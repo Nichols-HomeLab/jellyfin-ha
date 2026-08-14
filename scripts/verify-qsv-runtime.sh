@@ -50,6 +50,6 @@ LIBVA_DRIVER_NAME=iHD "$ffmpeg_bin" -nostdin -hide_banner -loglevel error \
     -init_hw_device qsv=qs@va -filter_hw_device qs \
     -hwaccel qsv -hwaccel_output_format qsv -c:v hevc_qsv \
     -i "$work_dir/main10.mkv" -map 0:v:0 -frames:v 12 \
-    -c:v h264_qsv -f null -
+    -vf 'scale_qsv=format=nv12' -c:v h264_qsv -f null -
 
 printf 'QSV hardware transcode passed: driver=%s device=%s\n' "$driver_path" "$render_device"
