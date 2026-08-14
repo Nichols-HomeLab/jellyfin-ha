@@ -79,7 +79,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
 
-        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=effective.priority,is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() FROM (SELECT item_id,MAX(priority) AS priority FROM hot_cache_interests WHERE expires_at_utc>now() GROUP BY item_id) effective WHERE j.item_id=effective.item_id AND j.state IN ('pending','running');", cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running');", cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
