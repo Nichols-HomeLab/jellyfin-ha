@@ -18,13 +18,20 @@ namespace Jellyfin.Database.Tests.PostgreSQL;
 public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
 {
     private static readonly TimeSpan ProbeInterval = TimeSpan.FromMilliseconds(50);
-    private readonly PostgreSqlContainer _container;
+    private readonly PostgreSqlContainer? _container;
+    private string? _connectionString;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PostgreSqlCatalogOwnershipTests"/> class.
     /// </summary>
     public PostgreSqlCatalogOwnershipTests()
     {
+        _connectionString = Environment.GetEnvironmentVariable("JELLYFIN_CATALOG_TEST_POSTGRES");
+        if (!string.IsNullOrWhiteSpace(_connectionString))
+        {
+            return;
+        }
+
         _container = new PostgreSqlBuilder()
             .WithImage("postgres:16-alpine")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("pg_isready"))
@@ -32,10 +39,23 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
     }
 
     /// <inheritdoc />
-    public Task InitializeAsync() => _container.StartAsync();
+    public async Task InitializeAsync()
+    {
+        if (_container is not null)
+        {
+            await _container.StartAsync().ConfigureAwait(false);
+            _connectionString = _container.GetConnectionString();
+        }
+    }
 
     /// <inheritdoc />
-    public Task DisposeAsync() => _container.DisposeAsync().AsTask();
+    public async Task DisposeAsync()
+    {
+        if (_container is not null)
+        {
+            await _container.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Two server instances sharing PostgreSQL expose exactly one writer and hand ownership off after release.
@@ -43,8 +63,8 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
     [Fact]
     public async Task SharedAuthority_HasOneOwnerAndHandsOffAfterRelease()
     {
-        await using var firstDataSource = NpgsqlDataSource.Create(_container.GetConnectionString());
-        await using var secondDataSource = NpgsqlDataSource.Create(_container.GetConnectionString());
+        await using var firstDataSource = NpgsqlDataSource.Create(_connectionString!);
+        await using var secondDataSource = NpgsqlDataSource.Create(_connectionString!);
         await using var first = new PostgreSqlCatalogOwnership(
             firstDataSource,
             "server-1",
@@ -76,7 +96,7 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
     [Fact]
     public async Task CoordinationUnavailable_RevokesOwnershipAndFailsClosed()
     {
-        await using var dataSource = NpgsqlDataSource.Create(_container.GetConnectionString());
+        await using var dataSource = NpgsqlDataSource.Create(_connectionString!);
         await using var ownership = new PostgreSqlCatalogOwnership(
             dataSource,
             "server-1",
@@ -86,7 +106,12 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
         await WaitUntilAsync(() => ownership.TryGetCatalogWriteToken(out _));
         Assert.True(ownership.TryGetCatalogWriteToken(out var ownershipLost));
 
-        await _container.StopAsync();
+        await using var observer = NpgsqlDataSource.Create(_connectionString!);
+        await using var command = observer.CreateCommand(
+            "SELECT bool_or(pg_terminate_backend(pid)) FROM pg_locks WHERE locktype = 'advisory' AND granted AND classid = $1::oid AND objid = $2::oid");
+        command.Parameters.AddWithValue(1246573006);
+        command.Parameters.AddWithValue(607);
+        Assert.True(await command.ExecuteScalarAsync() is true);
 
         await WaitUntilAsync(() => !ownership.TryGetCatalogWriteToken(out _));
         Assert.True(ownershipLost.IsCancellationRequested);
