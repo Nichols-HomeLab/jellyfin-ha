@@ -44,6 +44,8 @@ RUN apt-get update \
  && apt-get update \
  && apt-get install -y --no-install-recommends \
       jellyfin-ffmpeg7="${JELLYFIN_FFMPEG_VERSION}" \
+ && ln -s /usr/lib/jellyfin-ffmpeg/ffmpeg /usr/local/bin/ffmpeg \
+ && ln -s /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
  && rm -rf /var/lib/apt/lists/*
 
 COPY scripts/verify-qsv-runtime.sh /usr/local/bin/verify-qsv-runtime

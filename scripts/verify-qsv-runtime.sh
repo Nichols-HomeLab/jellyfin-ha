@@ -3,16 +3,31 @@ set -eu
 
 render_device="${JELLYFIN_QSV_RENDER_DEVICE:-/dev/dri/renderD128}"
 
-if [ -x /usr/lib/jellyfin-ffmpeg/ffmpeg ]; then
-    ffmpeg_bin=/usr/lib/jellyfin-ffmpeg/ffmpeg
-else
-    ffmpeg_bin="$(command -v ffmpeg || true)"
-fi
+ffmpeg_bin=/usr/lib/jellyfin-ffmpeg/ffmpeg
+ffprobe_bin=/usr/lib/jellyfin-ffmpeg/ffprobe
 
-if [ -z "$ffmpeg_bin" ]; then
-    echo "FFmpeg is missing" >&2
+if [ ! -x "$ffmpeg_bin" ] || [ ! -x "$ffprobe_bin" ]; then
+    echo "Bundled FFmpeg or FFprobe is missing" >&2
     exit 1
 fi
+
+ffmpeg_path="$(command -v ffmpeg || true)"
+ffprobe_path="$(command -v ffprobe || true)"
+if [ -z "$ffmpeg_path" ] || [ -z "$ffprobe_path" ]; then
+    echo "Bare ffmpeg or ffprobe is not available on PATH" >&2
+    exit 1
+fi
+
+if [ "$(readlink -f "$ffmpeg_path")" != "$ffmpeg_bin" ] \
+    || [ "$(readlink -f "$ffprobe_path")" != "$ffprobe_bin" ]; then
+    echo "Bare ffmpeg or ffprobe does not resolve to the bundled Jellyfin runtime" >&2
+    exit 1
+fi
+
+# Plugins such as IntroSkipper invoke these tools by bare command name rather
+# than reading JELLYFIN_FFMPEG. Exercise that exact compatibility contract.
+ffmpeg -hide_banner -version >/dev/null
+ffprobe -hide_banner -version >/dev/null
 
 driver_path="$(find /usr/lib -type f -name iHD_drv_video.so -print -quit 2>/dev/null)"
 if [ -z "$driver_path" ]; then
