@@ -12,6 +12,17 @@ namespace Jellyfin.Server.Implementations.Tests.Library;
 public sealed class RedisCatalogChangeNotifierTests
 {
     [Fact]
+    public void PropagationMetrics_UseTheGitOpsMonitorContract()
+    {
+        Assert.Equal("jellyfin_catalog_propagation_subscriber_connected", CatalogPropagationMetrics.SubscriberConnectedMetricName);
+        Assert.Equal("jellyfin_catalog_propagation_last_applied_sequence", CatalogPropagationMetrics.LastAppliedSequenceMetricName);
+        Assert.Equal("jellyfin_catalog_propagation_gap_detections_total", CatalogPropagationMetrics.GapDetectionsMetricName);
+        Assert.Equal("jellyfin_catalog_propagation_reconnect_failures_total", CatalogPropagationMetrics.ReconnectFailuresMetricName);
+        Assert.Equal("jellyfin_catalog_propagation_full_resync_failures_total", CatalogPropagationMetrics.FullResyncFailuresMetricName);
+        Assert.Equal("jellyfin_catalog_propagation_apply_failures_total", CatalogPropagationMetrics.ApplyFailuresMetricName);
+    }
+
+    [Fact]
     public void WireMessage_DeserializesCatalogChange()
     {
         var itemId = Guid.NewGuid();

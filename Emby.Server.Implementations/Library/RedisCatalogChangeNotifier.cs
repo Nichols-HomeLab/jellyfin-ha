@@ -46,6 +46,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         // Construction must not return before the subscription is acknowledged; otherwise the
         // first committed catalog change can be missed before this singleton is ready.
         _redis.ExecuteAsync(connection => SynchronizeAsync(connection, true, false)).GetAwaiter().GetResult();
+        CatalogPropagationMetrics.SetSubscriberConnected(true);
     }
 
     /// <inheritdoc />
@@ -126,23 +127,31 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
                 // A restored Redis instance may have lost its volatile sequence key. Reset the
                 // local watermark after invalidating caches so the new low sequence epoch applies.
                 _lastSequence = sequence;
+                CatalogPropagationMetrics.SetLastAppliedSequence(sequence);
                 changed = Changed;
             }
             else
             {
                 _lastSequence = Math.Max(_lastSequence, sequence);
+                CatalogPropagationMetrics.SetLastAppliedSequence(_lastSequence);
             }
         }
 
-        changed?.Invoke(CatalogChange.FullResync(sequence));
+        Dispatch(changed, CatalogChange.FullResync(sequence), true);
         return true;
     }
 
     private void OnConnectionReplaced(IConnectionMultiplexer connection)
-        => Recover(connection, true, "restore the catalog invalidation subscription after replacing Redis");
+    {
+        CatalogPropagationMetrics.SetSubscriberConnected(false);
+        Recover(connection, true, "restore the catalog invalidation subscription after replacing Redis");
+    }
 
     private void OnConnectionRestored(IConnectionMultiplexer connection)
-        => Recover(connection, false, "synchronize catalog invalidations after Redis restored its connection");
+    {
+        CatalogPropagationMetrics.SetSubscriberConnected(false);
+        Recover(connection, false, "synchronize catalog invalidations after Redis restored its connection");
+    }
 
     private void Recover(IConnectionMultiplexer connection, bool subscribe, string operation)
     {
@@ -153,9 +162,11 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
             // Recovery callbacks are synchronous by contract; completing synchronization here
             // fences later notifications behind the full-resync signal.
             SynchronizeAsync(connection, subscribe, true).GetAwaiter().GetResult();
+            CatalogPropagationMetrics.SetSubscriberConnected(true);
         }
         catch (RedisException ex)
         {
+            CatalogPropagationMetrics.RecordReconnectFailure();
             _logger.LogWarning(ex, "Failed to {CatalogRecoveryOperation}.", operation);
         }
     }
@@ -165,6 +176,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         _logger.LogDebug("Received Redis catalog invalidation message.");
         if (!TryDeserialize(value.ToString(), out var source, out var change))
         {
+            CatalogPropagationMetrics.RecordApplyFailure();
             _logger.LogWarning("Ignored malformed catalog invalidation message.");
             return;
         }
@@ -180,6 +192,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 
             requiresFullResync = _lastSequence > 0 && change.Sequence != _lastSequence + 1;
             _lastSequence = change.Sequence;
+            CatalogPropagationMetrics.SetLastAppliedSequence(change.Sequence);
             if (source.AsSpan().SequenceEqual(_source.AsSpan()))
             {
                 return;
@@ -190,10 +203,32 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 
         if (requiresFullResync)
         {
-            changed?.Invoke(CatalogChange.FullResync(change.Sequence - 1));
+            CatalogPropagationMetrics.RecordGapDetection();
+            Dispatch(changed, CatalogChange.FullResync(change.Sequence - 1), true);
         }
 
-        changed?.Invoke(change);
+        Dispatch(changed, change, false);
+    }
+
+    private void Dispatch(Action<CatalogChange>? changed, CatalogChange change, bool fullResync)
+    {
+        try
+        {
+            changed?.Invoke(change);
+        }
+        catch (Exception ex)
+        {
+            if (fullResync)
+            {
+                CatalogPropagationMetrics.RecordFullResyncFailure();
+            }
+            else
+            {
+                CatalogPropagationMetrics.RecordApplyFailure();
+            }
+
+            _logger.LogError(ex, "Failed to apply Redis catalog propagation change at sequence {Sequence}.", change.Sequence);
+        }
     }
 
     internal static bool TryDeserialize(string message, out string source, out CatalogChange change)
