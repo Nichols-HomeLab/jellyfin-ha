@@ -21,6 +21,7 @@ using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Extensions;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.MediaEncoding.Probing;
 using MediaBrowser.Model.Configuration;
@@ -59,6 +60,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
         private readonly IConfiguration _config;
         private readonly IServerConfigurationManager _serverConfig;
         private readonly string _startupOptionFFmpegPath;
+        private readonly IPlaybackPathResolver _playbackPathResolver;
 
         private readonly AsyncNonKeyedLocker _thumbnailResourcePool;
 
@@ -112,7 +114,8 @@ namespace MediaBrowser.MediaEncoding.Encoder
             IBlurayExaminer blurayExaminer,
             ILocalizationManager localization,
             IConfiguration config,
-            IServerConfigurationManager serverConfig)
+            IServerConfigurationManager serverConfig,
+            IPlaybackPathResolver playbackPathResolver = null)
         {
             _logger = logger;
             _configurationManager = configurationManager;
@@ -121,6 +124,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
             _localization = localization;
             _config = config;
             _serverConfig = serverConfig;
+            _playbackPathResolver = playbackPathResolver;
             _startupOptionFFmpegPath = config.GetValue<string>(Controller.Extensions.ConfigurationExtensions.FfmpegPathKey) ?? string.Empty;
 
             _jsonSerializerOptions = new JsonSerializerOptions(JsonDefaults.Options);
@@ -416,10 +420,12 @@ namespace MediaBrowser.MediaEncoding.Encoder
         {
             var extractChapters = request.MediaType == DlnaProfileType.Video && request.ExtractChapters;
             var extraArgs = GetExtraArguments(request);
+            var canonicalPath = request.MediaSource.Path;
+            var resolvedPath = _playbackPathResolver?.Resolve(new PlaybackPathRequest(canonicalPath, request.MediaSource.Size, PlaybackPathPurpose.Probe)).Path ?? canonicalPath;
 
             return GetMediaInfoInternal(
-                GetInputArgument(request.MediaSource.Path, request.MediaSource),
-                request.MediaSource.Path,
+                GetInputArgument(resolvedPath, request.MediaSource),
+                canonicalPath,
                 request.MediaSource.Protocol,
                 extractChapters,
                 extraArgs,
