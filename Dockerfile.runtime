@@ -22,14 +22,33 @@ RUN apt-get update \
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
 
-# Install FFmpeg and native dependencies required by SkiaSharp and fontconfig.
+# Jellyfin's FFmpeg package pins its FFmpeg/libvpl userspace and bundles a
+# compatible Intel iHD VAAPI driver. Keep the package immutable so a base-image
+# rebuild cannot silently change the hardware-transcode contract.
+ARG JELLYFIN_FFMPEG_VERSION=7.1.4-3-noble
+
+# Install Jellyfin FFmpeg, Intel QSV/VAAPI userspace, and native dependencies
+# required by SkiaSharp and fontconfig.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ffmpeg \
+      ca-certificates \
+      curl \
       fontconfig \
+      gnupg \
       libfontconfig1 \
       libfreetype6 \
+ && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+    | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \
+ && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/ubuntu noble main" \
+    > /etc/apt/sources.list.d/jellyfin.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+      jellyfin-ffmpeg7="${JELLYFIN_FFMPEG_VERSION}" \
  && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/verify-qsv-runtime.sh /usr/local/bin/verify-qsv-runtime
+RUN chmod 0755 /usr/local/bin/verify-qsv-runtime \
+ && /usr/local/bin/verify-qsv-runtime
 
 WORKDIR /jellyfin
 
@@ -47,7 +66,8 @@ VOLUME ["/config", "/cache", "/media"]
 
 ENV JELLYFIN_DATA_DIR=/config \
     JELLYFIN_CACHE_DIR=/cache \
-    JELLYFIN_LOG_DIR=/config/log
+    JELLYFIN_LOG_DIR=/config/log \
+    JELLYFIN_FFMPEG=/usr/lib/jellyfin-ffmpeg/ffmpeg
 
 # Directory settings are environment-configurable. Do not repeat them as CLI
 # arguments here: command-line values override JELLYFIN_*_DIR and make retained
