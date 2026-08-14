@@ -38,6 +38,7 @@ services:
       Jellyfin__TranscodeStore__RedisConnectionString: redis:6379,abortConnect=false
       Jellyfin__TranscodeStore__LeaseDurationSeconds: "30"
       Jellyfin__TranscodeStore__RecoveryRetentionSeconds: "300"
+      JELLYFIN_Jellyfin__CatalogOwnership__ProbeIntervalSeconds: "2"
       JELLYFIN_INSTANCE_ID: jellyfin-1
     volumes:
       - jellyfin-config:/config
@@ -62,6 +63,16 @@ For multiple replicas, every instance needs:
 Use a load balancer with session affinity for normal playback traffic. Redis
 leases coordinate recovery; they are not a replacement for stable request
 routing while the owning instance is healthy.
+
+PostgreSQL-backed replicas also elect exactly one catalog writer with a
+session-level advisory lock. Only that replica runs scheduled tasks or dispatches
+filesystem-monitor refreshes; every replica continues serving HTTP and playback.
+The owner health-checks its lock session at the configured interval (between
+0.05 and 30 seconds), releases it during graceful shutdown, and cancels running
+scheduled work if PostgreSQL coordination is lost. Until coordination succeeds,
+the server fails closed for catalog work. Ownership acquisition and loss are
+logged with `JELLYFIN_INSTANCE_ID`. Normal SQLite deployments retain their
+single-instance behavior and require no additional configuration.
 
 ## First start
 

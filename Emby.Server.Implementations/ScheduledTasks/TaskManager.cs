@@ -3,8 +3,10 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Emby.Server.Implementations.Library;
 using Jellyfin.Data.Events;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -22,18 +24,32 @@ public class TaskManager : ITaskManager
         new ConcurrentQueue<Tuple<Type, TaskOptions>>();
 
     private readonly IApplicationPaths _applicationPaths;
+    private readonly ICatalogOwnership _catalogOwnership;
     private readonly ILogger<TaskManager> _logger;
+
+    /// <summary>
+    /// Initializes a new single-instance <see cref="TaskManager" />.
+    /// </summary>
+    /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="logger">The logger.</param>
+    public TaskManager(IApplicationPaths applicationPaths, ILogger<TaskManager> logger)
+        : this(applicationPaths, new SingleInstanceCatalogOwnership(), logger)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskManager" /> class.
     /// </summary>
     /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="catalogOwnership">The cluster-wide catalog ownership.</param>
     /// <param name="logger">The logger.</param>
     public TaskManager(
         IApplicationPaths applicationPaths,
+        ICatalogOwnership catalogOwnership,
         ILogger<TaskManager> logger)
     {
         _applicationPaths = applicationPaths;
+        _catalogOwnership = catalogOwnership;
         _logger = logger;
 
         ScheduledTasks = [];
@@ -158,6 +174,12 @@ public class TaskManager : ITaskManager
     {
         var type = task.ScheduledTask.GetType();
 
+        if (!_catalogOwnership.TryGetCatalogWriteToken(out _))
+        {
+            _logger.LogDebug("Skipping scheduled task {Name} because this instance does not own catalog writes", type.Name);
+            return;
+        }
+
         _logger.LogDebug("Queuing task {Name}", type.Name);
 
         lock (_taskQueue)
@@ -175,7 +197,7 @@ public class TaskManager : ITaskManager
     /// <inheritdoc />
     public void AddTasks(IEnumerable<IScheduledTask> tasks)
     {
-        var list = tasks.Select(t => new ScheduledTaskWorker(t, _applicationPaths, this, _logger));
+        var list = tasks.Select(t => new ScheduledTaskWorker(t, _applicationPaths, this, _catalogOwnership, _logger));
 
         ScheduledTasks = ScheduledTasks.Concat(list).ToArray();
     }
