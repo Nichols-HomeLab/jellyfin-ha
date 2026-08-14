@@ -28,6 +28,15 @@ namespace Emby.Server.Implementations.IO
             string path,
             IServerConfigurationManager configurationManager,
             ILibraryManager libraryManager,
+            ILogger logger)
+            : this(path, configurationManager, libraryManager, new SingleInstanceCatalogOwnership(), logger)
+        {
+        }
+
+        public FileRefresher(
+            string path,
+            IServerConfigurationManager configurationManager,
+            ILibraryManager libraryManager,
             ICatalogOwnership catalogOwnership,
             ILogger logger)
         {

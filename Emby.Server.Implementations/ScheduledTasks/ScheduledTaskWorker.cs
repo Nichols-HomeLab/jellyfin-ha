@@ -8,6 +8,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Emby.Server.Implementations.Library;
 using Emby.Server.Implementations.ScheduledTasks.Triggers;
 using Jellyfin.Data.Events;
 using Jellyfin.Extensions.Json;
@@ -35,6 +36,22 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     private Task _currentTask;
     private Tuple<TaskTriggerInfo, ITaskTrigger>[] _triggers;
     private string _id;
+
+    /// <summary>
+    /// Initializes a new single-instance <see cref="ScheduledTaskWorker" />.
+    /// </summary>
+    /// <param name="scheduledTask">The scheduled task.</param>
+    /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="taskManager">The task manager.</param>
+    /// <param name="logger">The logger.</param>
+    public ScheduledTaskWorker(
+        IScheduledTask scheduledTask,
+        IApplicationPaths applicationPaths,
+        ITaskManager taskManager,
+        ILogger logger)
+        : this(scheduledTask, applicationPaths, taskManager, new SingleInstanceCatalogOwnership(), logger)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduledTaskWorker" /> class.

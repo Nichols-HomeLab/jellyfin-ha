@@ -41,6 +41,24 @@ namespace Emby.Server.Implementations.IO
         private bool _disposed;
 
         /// <summary>
+        /// Initializes a new single-instance <see cref="LibraryMonitor" />.
+        /// </summary>
+        /// <param name="logger">The logger.</param>
+        /// <param name="libraryManager">The library manager.</param>
+        /// <param name="configurationManager">The configuration manager.</param>
+        /// <param name="fileSystem">The filesystem.</param>
+        /// <param name="appLifetime">The <see cref="IHostApplicationLifetime"/>.</param>
+        public LibraryMonitor(
+            ILogger<LibraryMonitor> logger,
+            ILibraryManager libraryManager,
+            IServerConfigurationManager configurationManager,
+            IFileSystem fileSystem,
+            IHostApplicationLifetime appLifetime)
+            : this(logger, libraryManager, configurationManager, fileSystem, new SingleInstanceCatalogOwnership(), appLifetime)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="LibraryMonitor" /> class.
         /// </summary>
         /// <param name="logger">The logger.</param>

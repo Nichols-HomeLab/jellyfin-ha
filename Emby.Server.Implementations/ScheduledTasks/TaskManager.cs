@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Emby.Server.Implementations.Library;
 using Jellyfin.Data.Events;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Library;
@@ -25,6 +26,16 @@ public class TaskManager : ITaskManager
     private readonly IApplicationPaths _applicationPaths;
     private readonly ICatalogOwnership _catalogOwnership;
     private readonly ILogger<TaskManager> _logger;
+
+    /// <summary>
+    /// Initializes a new single-instance <see cref="TaskManager" />.
+    /// </summary>
+    /// <param name="applicationPaths">The application paths.</param>
+    /// <param name="logger">The logger.</param>
+    public TaskManager(IApplicationPaths applicationPaths, ILogger<TaskManager> logger)
+        : this(applicationPaths, new SingleInstanceCatalogOwnership(), logger)
+    {
+    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TaskManager" /> class.
