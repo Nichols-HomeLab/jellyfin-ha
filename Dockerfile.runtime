@@ -48,6 +48,8 @@ RUN apt-get update \
  && ln -s /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
  && rm -rf /var/lib/apt/lists/*
 
+ENV LIBVA_DRIVER_NAME=iHD
+
 COPY scripts/verify-qsv-runtime.sh /usr/local/bin/verify-qsv-runtime
 RUN chmod 0755 /usr/local/bin/verify-qsv-runtime \
  && /usr/local/bin/verify-qsv-runtime

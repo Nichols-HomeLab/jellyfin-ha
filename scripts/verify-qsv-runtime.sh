@@ -35,6 +35,12 @@ if [ -z "$driver_path" ]; then
     exit 1
 fi
 
+if [ "${LIBVA_DRIVER_NAME:-}" != "iHD" ]; then
+    echo "LIBVA_DRIVER_NAME must select the Intel iHD driver" >&2
+    exit 1
+fi
+
+"$ffmpeg_bin" -hide_banner -hwaccels 2>/dev/null | grep -qx 'vaapi'
 "$ffmpeg_bin" -hide_banner -hwaccels 2>/dev/null | grep -qx 'qsv'
 "$ffmpeg_bin" -hide_banner -encoders 2>/dev/null | grep -Eq '^[[:space:]]*V[^[:space:]]*[[:space:]]+h264_qsv[[:space:]]'
 "$ffmpeg_bin" -hide_banner -decoders 2>/dev/null | grep -Eq '^[[:space:]]*V[^[:space:]]*[[:space:]]+hevc_qsv[[:space:]]'
