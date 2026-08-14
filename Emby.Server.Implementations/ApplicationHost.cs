@@ -160,6 +160,18 @@ namespace Emby.Server.Implementations
 
             _xmlSerializer = new MyXmlSerializer();
             ConfigurationManager = new ServerConfigurationManager(ApplicationPaths, LoggerFactory, _xmlSerializer);
+
+            // This is deliberately an opt-in deployment override. Enabling the
+            // built-in Prometheus endpoint lets operators retain per-route
+            // latency histograms without mutating the shared system.xml PVC.
+            // Do not accept false here: an administrator's persisted choice
+            // must not be silently disabled by an unset or malformed env var.
+            if (bool.TryParse(Environment.GetEnvironmentVariable("JELLYFIN_ENABLE_METRICS"), out var enableMetrics)
+                && enableMetrics)
+            {
+                ConfigurationManager.Configuration.EnableMetrics = true;
+            }
+
             _pluginManager = new PluginManager(
                 LoggerFactory.CreateLogger<PluginManager>(),
                 this,
