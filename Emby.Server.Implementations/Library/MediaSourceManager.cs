@@ -51,6 +51,7 @@ namespace Emby.Server.Implementations.Library
         private readonly ILogger<MediaSourceManager> _logger;
         private readonly IUserDataManager _userDataManager;
         private readonly IMediaEncoder _mediaEncoder;
+        private readonly IPlaybackPathResolver _playbackPathResolver;
         private readonly ILocalizationManager _localizationManager;
         private readonly IApplicationPaths _appPaths;
         private readonly IDirectoryService _directoryService;
@@ -73,6 +74,7 @@ namespace Emby.Server.Implementations.Library
             IFileSystem fileSystem,
             IUserDataManager userDataManager,
             IMediaEncoder mediaEncoder,
+            IPlaybackPathResolver playbackPathResolver,
             IDirectoryService directoryService,
             IMediaStreamRepository mediaStreamRepository,
             IMediaAttachmentRepository mediaAttachmentRepository)
@@ -85,6 +87,7 @@ namespace Emby.Server.Implementations.Library
             _fileSystem = fileSystem;
             _userDataManager = userDataManager;
             _mediaEncoder = mediaEncoder;
+            _playbackPathResolver = playbackPathResolver;
             _localizationManager = localizationManager;
             _appPaths = applicationPaths;
             _directoryService = directoryService;
@@ -352,6 +355,23 @@ namespace Emby.Server.Implementations.Library
             var hasMediaSources = (IHasMediaSources)item;
 
             var sources = hasMediaSources.GetMediaSources(enablePathSubstitution);
+
+            // This modifies only transient server-side sources. BaseItem.Path and all stored
+            // library metadata remain canonical, so a hot-tier failure is always cold-safe.
+            if (!enablePathSubstitution)
+            {
+                foreach (var source in sources)
+                {
+                    if (source.Protocol != MediaProtocol.File || string.IsNullOrEmpty(source.Path))
+                    {
+                        continue;
+                    }
+
+                    var canonicalPath = source.Path;
+                    var resolution = _playbackPathResolver.Resolve(new PlaybackPathRequest(canonicalPath, source.Size, PlaybackPathPurpose.MainMedia));
+                    source.Path = resolution.Path;
+                }
+            }
 
             if (user is not null)
             {

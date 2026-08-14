@@ -40,7 +40,10 @@ namespace Jellyfin.Server.Implementations.Events
 
             // Session consumers
             collection.AddScoped<IEventConsumer<PlaybackStartEventArgs>, PlaybackStartLogger>();
+            collection.AddScoped<IEventConsumer<PlaybackStartEventArgs>, HotCachePlaybackStartConsumer>();
+            collection.AddScoped<IEventConsumer<PlaybackProgressEventArgs>, HotCachePlaybackProgressConsumer>();
             collection.AddScoped<IEventConsumer<PlaybackStopEventArgs>, PlaybackStopLogger>();
+            collection.AddScoped<IEventConsumer<PlaybackStopEventArgs>, HotCachePlaybackStopConsumer>();
             collection.AddScoped<IEventConsumer<SessionEndedEventArgs>, SessionEndedLogger>();
             collection.AddScoped<IEventConsumer<SessionStartedEventArgs>, SessionStartedLogger>();
 

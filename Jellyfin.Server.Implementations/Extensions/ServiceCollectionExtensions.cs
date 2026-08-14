@@ -9,6 +9,7 @@ using Jellyfin.Database.Implementations.Locking;
 using Jellyfin.Database.Providers.PostgreSQL;
 using Jellyfin.Database.Providers.Sqlite;
 using Jellyfin.Server.Implementations.Catalog;
+using Jellyfin.Server.Implementations.HotCache;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
@@ -144,6 +145,7 @@ public static class ServiceCollectionExtensions
         }
 
         serviceCollection.AddSingleton<IJellyfinDatabaseProvider>(providerFactory!);
+        serviceCollection.AddSingleton<IHotCacheCoordinator, NullHotCacheCoordinator>();
 
         if (UsesPostgreSqlCatalogOwnership(efCoreConfiguration))
         {
@@ -199,6 +201,9 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PostgreSqlCatalogOwnership>>()));
             serviceCollection.AddSingleton<ICatalogOwnership>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
             serviceCollection.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
+            serviceCollection.AddSingleton<PostgreSqlHotCacheCoordinator>();
+            serviceCollection.AddSingleton<IHotCacheCoordinator>(sp => sp.GetRequiredService<PostgreSqlHotCacheCoordinator>());
+            serviceCollection.AddSingleton<IHostedService, HotCacheHostedService>();
         }
 
         switch (efCoreConfiguration.LockingBehavior)
