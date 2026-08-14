@@ -466,7 +466,7 @@ namespace Emby.Server.Implementations.Library
             foreach (var (item, _, _) in pathMaps)
             {
                 _cache.TryRemove(item.Id, out _);
-                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, item.Id));
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, item.Id, item.ParentId));
             }
         }
 
@@ -2378,18 +2378,9 @@ namespace Emby.Server.Implementations.Library
         {
             lock (_catalogChangeLock)
             {
-                if (change.Sequence > 0 && change.Sequence <= _lastCatalogChangeSequence)
-                {
-                    return;
-                }
-
-                if (change.Sequence > 0)
-                {
-                    _lastCatalogChangeSequence = change.Sequence;
-                }
-
                 if (change.Kind == CatalogChangeKind.FullResync)
                 {
+                    _lastCatalogChangeSequence = Math.Max(_lastCatalogChangeSequence, change.Sequence);
                     _cache.Clear();
                     if (_rootFolder is not null)
                     {
@@ -2407,6 +2398,16 @@ namespace Emby.Server.Implementations.Library
                         "Discarded local catalog caches after Redis delivery recovery at sequence {Sequence}.",
                         change.Sequence);
                     return;
+                }
+
+                if (change.Sequence > 0 && change.Sequence <= _lastCatalogChangeSequence)
+                {
+                    return;
+                }
+
+                if (change.Sequence > 0)
+                {
+                    _lastCatalogChangeSequence = change.Sequence;
                 }
 
                 _cache.TryRemove(change.ItemId, out var previousItem);

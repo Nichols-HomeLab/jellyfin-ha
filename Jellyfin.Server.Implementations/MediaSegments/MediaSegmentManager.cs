@@ -32,6 +32,7 @@ public class MediaSegmentManager : IMediaSegmentManager
     private readonly IDbContextFactory<JellyfinDbContext> _dbProvider;
     private readonly IMediaSegmentProvider[] _segmentProviders;
     private readonly ICatalogChangeNotifier _catalogChangeNotifier;
+    private readonly ICatalogOwnership _catalogOwnership;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaSegmentManager"/> class.
@@ -43,7 +44,7 @@ public class MediaSegmentManager : IMediaSegmentManager
         ILogger<MediaSegmentManager> logger,
         IDbContextFactory<JellyfinDbContext> dbProvider,
         IEnumerable<IMediaSegmentProvider> segmentProviders)
-        : this(logger, dbProvider, segmentProviders, NullCatalogChangeNotifier.Instance)
+        : this(logger, dbProvider, segmentProviders, NullCatalogChangeNotifier.Instance, new SingleInstanceMediaSegmentCatalogOwnership())
     {
     }
 
@@ -59,10 +60,29 @@ public class MediaSegmentManager : IMediaSegmentManager
         IDbContextFactory<JellyfinDbContext> dbProvider,
         IEnumerable<IMediaSegmentProvider> segmentProviders,
         ICatalogChangeNotifier catalogChangeNotifier)
+        : this(logger, dbProvider, segmentProviders, catalogChangeNotifier, new SingleInstanceMediaSegmentCatalogOwnership())
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MediaSegmentManager"/> class with distributed catalog propagation and ownership.
+    /// </summary>
+    /// <param name="logger">Logger.</param>
+    /// <param name="dbProvider">EFCore Database factory.</param>
+    /// <param name="segmentProviders">List of all media segment providers.</param>
+    /// <param name="catalogChangeNotifier">Distributes committed segment changes.</param>
+    /// <param name="catalogOwnership">Controls catalog mutation ownership.</param>
+    public MediaSegmentManager(
+        ILogger<MediaSegmentManager> logger,
+        IDbContextFactory<JellyfinDbContext> dbProvider,
+        IEnumerable<IMediaSegmentProvider> segmentProviders,
+        ICatalogChangeNotifier catalogChangeNotifier,
+        ICatalogOwnership catalogOwnership)
     {
         _logger = logger;
         _dbProvider = dbProvider;
         _catalogChangeNotifier = catalogChangeNotifier;
+        _catalogOwnership = catalogOwnership;
 
         _segmentProviders = segmentProviders
             .OrderBy(i => i is IHasOrder hasOrder ? hasOrder.Order : 0)
@@ -72,6 +92,8 @@ public class MediaSegmentManager : IMediaSegmentManager
     /// <inheritdoc/>
     public async Task RunSegmentPluginProviders(BaseItem baseItem, LibraryOptions libraryOptions, bool forceOverwrite, CancellationToken cancellationToken)
     {
+        using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
+        var catalogWriteToken = catalogWrite.Token;
         var changed = false;
         var providers = _segmentProviders
             .Where(e => !libraryOptions.DisabledMediaSegmentProviders.Contains(GetProviderId(e.Name)))
@@ -88,7 +110,7 @@ public class MediaSegmentManager : IMediaSegmentManager
             return;
         }
 
-        var db = await _dbProvider.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        var db = await _dbProvider.CreateDbContextAsync(catalogWriteToken).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             _logger.LogDebug("Start media segment extraction for {MediaPath} with {CountProviders} providers enabled", baseItem.Path, providers.Count);
@@ -96,7 +118,7 @@ public class MediaSegmentManager : IMediaSegmentManager
             if (forceOverwrite)
             {
                 // delete all existing media segments if forceOverwrite is set.
-                changed = await db.MediaSegments.Where(e => e.ItemId.Equals(baseItem.Id)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false) > 0;
+                changed = await db.MediaSegments.Where(e => e.ItemId.Equals(baseItem.Id)).ExecuteDeleteAsync(catalogWriteToken).ConfigureAwait(false) > 0;
             }
 
             foreach (var provider in providers)
@@ -125,7 +147,7 @@ public class MediaSegmentManager : IMediaSegmentManager
 
                 try
                 {
-                    var segments = await provider.GetMediaSegments(requestItem, cancellationToken)
+                    var segments = await provider.GetMediaSegments(requestItem, catalogWriteToken)
                         .ConfigureAwait(false);
 
                     if (!forceOverwrite)
@@ -144,7 +166,7 @@ public class MediaSegmentManager : IMediaSegmentManager
                         }
 
                         // delete existing media segments that were re-generated.
-                        changed |= await existingSegments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false) > 0;
+                        changed |= await existingSegments.ExecuteDeleteAsync(catalogWriteToken).ConfigureAwait(false) > 0;
                     }
 
                     if (segments.Count == 0 && !requestItem.ExistingSegments.Any())
@@ -163,9 +185,13 @@ public class MediaSegmentManager : IMediaSegmentManager
                     foreach (var segment in segments)
                     {
                         segment.ItemId = baseItem.Id;
-                        await CreateSegmentInternalAsync(segment, providerId, false).ConfigureAwait(false);
+                        await CreateSegmentInternalAsync(segment, providerId, false, catalogWriteToken).ConfigureAwait(false);
                         changed = true;
                     }
+                }
+                catch (OperationCanceledException) when (catalogWriteToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -175,6 +201,7 @@ public class MediaSegmentManager : IMediaSegmentManager
 
             if (changed)
             {
+                catalogWriteToken.ThrowIfCancellationRequested();
                 _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, baseItem.Id, baseItem.ParentId));
             }
         }
@@ -182,21 +209,40 @@ public class MediaSegmentManager : IMediaSegmentManager
 
     /// <inheritdoc />
     public Task<MediaSegmentDto> CreateSegmentAsync(MediaSegmentDto mediaSegment, string segmentProviderId)
-        => CreateSegmentInternalAsync(mediaSegment, segmentProviderId, true);
+    {
+        var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(CancellationToken.None);
+        return CreateSegmentOwnedAsync(mediaSegment, segmentProviderId, catalogWrite);
+    }
 
-    private async Task<MediaSegmentDto> CreateSegmentInternalAsync(MediaSegmentDto mediaSegment, string segmentProviderId, bool publish)
+    private async Task<MediaSegmentDto> CreateSegmentOwnedAsync(
+        MediaSegmentDto mediaSegment,
+        string segmentProviderId,
+        CancellationTokenSource catalogWrite)
+    {
+        using (catalogWrite)
+        {
+            return await CreateSegmentInternalAsync(mediaSegment, segmentProviderId, true, catalogWrite.Token).ConfigureAwait(false);
+        }
+    }
+
+    private async Task<MediaSegmentDto> CreateSegmentInternalAsync(
+        MediaSegmentDto mediaSegment,
+        string segmentProviderId,
+        bool publish,
+        CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(mediaSegment.EndTicks, mediaSegment.StartTicks);
 
-        var db = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+        var db = await _dbProvider.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             db.MediaSegments.Add(Map(mediaSegment, segmentProviderId));
-            await db.SaveChangesAsync().ConfigureAwait(false);
+            await db.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
         if (publish)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, mediaSegment.ItemId));
         }
 
@@ -206,7 +252,8 @@ public class MediaSegmentManager : IMediaSegmentManager
     /// <inheritdoc />
     public async Task DeleteSegmentAsync(Guid segmentId)
     {
-        var db = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
+        using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(CancellationToken.None);
+        var db = await _dbProvider.CreateDbContextAsync(catalogWrite.Token).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
             var itemId = await db.MediaSegments
@@ -215,8 +262,9 @@ public class MediaSegmentManager : IMediaSegmentManager
                 .SingleOrDefaultAsync()
                 .ConfigureAwait(false);
             if (itemId.HasValue
-                && await db.MediaSegments.Where(e => e.Id.Equals(segmentId)).ExecuteDeleteAsync().ConfigureAwait(false) > 0)
+                && await db.MediaSegments.Where(e => e.Id.Equals(segmentId)).ExecuteDeleteAsync(catalogWrite.Token).ConfigureAwait(false) > 0)
             {
+                catalogWrite.Token.ThrowIfCancellationRequested();
                 _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, itemId.Value));
             }
         }
@@ -225,11 +273,13 @@ public class MediaSegmentManager : IMediaSegmentManager
     /// <inheritdoc />
     public async Task DeleteSegmentsAsync(Guid itemId, CancellationToken cancellationToken)
     {
-        var db = await _dbProvider.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
+        var db = await _dbProvider.CreateDbContextAsync(catalogWrite.Token).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
-            if (await db.MediaSegments.Where(e => e.ItemId.Equals(itemId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false) > 0)
+            if (await db.MediaSegments.Where(e => e.ItemId.Equals(itemId)).ExecuteDeleteAsync(catalogWrite.Token).ConfigureAwait(false) > 0)
             {
+                catalogWrite.Token.ThrowIfCancellationRequested();
                 _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, itemId));
             }
         }
@@ -332,4 +382,13 @@ public class MediaSegmentManager : IMediaSegmentManager
         => name.ToLowerInvariant()
             .GetMD5()
             .ToString("N", CultureInfo.InvariantCulture);
+
+    private sealed class SingleInstanceMediaSegmentCatalogOwnership : ICatalogOwnership
+    {
+        public bool TryGetCatalogWriteToken(out CancellationToken ownershipLost)
+        {
+            ownershipLost = CancellationToken.None;
+            return true;
+        }
+    }
 }

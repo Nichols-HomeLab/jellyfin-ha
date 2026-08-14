@@ -7,6 +7,7 @@ using AutoFixture;
 using AutoFixture.AutoMoq;
 using AutoFixture.Kernel;
 using Emby.Naming.Common;
+using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -56,7 +57,7 @@ public sealed class CatalogReplicaConvergenceTests
             2,
             followerRepository.Invocations.Count(i =>
                 i.Method.Name == nameof(IItemRepository.RetrieveItem)
-                && (Guid)i.Arguments[0] == itemId));
+                && ((Guid)i.Arguments[0]).Equals(itemId)));
     }
 
     [Fact]
@@ -122,6 +123,41 @@ public sealed class CatalogReplicaConvergenceTests
         repository.Verify(r => r.SaveImages(It.IsAny<BaseItem>()), Times.Never);
     }
 
+    [Fact]
+    public void FullResync_WithAlreadyObservedSequence_StillDiscardsCachedCatalogItems()
+    {
+        var notifier = new FakeCatalogChangeNotifier();
+        var (follower, repository) = CreateLibraryManager(notifier);
+        var itemId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var persistedName = "Before reconnect race";
+        repository.Setup(r => r.RetrieveItem(itemId)).Returns(() => new Movie { Id = itemId, Name = persistedName });
+        repository.Setup(r => r.RetrieveItem(parentId)).Returns(new Folder { Id = parentId, Name = "Movies" });
+
+        Assert.Equal("Before reconnect race", follower.GetItemById(itemId)!.Name);
+        notifier.Receive(new CatalogChange(44, CatalogChangeKind.Updated, itemId, parentId));
+        persistedName = "Committed during reconnect";
+
+        notifier.Receive(CatalogChange.FullResync(44));
+
+        Assert.Equal("Committed during reconnect", follower.GetItemById(itemId)!.Name);
+    }
+
+    [Fact]
+    public void FastDelete_PublishesParentForFollowerChildrenInvalidation()
+    {
+        var notifier = new FakeCatalogChangeNotifier();
+        var (owner, _) = CreateLibraryManager(notifier);
+        var parentId = Guid.NewGuid();
+        var item = new FastDeleteCatalogItem { Id = Guid.NewGuid(), ParentId = parentId, Name = "Removed movie" };
+
+        owner.DeleteItemsUnsafeFast([item]);
+
+        var change = Assert.Single(notifier.Published);
+        Assert.Equal(CatalogChangeKind.Removed, change.Kind);
+        Assert.Equal(parentId, change.ParentId);
+    }
+
     private static (Emby.Server.Implementations.Library.LibraryManager Manager, Mock<IItemRepository> Repository) CreateLibraryManager(
         ICatalogChangeNotifier notifier)
     {
@@ -170,11 +206,18 @@ public sealed class CatalogReplicaConvergenceTests
         }
     }
 
+    private sealed class FastDeleteCatalogItem : Folder
+    {
+        public override string GetInternalMetadataPath() => "/path-that-does-not-exist/catalog-item";
+
+        public override IEnumerable<MediaBrowser.Model.IO.FileSystemMetadata> GetDeletePaths() => [];
+    }
+
     private sealed class FakeCatalogChangeNotifier(FakeCatalogChangeHub? hub = null) : ICatalogChangeNotifier
     {
-        public List<CatalogChange> Published { get; } = [];
-
         public event Action<CatalogChange>? Changed;
+
+        public List<CatalogChange> Published { get; } = [];
 
         public void Publish(CatalogChange change)
         {

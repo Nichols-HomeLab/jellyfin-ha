@@ -20,6 +20,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     private readonly string _source = Guid.NewGuid().ToString("N");
     private readonly object _publishLock = new();
     private readonly object _receiveLock = new();
+    private ChannelMessageQueue? _subscription;
     private long _lastSequence;
     private bool _disposed;
 
@@ -35,7 +36,8 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         _redis = redis;
         _logger = logger;
         _redis.ConnectionReplaced += OnConnectionReplaced;
-        _redis.ExecuteAsync(connection => SubscribeAndSynchronizeAsync(connection, false)).GetAwaiter().GetResult();
+        _redis.ConnectionRestored += OnConnectionRestored;
+        _redis.ExecuteAsync(connection => SynchronizeAsync(connection, true, false)).GetAwaiter().GetResult();
     }
 
     /// <inheritdoc />
@@ -75,15 +77,32 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 
         _disposed = true;
         _redis.ConnectionReplaced -= OnConnectionReplaced;
+        _redis.ConnectionRestored -= OnConnectionRestored;
+        try
+        {
+            _subscription?.Unsubscribe();
+        }
+        catch (RedisException)
+        {
+            // The managed connection may already have been replaced or disposed.
+        }
+
         GC.SuppressFinalize(this);
     }
 
-    private async Task<bool> SubscribeAndSynchronizeAsync(IConnectionMultiplexer connection, bool forceFullResync)
+    private async Task<bool> SynchronizeAsync(
+        IConnectionMultiplexer connection,
+        bool subscribe,
+        bool forceFullResync)
     {
-        await connection.GetSubscriber().SubscribeAsync(
-                RedisChannel.Literal(ChannelName),
-                (_, value) => HandleMessage(value))
-            .ConfigureAwait(false);
+        if (subscribe)
+        {
+            var subscription = await connection.GetSubscriber()
+                .SubscribeAsync(RedisChannel.Literal(ChannelName))
+                .ConfigureAwait(false);
+            subscription.OnMessage(message => HandleMessage(message.Message));
+            _subscription = subscription;
+        }
 
         var value = await connection.GetDatabase().StringGetAsync(SequenceKey).ConfigureAwait(false);
         var sequence = long.TryParse(value.ToString(), NumberStyles.None, CultureInfo.InvariantCulture, out var parsed)
@@ -107,7 +126,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     {
         try
         {
-            SubscribeAndSynchronizeAsync(connection, true).GetAwaiter().GetResult();
+            SynchronizeAsync(connection, true, true).GetAwaiter().GetResult();
         }
         catch (RedisException ex)
         {
@@ -115,8 +134,23 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         }
     }
 
+    private void OnConnectionRestored(IConnectionMultiplexer connection)
+    {
+        try
+        {
+            // StackExchange.Redis restores subscriptions on the same multiplexer. Compare the
+            // durable generation immediately so missed pub/sub messages cannot leave stale caches.
+            SynchronizeAsync(connection, false, true).GetAwaiter().GetResult();
+        }
+        catch (RedisException ex)
+        {
+            _logger.LogWarning(ex, "Failed to synchronize catalog invalidations after Redis restored its connection.");
+        }
+    }
+
     private void HandleMessage(RedisValue value)
     {
+        _logger.LogDebug("Received Redis catalog invalidation message.");
         if (!TryDeserialize(value.ToString(), out var source, out var change))
         {
             _logger.LogWarning("Ignored malformed catalog invalidation message.");
@@ -155,7 +189,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
             CultureInfo.InvariantCulture,
             $"{_source}|{change.Sequence}|{(int)change.Kind}|{change.ItemId:N}|{change.ParentId:N}");
 
-    private static bool TryDeserialize(string message, out string source, out CatalogChange change)
+    internal static bool TryDeserialize(string message, out string source, out CatalogChange change)
     {
         source = string.Empty;
         change = default;

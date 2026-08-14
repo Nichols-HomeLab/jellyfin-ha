@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Emby.Server.Implementations.Library;
 using Emby.Server.Implementations.MediaEncoding;
 using MediaBrowser.Controller.Library;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using StackExchange.Redis;
 using Xunit;
@@ -35,8 +36,10 @@ public sealed class RedisCatalogChangeNotifierIntegrationTests
                 return ConnectionMultiplexer.Connect(connectionString);
             },
             NullLogger<RedisConnectionManager>.Instance);
-        using var replicaA = new RedisCatalogChangeNotifier(replicaARedis, NullLogger<RedisCatalogChangeNotifier>.Instance);
-        using var replicaB = new RedisCatalogChangeNotifier(replicaBRedis, NullLogger<RedisCatalogChangeNotifier>.Instance);
+        var replicaALogger = new RecordingLogger<RedisCatalogChangeNotifier>();
+        var replicaBLogger = new RecordingLogger<RedisCatalogChangeNotifier>();
+        using var replicaA = new RedisCatalogChangeNotifier(replicaARedis, replicaALogger);
+        using var replicaB = new RedisCatalogChangeNotifier(replicaBRedis, replicaBLogger);
         var replicaAChanges = new ConcurrentQueue<CatalogChange>();
         var replicaBChanges = new ConcurrentQueue<CatalogChange>();
         replicaA.Changed += replicaAChanges.Enqueue;
@@ -46,7 +49,14 @@ public sealed class RedisCatalogChangeNotifierIntegrationTests
 
         replicaA.Publish(CatalogChange.Local(CatalogChangeKind.Updated, firstId));
         replicaA.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, secondId));
-        await WaitUntilAsync(() => replicaBChanges.Count == 2).ConfigureAwait(false);
+        try
+        {
+            await WaitUntilAsync(() => replicaBChanges.Count >= 2).ConfigureAwait(false);
+        }
+        catch (TaskCanceledException)
+        {
+            Assert.Fail($"Replica B received {replicaBChanges.Count} changes. Logs: {string.Join("; ", replicaBLogger.Messages)}");
+        }
 
         Assert.Empty(replicaAChanges);
         Assert.Equal([firstId, secondId], replicaBChanges.Select(change => change.ItemId).ToArray());
@@ -60,7 +70,7 @@ public sealed class RedisCatalogChangeNotifierIntegrationTests
         replicaA.Publish(CatalogChange.Local(CatalogChangeKind.Updated, afterGapId));
         await WaitUntilAsync(() => replicaBChanges.Any(change => change.Kind == CatalogChangeKind.FullResync)).ConfigureAwait(false);
         Assert.Contains(replicaBChanges, change => change.Kind == CatalogChangeKind.FullResync);
-        Assert.Contains(replicaBChanges, change => change.ItemId == afterGapId);
+        Assert.Contains(replicaBChanges, change => change.ItemId.Equals(afterGapId));
 
         var beforeReconnect = replicaBChanges.Count;
         await replicaBRedis.ExecuteAsync<int>(connection =>
@@ -83,5 +93,24 @@ public sealed class RedisCatalogChangeNotifierIntegrationTests
         {
             await Task.Delay(25, timeout.Token).ConfigureAwait(false);
         }
+    }
+
+    private sealed class RecordingLogger<T> : ILogger<T>
+    {
+        public ConcurrentQueue<string> Messages { get; } = new();
+
+        public IDisposable? BeginScope<TState>(TState state)
+            where TState : notnull
+            => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+            => Messages.Enqueue(formatter(state, exception));
     }
 }

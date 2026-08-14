@@ -68,18 +68,73 @@ public sealed class MediaSegmentPropagationTests : IDisposable
             change => Assert.Equal((CatalogChangeKind.MediaSegments, itemId), (change.Kind, change.ItemId)));
     }
 
+    [Theory]
+    [InlineData("create")]
+    [InlineData("delete-one")]
+    [InlineData("delete-all")]
+    [InlineData("providers")]
+    public async Task SegmentMutation_WhenFollower_RejectsWithoutDatabaseWriteOrPublish(string mutation)
+    {
+        var notifier = new RecordingCatalogChangeNotifier();
+        var manager = new MediaSegmentManager(
+            NullLogger<MediaSegmentManager>.Instance,
+            _factory.Object,
+            Array.Empty<IMediaSegmentProvider>(),
+            notifier,
+            new TestCatalogOwnership(false));
+        var itemId = Guid.NewGuid();
+
+        await Assert.ThrowsAsync<CatalogWriteUnavailableException>(async () =>
+        {
+            switch (mutation)
+            {
+                case "create":
+                    await manager.CreateSegmentAsync(
+                        new MediaSegmentDto { Id = Guid.NewGuid(), ItemId = itemId, StartTicks = 1, EndTicks = 2 },
+                        "intro-skipper");
+                    break;
+                case "delete-one":
+                    await manager.DeleteSegmentAsync(Guid.NewGuid());
+                    break;
+                case "delete-all":
+                    await manager.DeleteSegmentsAsync(itemId, CancellationToken.None);
+                    break;
+                case "providers":
+                    await manager.RunSegmentPluginProviders(
+                        new MediaBrowser.Controller.Entities.Movies.Movie { Id = itemId },
+                        new MediaBrowser.Model.Configuration.LibraryOptions(),
+                        false,
+                        CancellationToken.None);
+                    break;
+            }
+        });
+
+        _factory.Verify(factory => factory.CreateDbContext(), Times.Never);
+        _factory.Verify(factory => factory.CreateDbContextAsync(It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(notifier.Published);
+    }
+
     public void Dispose() => _connection.Dispose();
 
     private sealed class RecordingCatalogChangeNotifier : ICatalogChangeNotifier
     {
-        public List<CatalogChange> Published { get; } = [];
-
         public event Action<CatalogChange>? Changed
         {
             add { }
             remove { }
         }
 
+        public List<CatalogChange> Published { get; } = [];
+
         public void Publish(CatalogChange change) => Published.Add(change);
+    }
+
+    private sealed class TestCatalogOwnership(bool isOwner) : ICatalogOwnership
+    {
+        public bool TryGetCatalogWriteToken(out CancellationToken ownershipLost)
+        {
+            ownershipLost = CancellationToken.None;
+            return isOwner;
+        }
     }
 }
