@@ -58,7 +58,7 @@ jobs:
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
           mkdir -p "$DOTNET_INSTALL_DIR"
-          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir "$DOTNET_INSTALL_DIR"
+          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir "$DOTNET_INSTALL_DIR"
           echo "DOTNET_ROOT=$DOTNET_INSTALL_DIR" >> "$GITHUB_ENV"
           echo "PATH=$DOTNET_INSTALL_DIR:$PATH" >> "$GITHUB_ENV"
 
@@ -95,7 +95,7 @@ jobs:
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
           mkdir -p "$DOTNET_INSTALL_DIR"
-          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir "$DOTNET_INSTALL_DIR"
+          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir "$DOTNET_INSTALL_DIR"
           echo "DOTNET_ROOT=$DOTNET_INSTALL_DIR" >> "$GITHUB_ENV"
           echo "PATH=$DOTNET_INSTALL_DIR:$PATH" >> "$GITHUB_ENV"
 

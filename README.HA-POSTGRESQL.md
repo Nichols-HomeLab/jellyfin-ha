@@ -38,7 +38,7 @@ services:
       Jellyfin__TranscodeStore__RedisConnectionString: redis:6379,abortConnect=false
       Jellyfin__TranscodeStore__LeaseDurationSeconds: "30"
       Jellyfin__TranscodeStore__RecoveryRetentionSeconds: "300"
-      Jellyfin__CatalogOwnership__ProbeIntervalSeconds: "2"
+      JELLYFIN_Jellyfin__CatalogOwnership__ProbeIntervalSeconds: "2"
       JELLYFIN_INSTANCE_ID: jellyfin-1
     volumes:
       - jellyfin-config:/config

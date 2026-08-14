@@ -27,7 +27,8 @@ public sealed class CatalogOwnershipTaskManagerTests : IDisposable
     public async Task Follower_DoesNotExecuteScheduledWork()
     {
         var task = new RecordingScheduledTask();
-        using var manager = CreateManager(new TestCatalogOwnership(isOwner: false));
+        using var ownership = new TestCatalogOwnership(isOwner: false);
+        using var manager = CreateManager(ownership);
         manager.AddTasks([task]);
 
         manager.QueueScheduledTask(task, new TaskOptions());
@@ -44,7 +45,8 @@ public sealed class CatalogOwnershipTaskManagerTests : IDisposable
     public async Task Owner_ExecutesScheduledWork()
     {
         var task = new RecordingScheduledTask();
-        using var manager = CreateManager(new TestCatalogOwnership(isOwner: true));
+        using var ownership = new TestCatalogOwnership(isOwner: true);
+        using var manager = CreateManager(ownership);
         manager.AddTasks([task]);
 
         manager.QueueScheduledTask(task, new TaskOptions());
@@ -59,7 +61,7 @@ public sealed class CatalogOwnershipTaskManagerTests : IDisposable
     [Fact]
     public async Task RunningWork_IsCancelledWhenOwnershipIsLost()
     {
-        var ownership = new TestCatalogOwnership(isOwner: true);
+        using var ownership = new TestCatalogOwnership(isOwner: true);
         var task = new RecordingScheduledTask(waitForCancellation: true);
         using var manager = CreateManager(ownership);
         manager.AddTasks([task]);
@@ -68,8 +70,8 @@ public sealed class CatalogOwnershipTaskManagerTests : IDisposable
         await task.Executed.Task.WaitAsync(TimeSpan.FromSeconds(2));
         ownership.LoseOwnership();
 
-        await task.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
-        Assert.True(task.Cancelled.Task.Result);
+        var cancelled = await task.Cancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.True(cancelled);
     }
 
     /// <inheritdoc />
@@ -90,7 +92,7 @@ public sealed class CatalogOwnershipTaskManagerTests : IDisposable
         return new TaskManager(paths.Object, ownership, NullLogger<TaskManager>.Instance);
     }
 
-    private sealed class TestCatalogOwnership(bool isOwner) : ICatalogOwnership
+    private sealed class TestCatalogOwnership(bool isOwner) : ICatalogOwnership, IDisposable
     {
         private readonly CancellationTokenSource _ownershipLost = new();
         private bool _isOwner = isOwner;
@@ -106,6 +108,8 @@ public sealed class CatalogOwnershipTaskManagerTests : IDisposable
             _isOwner = false;
             _ownershipLost.Cancel();
         }
+
+        public void Dispose() => _ownershipLost.Dispose();
     }
 
     private sealed class RecordingScheduledTask(bool waitForCancellation = false) : IScheduledTask

@@ -44,6 +44,7 @@ namespace MediaBrowser.Providers.Manager
         private readonly ILibraryMonitor _libraryMonitor;
         private readonly IFileSystem _fileSystem;
         private readonly ILogger _logger;
+        private readonly ICatalogOwnership _catalogOwnership;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ImageSaver" /> class.
@@ -53,11 +54,25 @@ namespace MediaBrowser.Providers.Manager
         /// <param name="fileSystem">The file system.</param>
         /// <param name="logger">The logger.</param>
         public ImageSaver(IServerConfigurationManager config, ILibraryMonitor libraryMonitor, IFileSystem fileSystem, ILogger logger)
+            : this(config, libraryMonitor, fileSystem, logger, new SingleInstanceProviderCatalogOwnership())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ImageSaver"/> class.
+        /// </summary>
+        public ImageSaver(
+            IServerConfigurationManager config,
+            ILibraryMonitor libraryMonitor,
+            IFileSystem fileSystem,
+            ILogger logger,
+            ICatalogOwnership catalogOwnership)
         {
             _config = config;
             _libraryMonitor = libraryMonitor;
             _fileSystem = fileSystem;
             _logger = logger;
+            _catalogOwnership = catalogOwnership;
         }
 
         private bool EnableExtraThumbsDuplication
@@ -89,6 +104,8 @@ namespace MediaBrowser.Providers.Manager
         public async Task SaveImage(BaseItem item, Stream source, string mimeType, ImageType type, int? imageIndex, bool? saveLocallyWithMedia, CancellationToken cancellationToken)
         {
             ArgumentException.ThrowIfNullOrEmpty(mimeType);
+            using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
+            cancellationToken = catalogWrite.Token;
 
             var saveLocally = item.SupportsLocalMetadata && item.IsSaveLocalMetadataEnabled() && !item.ExtraType.HasValue && item is not Audio;
 
@@ -280,6 +297,7 @@ namespace MediaBrowser.Providers.Manager
 
             var parentFolder = Path.GetDirectoryName(path);
 
+            var temporaryPath = path + "." + Guid.NewGuid().ToString("N", CultureInfo.InvariantCulture) + ".tmp";
             try
             {
                 _libraryMonitor.ReportFileSystemChangeBeginning(path);
@@ -290,18 +308,22 @@ namespace MediaBrowser.Providers.Manager
                 _fileSystem.SetAttributes(path, false, false);
 
                 var fileStreamOptions = AsyncFile.WriteOptions;
-                fileStreamOptions.Mode = FileMode.Create;
+                fileStreamOptions.Mode = FileMode.CreateNew;
                 fileStreamOptions.Options = FileOptions.WriteThrough;
                 if (source.CanSeek)
                 {
                     fileStreamOptions.PreallocationSize = source.Length;
                 }
 
-                var fs = new FileStream(path, fileStreamOptions);
+                var fs = new FileStream(temporaryPath, fileStreamOptions);
                 await using (fs.ConfigureAwait(false))
                 {
                     await source.CopyToAsync(fs, cancellationToken).ConfigureAwait(false);
+                    await fs.FlushAsync(cancellationToken).ConfigureAwait(false);
                 }
+
+                cancellationToken.ThrowIfCancellationRequested();
+                File.Move(temporaryPath, path, true);
 
                 if (_config.Configuration.SaveMetadataHidden)
                 {
@@ -310,6 +332,15 @@ namespace MediaBrowser.Providers.Manager
             }
             finally
             {
+                try
+                {
+                    File.Delete(temporaryPath);
+                }
+                catch (IOException ex)
+                {
+                    _logger.LogWarning(ex, "Unable to remove incomplete image {TemporaryPath}", temporaryPath);
+                }
+
                 _libraryMonitor.ReportFileSystemChangeComplete(path, false);
                 _libraryMonitor.ReportFileSystemChangeComplete(parentFolder, false);
             }

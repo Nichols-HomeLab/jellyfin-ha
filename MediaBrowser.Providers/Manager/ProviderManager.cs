@@ -63,6 +63,7 @@ namespace MediaBrowser.Providers.Manager
         private readonly PriorityQueue<(Guid ItemId, MetadataRefreshOptions RefreshOptions), RefreshPriority> _refreshQueue = new();
         private readonly IMemoryCache _memoryCache;
         private readonly IMediaSegmentManager _mediaSegmentManager;
+        private readonly ICatalogOwnership _catalogOwnership;
         private readonly AsyncKeyedLocker<string> _imageSaveLock = new(o =>
         {
             o.PoolSize = 20;
@@ -106,6 +107,40 @@ namespace MediaBrowser.Providers.Manager
             ILyricManager lyricManager,
             IMemoryCache memoryCache,
             IMediaSegmentManager mediaSegmentManager)
+            : this(
+                httpClientFactory,
+                subtitleManager,
+                configurationManager,
+                libraryMonitor,
+                logger,
+                fileSystem,
+                appPaths,
+                libraryManager,
+                baseItemManager,
+                lyricManager,
+                memoryCache,
+                mediaSegmentManager,
+                new SingleInstanceProviderCatalogOwnership())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ProviderManager"/> class.
+        /// </summary>
+        public ProviderManager(
+            IHttpClientFactory httpClientFactory,
+            ISubtitleManager subtitleManager,
+            IServerConfigurationManager configurationManager,
+            ILibraryMonitor libraryMonitor,
+            ILogger<ProviderManager> logger,
+            IFileSystem fileSystem,
+            IServerApplicationPaths appPaths,
+            ILibraryManager libraryManager,
+            IBaseItemManager baseItemManager,
+            ILyricManager lyricManager,
+            IMemoryCache memoryCache,
+            IMediaSegmentManager mediaSegmentManager,
+            ICatalogOwnership catalogOwnership)
         {
             _logger = logger;
             _httpClientFactory = httpClientFactory;
@@ -119,6 +154,7 @@ namespace MediaBrowser.Providers.Manager
             _lyricManager = lyricManager;
             _memoryCache = memoryCache;
             _mediaSegmentManager = mediaSegmentManager;
+            _catalogOwnership = catalogOwnership;
         }
 
         /// <inheritdoc/>
@@ -238,7 +274,8 @@ namespace MediaBrowser.Providers.Manager
         /// <inheritdoc/>
         public Task SaveImage(BaseItem item, Stream source, string mimeType, ImageType type, int? imageIndex, CancellationToken cancellationToken)
         {
-            return new ImageSaver(_configurationManager, _libraryMonitor, _fileSystem, _logger).SaveImage(item, source, mimeType, type, imageIndex, cancellationToken);
+            return new ImageSaver(_configurationManager, _libraryMonitor, _fileSystem, _logger, _catalogOwnership)
+                .SaveImage(item, source, mimeType, type, imageIndex, cancellationToken);
         }
 
         /// <inheritdoc/>
@@ -252,7 +289,7 @@ namespace MediaBrowser.Providers.Manager
             try
             {
                 var fileStream = AsyncFile.OpenRead(source);
-                await new ImageSaver(_configurationManager, _libraryMonitor, _fileSystem, _logger)
+                await new ImageSaver(_configurationManager, _libraryMonitor, _fileSystem, _logger, _catalogOwnership)
                     .SaveImage(item, fileStream, mimeType, type, imageIndex, saveLocallyWithMedia, cancellationToken)
                     .ConfigureAwait(false);
             }
@@ -272,7 +309,7 @@ namespace MediaBrowser.Providers.Manager
         /// <inheritdoc/>
         public Task SaveImage(Stream source, string mimeType, string path)
         {
-            return new ImageSaver(_configurationManager, _libraryMonitor, _fileSystem, _logger)
+            return new ImageSaver(_configurationManager, _libraryMonitor, _fileSystem, _logger, _catalogOwnership)
                 .SaveImage(source, path);
         }
 
@@ -668,6 +705,7 @@ namespace MediaBrowser.Providers.Manager
         /// <param name="savers">The savers.</param>
         private async Task SaveMetadataAsync(BaseItem item, ItemUpdateType updateType, IEnumerable<IMetadataSaver> savers)
         {
+            using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(CancellationToken.None);
             var libraryOptions = _libraryManager.GetLibraryOptions(item);
             var applicableSavers = savers.Where(i => IsSaverEnabledForItem(i, item, libraryOptions, updateType, false)).ToList();
             if (applicableSavers.Count == 0)
@@ -677,6 +715,7 @@ namespace MediaBrowser.Providers.Manager
 
             foreach (var saver in applicableSavers)
             {
+                catalogWrite.Token.ThrowIfCancellationRequested();
                 _logger.LogDebug("Saving {Item} to {Saver}", item.Path ?? item.Name, saver.Name);
 
                 if (saver is IMetadataFileSaver fileSaver)
@@ -696,7 +735,7 @@ namespace MediaBrowser.Providers.Manager
                     try
                     {
                         _libraryMonitor.ReportFileSystemChangeBeginning(path);
-                        await saver.SaveAsync(item, CancellationToken.None).ConfigureAwait(false);
+                        await saver.SaveAsync(item, catalogWrite.Token).ConfigureAwait(false);
                         item.DateLastSaved = DateTime.UtcNow;
                     }
                     catch (Exception ex)
@@ -712,7 +751,7 @@ namespace MediaBrowser.Providers.Manager
                 {
                     try
                     {
-                        await saver.SaveAsync(item, CancellationToken.None).ConfigureAwait(false);
+                        await saver.SaveAsync(item, catalogWrite.Token).ConfigureAwait(false);
                         item.DateLastSaved = DateTime.UtcNow;
                     }
                     catch (Exception ex)

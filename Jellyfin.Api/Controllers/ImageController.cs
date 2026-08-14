@@ -50,6 +50,7 @@ public class ImageController : BaseJellyfinApiController
     private readonly ILogger<ImageController> _logger;
     private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly IApplicationPaths _appPaths;
+    private readonly ICatalogOwnership _catalogOwnership;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageController"/> class.
@@ -71,6 +72,32 @@ public class ImageController : BaseJellyfinApiController
         ILogger<ImageController> logger,
         IServerConfigurationManager serverConfigurationManager,
         IApplicationPaths appPaths)
+        : this(
+            userManager,
+            libraryManager,
+            providerManager,
+            imageProcessor,
+            fileSystem,
+            logger,
+            serverConfigurationManager,
+            appPaths,
+            new SingleInstanceImageControllerCatalogOwnership())
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageController"/> class.
+    /// </summary>
+    public ImageController(
+        IUserManager userManager,
+        ILibraryManager libraryManager,
+        IProviderManager providerManager,
+        IImageProcessor imageProcessor,
+        IFileSystem fileSystem,
+        ILogger<ImageController> logger,
+        IServerConfigurationManager serverConfigurationManager,
+        IApplicationPaths appPaths,
+        ICatalogOwnership catalogOwnership)
     {
         _userManager = userManager;
         _libraryManager = libraryManager;
@@ -80,6 +107,7 @@ public class ImageController : BaseJellyfinApiController
         _logger = logger;
         _serverConfigurationManager = serverConfigurationManager;
         _appPaths = appPaths;
+        _catalogOwnership = catalogOwnership;
     }
 
     private static CryptoStream GetFromBase64Stream(Stream inputStream)
@@ -303,6 +331,7 @@ public class ImageController : BaseJellyfinApiController
             return NotFound();
         }
 
+        _catalogOwnership.RequireCatalogWriteToken();
         await item.DeleteImageAsync(imageType, imageIndex ?? 0).ConfigureAwait(false);
         return NoContent();
     }
@@ -331,6 +360,7 @@ public class ImageController : BaseJellyfinApiController
             return NotFound();
         }
 
+        _catalogOwnership.RequireCatalogWriteToken();
         await item.DeleteImageAsync(imageType, imageIndex).ConfigureAwait(false);
         return NoContent();
     }
@@ -447,8 +477,18 @@ public class ImageController : BaseJellyfinApiController
             return NotFound();
         }
 
+        _catalogOwnership.RequireCatalogWriteToken();
         await item.SwapImagesAsync(imageType, imageIndex, newIndex).ConfigureAwait(false);
         return NoContent();
+    }
+
+    private sealed class SingleInstanceImageControllerCatalogOwnership : ICatalogOwnership
+    {
+        public bool TryGetCatalogWriteToken(out CancellationToken ownershipLost)
+        {
+            ownershipLost = CancellationToken.None;
+            return true;
+        }
     }
 
     /// <summary>
@@ -479,7 +519,21 @@ public class ImageController : BaseJellyfinApiController
             return list;
         }
 
-        await _libraryManager.UpdateImagesAsync(item).ConfigureAwait(false); // this makes sure dimensions and hashes are correct
+        if (_catalogOwnership.TryGetCatalogWriteToken(out var ownershipLost) && !ownershipLost.IsCancellationRequested)
+        {
+            try
+            {
+                await _libraryManager.UpdateImagesAsync(item).ConfigureAwait(false); // this makes sure dimensions and hashes are correct
+            }
+            catch (CatalogWriteUnavailableException)
+            {
+                // Ownership changed while serving this read; stale dimensions are still safe to return.
+            }
+            catch (OperationCanceledException) when (ownershipLost.IsCancellationRequested)
+            {
+                // Ownership changed while serving this read; stale dimensions are still safe to return.
+            }
+        }
 
         foreach (var image in itemImages)
         {

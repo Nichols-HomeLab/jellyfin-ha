@@ -3,6 +3,7 @@ using System.Threading;
 using Emby.Server.Implementations.IO;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -62,10 +63,12 @@ public sealed class LibraryMonitorCatalogOwnershipTests
     {
         var lifetime = new Mock<IHostApplicationLifetime>();
         lifetime.SetupGet(i => i.ApplicationStarted).Returns(CancellationToken.None);
+        var configuration = new Mock<IServerConfigurationManager>();
+        configuration.SetupGet(i => i.Configuration).Returns(new ServerConfiguration());
         return new LibraryMonitor(
             NullLogger<LibraryMonitor>.Instance,
             Mock.Of<ILibraryManager>(),
-            Mock.Of<IServerConfigurationManager>(),
+            configuration.Object,
             fileSystem,
             ownership,
             lifetime.Object);

@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DotNet.Testcontainers.Builders;
@@ -32,8 +31,7 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
             return;
         }
 
-        _container = new PostgreSqlBuilder()
-            .WithImage("postgres:16-alpine")
+        _container = new PostgreSqlBuilder("postgres:16-alpine")
             .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("pg_isready"))
             .Build();
     }
@@ -60,6 +58,7 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
     /// <summary>
     /// Two server instances sharing PostgreSQL expose exactly one writer and hand ownership off after release.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [Fact]
     public async Task SharedAuthority_HasOneOwnerAndHandsOffAfterRelease()
     {
@@ -80,7 +79,7 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
         await second.StartAsync(CancellationToken.None);
 
         await WaitUntilAsync(() => IsOwner(first) ^ IsOwner(second));
-        Assert.Single(new[] { first, second }.Where(IsOwner));
+        Assert.Single(new[] { first, second }, IsOwner);
 
         var owner = IsOwner(first) ? first : second;
         var follower = ReferenceEquals(owner, first) ? second : first;
@@ -91,10 +90,11 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
     }
 
     /// <summary>
-    /// Coordination loss revokes the current ownership token and makes the adapter fail closed.
+    /// Coordination loss revokes the current ownership token before the adapter reacquires ownership.
     /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
     [Fact]
-    public async Task CoordinationUnavailable_RevokesOwnershipAndFailsClosed()
+    public async Task CoordinationLoss_RevokesOwnershipBeforeReacquiring()
     {
         await using var dataSource = NpgsqlDataSource.Create(_connectionString!);
         await using var ownership = new PostgreSqlCatalogOwnership(
@@ -113,9 +113,11 @@ public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
         command.Parameters.AddWithValue(607);
         Assert.True(await command.ExecuteScalarAsync() is true);
 
-        await WaitUntilAsync(() => !ownership.TryGetCatalogWriteToken(out _));
+        await WaitUntilAsync(() => ownershipLost.IsCancellationRequested);
         Assert.True(ownershipLost.IsCancellationRequested);
-        Assert.False(ownership.TryGetCatalogWriteToken(out _));
+
+        await WaitUntilAsync(() => ownership.TryGetCatalogWriteToken(out _));
+        Assert.True(ownership.TryGetCatalogWriteToken(out _));
     }
 
     private static bool IsOwner(PostgreSqlCatalogOwnership ownership)

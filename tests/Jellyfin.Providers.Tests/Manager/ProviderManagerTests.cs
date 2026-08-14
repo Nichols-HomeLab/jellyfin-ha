@@ -75,6 +75,15 @@ namespace Jellyfin.Providers.Tests.Manager
                 },
             };
 
+        [Fact]
+        public async Task SaveMetadataAsync_WhenFollower_RejectsBeforeMetadataWriterRuns()
+        {
+            using var providerManager = GetProviderManager(catalogOwnership: new TestCatalogOwnership(false));
+
+            await Assert.ThrowsAsync<CatalogWriteUnavailableException>(() =>
+                providerManager.SaveMetadataAsync(new Movie(), ItemUpdateType.MetadataEdit));
+        }
+
         [Theory]
         [MemberData(nameof(RefreshSingleItemOrderData))]
         public async Task RefreshSingleItem_ServiceOrdering_FollowsPriority(Mock<IMetadataService>[] servicesList, int expectedIndex)
@@ -554,7 +563,8 @@ namespace Jellyfin.Providers.Tests.Manager
         private static ProviderManager GetProviderManager(
             ServerConfiguration? serverConfiguration = null,
             LibraryOptions? libraryOptions = null,
-            IBaseItemManager? baseItemManager = null)
+            IBaseItemManager? baseItemManager = null,
+            ICatalogOwnership? catalogOwnership = null)
         {
             var serverConfigurationManager = new Mock<IServerConfigurationManager>(MockBehavior.Strict);
             serverConfigurationManager.Setup(i => i.Configuration)
@@ -576,7 +586,8 @@ namespace Jellyfin.Providers.Tests.Manager
                 baseItemManager!,
                 Mock.Of<ILyricManager>(),
                 Mock.Of<IMemoryCache>(),
-                Mock.Of<IMediaSegmentManager>());
+                Mock.Of<IMediaSegmentManager>(),
+                catalogOwnership ?? new TestCatalogOwnership(true));
 
             return providerManager;
         }
@@ -598,6 +609,15 @@ namespace Jellyfin.Providers.Tests.Manager
             externalUrlProviders ??= Array.Empty<IExternalUrlProvider>();
 
             providerManager.AddParts(imageProviders, metadataServices, metadataProviders, metadataSavers, externalIds, externalUrlProviders);
+        }
+
+        private sealed class TestCatalogOwnership(bool isOwner) : ICatalogOwnership
+        {
+            public bool TryGetCatalogWriteToken(out CancellationToken ownershipLost)
+            {
+                ownershipLost = CancellationToken.None;
+                return isOwner;
+            }
         }
 
         /// <summary>

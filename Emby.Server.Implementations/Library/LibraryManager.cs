@@ -82,6 +82,7 @@ namespace Emby.Server.Implementations.Library
         private readonly IPeopleRepository _peopleRepository;
         private readonly ExtraResolver _extraResolver;
         private readonly IPathManager _pathManager;
+        private readonly ICatalogOwnership _catalogOwnership;
         private readonly FastConcurrentLru<Guid, BaseItem> _cache;
 
         /// <summary>
@@ -138,6 +139,50 @@ namespace Emby.Server.Implementations.Library
             IDirectoryService directoryService,
             IPeopleRepository peopleRepository,
             IPathManager pathManager)
+            : this(
+                appHost,
+                loggerFactory,
+                taskManager,
+                userManager,
+                configurationManager,
+                userDataManager,
+                libraryMonitorFactory,
+                fileSystem,
+                providerManagerFactory,
+                userViewManagerFactory,
+                mediaEncoder,
+                itemRepository,
+                imageProcessor,
+                namingOptions,
+                directoryService,
+                peopleRepository,
+                pathManager,
+                new SingleInstanceCatalogOwnership())
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LibraryManager"/> class.
+        /// </summary>
+        public LibraryManager(
+            IServerApplicationHost appHost,
+            ILoggerFactory loggerFactory,
+            ITaskManager taskManager,
+            IUserManager userManager,
+            IServerConfigurationManager configurationManager,
+            IUserDataManager userDataManager,
+            Lazy<ILibraryMonitor> libraryMonitorFactory,
+            IFileSystem fileSystem,
+            Lazy<IProviderManager> providerManagerFactory,
+            Lazy<IUserViewManager> userViewManagerFactory,
+            IMediaEncoder mediaEncoder,
+            IItemRepository itemRepository,
+            IImageProcessor imageProcessor,
+            NamingOptions namingOptions,
+            IDirectoryService directoryService,
+            IPeopleRepository peopleRepository,
+            IPathManager pathManager,
+            ICatalogOwnership catalogOwnership)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -158,6 +203,7 @@ namespace Emby.Server.Implementations.Library
             _namingOptions = namingOptions;
             _peopleRepository = peopleRepository;
             _pathManager = pathManager;
+            _catalogOwnership = catalogOwnership;
             _extraResolver = new ExtraResolver(loggerFactory.CreateLogger<ExtraResolver>(), namingOptions, directoryService);
 
             _configurationManager.ConfigurationUpdated += ConfigurationUpdated;
@@ -329,6 +375,7 @@ namespace Emby.Server.Implementations.Library
 
         public void DeleteItemsUnsafeFast(IEnumerable<BaseItem> items)
         {
+            _catalogOwnership.RequireCatalogWriteToken();
             var pathMaps = items.Select(e => (Item: e, InternalPath: GetInternalMetadataPaths(e), DeletePaths: e.GetDeletePaths())).ToArray();
 
             foreach (var (item, internalPaths, pathsToDelete) in pathMaps)
@@ -369,6 +416,7 @@ namespace Emby.Server.Implementations.Library
         public void DeleteItem(BaseItem item, DeleteOptions options, BaseItem parent, bool notifyParentItem)
         {
             ArgumentNullException.ThrowIfNull(item);
+            _catalogOwnership.RequireCatalogWriteToken();
 
             if (item.SourceType == SourceType.Channel)
             {
@@ -1186,6 +1234,7 @@ namespace Emby.Server.Implementations.Library
 
             if (toDelete.Count > 0)
             {
+                _catalogOwnership.RequireCatalogWriteToken();
                 _itemRepository.DeleteItem(toDelete.ToArray());
             }
         }
@@ -1262,6 +1311,7 @@ namespace Emby.Server.Implementations.Library
                 progress.Report(percent * 100);
             }
 
+            _catalogOwnership.RequireCatalogWriteToken();
             _itemRepository.UpdateInheritedValues();
 
             progress.Report(100);
@@ -1993,7 +2043,8 @@ namespace Emby.Server.Implementations.Library
         /// <inheritdoc />
         public void CreateItems(IReadOnlyList<BaseItem> items, BaseItem? parent, CancellationToken cancellationToken)
         {
-            _itemRepository.SaveItems(items, cancellationToken);
+            using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
+            _itemRepository.SaveItems(items, catalogWrite.Token);
 
             foreach (var item in items)
             {
@@ -2072,6 +2123,8 @@ namespace Emby.Server.Implementations.Library
                 return;
             }
 
+            _catalogOwnership.RequireCatalogWriteToken();
+
             foreach (var img in outdated)
             {
                 var image = img;
@@ -2144,6 +2197,7 @@ namespace Emby.Server.Implementations.Library
 
             item.ValidateImages();
 
+            _catalogOwnership.RequireCatalogWriteToken();
             _itemRepository.SaveImages(item);
 
             RegisterItem(item);
@@ -2152,6 +2206,7 @@ namespace Emby.Server.Implementations.Library
         /// <inheritdoc />
         public async Task UpdateItemsAsync(IReadOnlyList<BaseItem> items, BaseItem parent, ItemUpdateType updateReason, CancellationToken cancellationToken)
         {
+            using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
             foreach (var item in items)
             {
                 item.DateLastSaved = DateTime.UtcNow;
@@ -2161,7 +2216,8 @@ namespace Emby.Server.Implementations.Library
                 item.DateLastSaved = DateTime.UtcNow;
             }
 
-            _itemRepository.SaveItems(items, cancellationToken);
+            catalogWrite.Token.ThrowIfCancellationRequested();
+            _itemRepository.SaveItems(items, catalogWrite.Token);
 
             if (parent is Folder folder)
             {
@@ -2210,6 +2266,7 @@ namespace Emby.Server.Implementations.Library
 
         public async Task RunMetadataSavers(BaseItem item, ItemUpdateType updateReason)
         {
+            _catalogOwnership.RequireCatalogWriteToken();
             if (item.IsFileProtocol)
             {
                 await ProviderManager.SaveMetadataAsync(item, updateReason).ConfigureAwait(false);
@@ -2979,9 +3036,10 @@ namespace Emby.Server.Implementations.Library
 
             if (people is not null)
             {
+                using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
                 people = people.Where(e => e is not null).ToArray();
                 _peopleRepository.UpdatePeople(item.Id, people);
-                await SavePeopleMetadataAsync(people, cancellationToken).ConfigureAwait(false);
+                await SavePeopleMetadataAsync(people, catalogWrite.Token).ConfigureAwait(false);
             }
         }
 
