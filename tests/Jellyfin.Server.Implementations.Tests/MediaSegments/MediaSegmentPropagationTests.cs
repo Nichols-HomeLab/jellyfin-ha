@@ -32,6 +32,7 @@ public sealed class MediaSegmentPropagationTests : IDisposable
         JellyfinDbContext CreateContext() => new(
             options,
             NullLogger<JellyfinDbContext>.Instance,
+            // The provider dependency is only used for schema behavior outside these in-memory tests.
             new SqliteDatabaseProvider(null!, NullLogger<SqliteDatabaseProvider>.Instance),
             new NoLockBehavior(NullLogger<NoLockBehavior>.Instance));
         using var context = CreateContext();

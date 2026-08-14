@@ -17,15 +17,47 @@ public sealed class RedisCatalogChangeNotifierIntegrationTests
 {
     [SkippableFact]
     [Trait("Category", "IntegrationTest")]
+    public async Task ConcurrentPublishers_AllocateOneGloballyOrderedSequenceAndSuppressSelfMessages()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("JELLYFIN_TEST_REDIS");
+        Skip.If(string.IsNullOrWhiteSpace(connectionString), "Set JELLYFIN_TEST_REDIS to run Redis integration tests.");
+        await ResetSequenceAsync(connectionString).ConfigureAwait(false);
+
+        using var redisA = CreateManager(connectionString);
+        using var redisB = CreateManager(connectionString);
+        using var redisObserver = CreateManager(connectionString);
+        using var notifierA = new RedisCatalogChangeNotifier(redisA, NullLogger<RedisCatalogChangeNotifier>.Instance);
+        using var notifierB = new RedisCatalogChangeNotifier(redisB, NullLogger<RedisCatalogChangeNotifier>.Instance);
+        using var observer = new RedisCatalogChangeNotifier(redisObserver, NullLogger<RedisCatalogChangeNotifier>.Instance);
+        var receivedA = new ConcurrentQueue<CatalogChange>();
+        var receivedB = new ConcurrentQueue<CatalogChange>();
+        var receivedObserver = new ConcurrentQueue<CatalogChange>();
+        notifierA.Changed += receivedA.Enqueue;
+        notifierB.Changed += receivedB.Enqueue;
+        observer.Changed += receivedObserver.Enqueue;
+
+        var publishesA = Enumerable.Range(0, 50)
+            .Select(_ => Task.Run(() => notifierA.Publish(CatalogChange.Local(CatalogChangeKind.Updated, Guid.NewGuid()))));
+        var publishesB = Enumerable.Range(0, 50)
+            .Select(_ => Task.Run(() => notifierB.Publish(CatalogChange.Local(CatalogChangeKind.Updated, Guid.NewGuid()))));
+        await Task.WhenAll(publishesA.Concat(publishesB)).ConfigureAwait(false);
+        await WaitUntilAsync(() => receivedObserver.Count == 100).ConfigureAwait(false);
+        await WaitUntilAsync(() => receivedA.Count == 50 && receivedB.Count == 50).ConfigureAwait(false);
+
+        Assert.Equal(Enumerable.Range(1, 100).Select(value => (long)value), receivedObserver.Select(change => change.Sequence));
+        Assert.Equal(50, receivedA.Count);
+        Assert.Equal(50, receivedB.Count);
+        Assert.DoesNotContain(receivedObserver, change => change.Kind == CatalogChangeKind.FullResync);
+    }
+
+    [SkippableFact]
+    [Trait("Category", "IntegrationTest")]
     public async Task ReplicasReceiveOrderedChangesAndRecoverFromGapAndReconnect()
     {
         var connectionString = Environment.GetEnvironmentVariable("JELLYFIN_TEST_REDIS");
         Skip.If(string.IsNullOrWhiteSpace(connectionString), "Set JELLYFIN_TEST_REDIS to run Redis integration tests.");
 
-        using (var setup = await ConnectionMultiplexer.ConnectAsync(connectionString).ConfigureAwait(false))
-        {
-            await setup.GetDatabase().KeyDeleteAsync("jellyfin:catalog-cache:v1:sequence").ConfigureAwait(false);
-        }
+        await ResetSequenceAsync(connectionString).ConfigureAwait(false);
 
         using var replicaARedis = CreateManager(connectionString);
         var replicaBFactoryCalls = 0;
@@ -79,12 +111,34 @@ public sealed class RedisCatalogChangeNotifierIntegrationTests
                 : Task.FromResult(1)).ConfigureAwait(false);
         await WaitUntilAsync(() => replicaBChanges.Count > beforeReconnect).ConfigureAwait(false);
         Assert.Equal(CatalogChangeKind.FullResync, replicaBChanges.Last().Kind);
+
+        await replicaARedis.ExecuteAsync(connection =>
+                connection.GetDatabase().KeyDeleteAsync("jellyfin:catalog-cache:v1:sequence"))
+            .ConfigureAwait(false);
+        var beforeRollbackRecovery = replicaBChanges.Count;
+        var rollbackReconnectAttempts = 0;
+        await replicaBRedis.ExecuteAsync<int>(_ =>
+            ++rollbackReconnectAttempts == 1
+                ? throw new RedisServerException("READONLY test Redis restart")
+                : Task.FromResult(2)).ConfigureAwait(false);
+        await WaitUntilAsync(() => replicaBChanges.Count > beforeRollbackRecovery).ConfigureAwait(false);
+        Assert.Equal(0, replicaBChanges.Last().Sequence);
+        var newEpochId = Guid.NewGuid();
+        replicaA.Publish(CatalogChange.Local(CatalogChangeKind.Updated, newEpochId));
+        await WaitUntilAsync(() => replicaBChanges.Any(change => change.ItemId.Equals(newEpochId))).ConfigureAwait(false);
+        Assert.Contains(replicaBChanges, change => change.Sequence == 1 && change.ItemId.Equals(newEpochId));
     }
 
     private static RedisConnectionManager CreateManager(string connectionString)
         => new(
             () => ConnectionMultiplexer.Connect(connectionString),
             NullLogger<RedisConnectionManager>.Instance);
+
+    private static async Task ResetSequenceAsync(string connectionString)
+    {
+        using var setup = await ConnectionMultiplexer.ConnectAsync(connectionString).ConfigureAwait(false);
+        await setup.GetDatabase().KeyDeleteAsync("jellyfin:catalog-cache:v1:sequence").ConfigureAwait(false);
+    }
 
     private static async Task WaitUntilAsync(Func<bool> predicate)
     {

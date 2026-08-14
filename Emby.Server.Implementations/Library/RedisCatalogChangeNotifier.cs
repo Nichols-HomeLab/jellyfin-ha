@@ -15,10 +15,15 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 {
     private const string ChannelName = "jellyfin:catalog-cache:v1";
     private const string SequenceKey = "jellyfin:catalog-cache:v1:sequence";
+    private const string PublishScript = """
+        local sequence = redis.call('INCR', KEYS[1])
+        local message = ARGV[2] .. '|' .. sequence .. '|' .. ARGV[3] .. '|' .. ARGV[4] .. '|' .. ARGV[5]
+        redis.call('PUBLISH', ARGV[1], message)
+        return sequence
+        """;
     private readonly RedisConnectionManager _redis;
     private readonly ILogger<RedisCatalogChangeNotifier> _logger;
     private readonly string _source = Guid.NewGuid().ToString("N");
-    private readonly object _publishLock = new();
     private readonly object _receiveLock = new();
     private ChannelMessageQueue? _subscription;
     private long _lastSequence;
@@ -37,6 +42,8 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         _logger = logger;
         _redis.ConnectionReplaced += OnConnectionReplaced;
         _redis.ConnectionRestored += OnConnectionRestored;
+        // Construction must not return before the subscription is acknowledged; otherwise the
+        // first committed catalog change can be missed before this singleton is ready.
         _redis.ExecuteAsync(connection => SynchronizeAsync(connection, true, false)).GetAwaiter().GetResult();
     }
 
@@ -48,18 +55,20 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     {
         try
         {
-            lock (_publishLock)
-            {
-                _redis.ExecuteAsync(async connection =>
-                    {
-                        var sequence = await connection.GetDatabase().StringIncrementAsync(SequenceKey).ConfigureAwait(false);
-                        var message = Serialize(change with { Sequence = sequence });
-                        await connection.GetSubscriber().PublishAsync(RedisChannel.Literal(ChannelName), message).ConfigureAwait(false);
-                        return true;
-                    })
-                    .GetAwaiter()
-                    .GetResult();
-            }
+            // Lua makes sequence allocation and publication one globally ordered operation across
+            // every catalog-writer process, rather than only serializing callers in this instance.
+            _redis.ExecuteAsync(connection => connection.GetDatabase().ScriptEvaluateAsync(
+                    PublishScript,
+                    [(RedisKey)SequenceKey],
+                    [
+                        ChannelName,
+                        _source,
+                        ((int)change.Kind).ToString(CultureInfo.InvariantCulture),
+                        change.ItemId.ToString("N"),
+                        change.ParentId.ToString("N")
+                    ]))
+                .GetAwaiter()
+                .GetResult();
         }
         catch (RedisException ex)
         {
@@ -111,10 +120,16 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         Action<CatalogChange>? changed = null;
         lock (_receiveLock)
         {
-            _lastSequence = Math.Max(_lastSequence, sequence);
             if (forceFullResync)
             {
+                // A restored Redis instance may have lost its volatile sequence key. Reset the
+                // local watermark after invalidating caches so the new low sequence epoch applies.
+                _lastSequence = sequence;
                 changed = Changed;
+            }
+            else
+            {
+                _lastSequence = Math.Max(_lastSequence, sequence);
             }
         }
 
@@ -123,28 +138,24 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     }
 
     private void OnConnectionReplaced(IConnectionMultiplexer connection)
-    {
-        try
-        {
-            SynchronizeAsync(connection, true, true).GetAwaiter().GetResult();
-        }
-        catch (RedisException ex)
-        {
-            _logger.LogWarning(ex, "Failed to restore catalog invalidation subscription after reconnecting Redis.");
-        }
-    }
+        => Recover(connection, true, "restore the catalog invalidation subscription after replacing Redis");
 
     private void OnConnectionRestored(IConnectionMultiplexer connection)
+        => Recover(connection, false, "synchronize catalog invalidations after Redis restored its connection");
+
+    private void Recover(IConnectionMultiplexer connection, bool subscribe, string operation)
     {
         try
         {
             // StackExchange.Redis restores subscriptions on the same multiplexer. Compare the
             // durable generation immediately so missed pub/sub messages cannot leave stale caches.
-            SynchronizeAsync(connection, false, true).GetAwaiter().GetResult();
+            // Recovery callbacks are synchronous by contract; completing synchronization here
+            // fences later notifications behind the full-resync signal.
+            SynchronizeAsync(connection, subscribe, true).GetAwaiter().GetResult();
         }
         catch (RedisException ex)
         {
-            _logger.LogWarning(ex, "Failed to synchronize catalog invalidations after Redis restored its connection.");
+            _logger.LogWarning(ex, "Failed to {CatalogRecoveryOperation}.", operation);
         }
     }
 
@@ -183,11 +194,6 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 
         changed?.Invoke(change);
     }
-
-    private string Serialize(CatalogChange change)
-        => string.Create(
-            CultureInfo.InvariantCulture,
-            $"{_source}|{change.Sequence}|{(int)change.Kind}|{change.ItemId:N}|{change.ParentId:N}");
 
     internal static bool TryDeserialize(string message, out string source, out CatalogChange change)
     {

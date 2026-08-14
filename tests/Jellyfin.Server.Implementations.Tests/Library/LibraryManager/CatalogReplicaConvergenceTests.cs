@@ -144,6 +144,25 @@ public sealed class CatalogReplicaConvergenceTests
     }
 
     [Fact]
+    public void FullResync_AfterSequenceRollback_AcceptsNewLowSequenceEpoch()
+    {
+        var notifier = new FakeCatalogChangeNotifier();
+        var (follower, repository) = CreateLibraryManager(notifier);
+        var itemId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        var persistedName = "Old Redis epoch";
+        repository.Setup(r => r.RetrieveItem(itemId)).Returns(() => new Movie { Id = itemId, Name = persistedName });
+        repository.Setup(r => r.RetrieveItem(parentId)).Returns(new Folder { Id = parentId, Name = "Movies" });
+
+        notifier.Receive(new CatalogChange(99, CatalogChangeKind.Updated, itemId, parentId));
+        notifier.Receive(CatalogChange.FullResync(0));
+        persistedName = "New Redis epoch";
+        notifier.Receive(new CatalogChange(1, CatalogChangeKind.Updated, itemId, parentId));
+
+        Assert.Equal("New Redis epoch", follower.GetItemById(itemId)!.Name);
+    }
+
+    [Fact]
     public void FastDelete_PublishesParentForFollowerChildrenInvalidation()
     {
         var notifier = new FakeCatalogChangeNotifier();
@@ -156,6 +175,29 @@ public sealed class CatalogReplicaConvergenceTests
         var change = Assert.Single(notifier.Published);
         Assert.Equal(CatalogChangeKind.Removed, change.Kind);
         Assert.Equal(parentId, change.ParentId);
+    }
+
+    [Fact]
+    public void TopLibraryDelete_EvictsFollowerAndReplaysRemoval()
+    {
+        var hub = new FakeCatalogChangeHub();
+        var (owner, ownerRepository) = CreateLibraryManager(hub.CreateNotifier());
+        var (follower, followerRepository) = CreateLibraryManager(hub.CreateNotifier());
+        var parent = new Folder { Id = Guid.NewGuid(), Name = "Library root" };
+        var item = new Folder { Id = Guid.NewGuid(), ParentId = parent.Id, Name = "Missing collection" };
+        var followerParent = new Folder { Id = parent.Id, Name = parent.Name, Children = [item] };
+        follower.RegisterItem(followerParent);
+        follower.RegisterItem(item);
+        // The shared repository no longer contains the deleted row.
+        followerRepository.Setup(r => r.RetrieveItem(item.Id)).Returns(() => null!);
+        BaseItem? removed = null;
+        follower.ItemRemoved += (_, eventArgs) => removed = eventArgs.Item;
+
+        owner.DeleteItemsFromCatalog([item], parent);
+
+        ownerRepository.Verify(r => r.DeleteItem(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(item.Id))), Times.Once);
+        Assert.Equal(item.Id, removed?.Id);
+        Assert.Null(follower.GetItemById(item.Id));
     }
 
     private static (Emby.Server.Implementations.Library.LibraryManager Manager, Mock<IItemRepository> Repository) CreateLibraryManager(

@@ -1280,13 +1280,13 @@ namespace Emby.Server.Implementations.Library
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             // Quickly scan CollectionFolders for changes
-            var toDelete = new List<Guid>();
+            var toDelete = new List<BaseItem>();
             foreach (var child in rootFolder.Children!.OfType<Folder>())
             {
                 // If the user has somehow deleted the collection directory, remove the metadata from the database.
                 if (child is CollectionFolder collectionFolder && !Directory.Exists(collectionFolder.Path))
                 {
-                    toDelete.Add(collectionFolder.Id);
+                    toDelete.Add(collectionFolder);
                 }
                 else
                 {
@@ -1296,8 +1296,25 @@ namespace Emby.Server.Implementations.Library
 
             if (toDelete.Count > 0)
             {
-                _catalogOwnership.RequireCatalogWriteToken();
-                _itemRepository.DeleteItem(toDelete.ToArray());
+                DeleteItemsFromCatalog(toDelete, rootFolder);
+            }
+        }
+
+        internal void DeleteItemsFromCatalog(IReadOnlyList<BaseItem> items, BaseItem parent)
+        {
+            _catalogOwnership.RequireCatalogWriteToken();
+            _itemRepository.DeleteItem([.. items.Select(item => item.Id)]);
+            if (parent is Folder parentFolder)
+            {
+                parentFolder.Children = null;
+                parentFolder.UserData = null;
+            }
+
+            foreach (var item in items)
+            {
+                _cache.TryRemove(item.Id, out _);
+                ReportItemRemoved(item, parent);
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, item.Id, parent.Id));
             }
         }
 
@@ -2380,7 +2397,7 @@ namespace Emby.Server.Implementations.Library
             {
                 if (change.Kind == CatalogChangeKind.FullResync)
                 {
-                    _lastCatalogChangeSequence = Math.Max(_lastCatalogChangeSequence, change.Sequence);
+                    _lastCatalogChangeSequence = change.Sequence;
                     _cache.Clear();
                     if (_rootFolder is not null)
                     {
