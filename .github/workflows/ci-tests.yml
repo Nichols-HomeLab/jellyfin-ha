@@ -26,8 +26,16 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
       JELLYFIN_CATALOG_TEST_POSTGRES: Host=postgres;Port=5432;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test
+      JELLYFIN_TEST_REDIS: redis:6379
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
 
@@ -46,6 +54,14 @@ jobs:
             --configuration Release \
             --verbosity minimal \
             --filter "FullyQualifiedName~PostgreSqlCatalogOwnershipTests"
+
+      - name: Test cluster-wide catalog propagation
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          dotnet test tests/Jellyfin.Server.Implementations.Tests/Jellyfin.Server.Implementations.Tests.csproj \
+            --configuration Release \
+            --verbosity minimal \
+            --filter "FullyQualifiedName~CatalogReplicaConvergenceTests|FullyQualifiedName~RedisCatalogChangeNotifierIntegrationTests"
 
   run-tests:
     runs-on: [self-hosted, k3s, linux, amd64]

@@ -139,10 +139,12 @@ namespace Jellyfin.Server
                 });
                 serviceCollection.AddSingleton<ITranscodeSessionStore, RedisTranscodeSessionStore>();
                 serviceCollection.AddSingleton<IUserDataCacheInvalidator, RedisUserDataCacheInvalidator>();
+                serviceCollection.AddSingleton<ICatalogChangeNotifier, RedisCatalogChangeNotifier>();
             }
             else
             {
                 serviceCollection.AddSingleton<ITranscodeSessionStore, NullTranscodeSessionStore>();
+                serviceCollection.AddSingleton<ICatalogChangeNotifier>(_ => NullCatalogChangeNotifier.Instance);
             }
 
             foreach (var type in GetExportTypes<ILyricProvider>())

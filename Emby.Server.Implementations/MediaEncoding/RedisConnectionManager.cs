@@ -31,12 +31,18 @@ public sealed class RedisConnectionManager : IDisposable
         _connectionFactory = connectionFactory;
         _logger = logger;
         _connection = connectionFactory();
+        _connection.ConnectionRestored += OnMultiplexerConnectionRestored;
     }
 
     /// <summary>
     /// Occurs after the managed connection has been replaced.
     /// </summary>
     public event Action<IConnectionMultiplexer>? ConnectionReplaced;
+
+    /// <summary>
+    /// Occurs after the current multiplexer restores a transiently disconnected connection.
+    /// </summary>
+    public event Action<IConnectionMultiplexer>? ConnectionRestored;
 
     /// <summary>
     /// Executes an operation and retries it once on a new connection when the
@@ -77,7 +83,9 @@ public sealed class RedisConnectionManager : IDisposable
         }
 
         _disposed = true;
-        Volatile.Read(ref _connection).Dispose();
+        var connection = Volatile.Read(ref _connection);
+        connection.ConnectionRestored -= OnMultiplexerConnectionRestored;
+        connection.Dispose();
         _reconnectLock.Dispose();
         GC.SuppressFinalize(this);
     }
@@ -113,7 +121,9 @@ public sealed class RedisConnectionManager : IDisposable
             }
 
             var replacement = _connectionFactory();
+            replacement.ConnectionRestored += OnMultiplexerConnectionRestored;
             var previous = Interlocked.Exchange(ref _connection, replacement);
+            previous.ConnectionRestored -= OnMultiplexerConnectionRestored;
             previous.Dispose();
             ConnectionReplaced?.Invoke(replacement);
             _logger.LogInformation("Reconnected the Redis transcode store to a fresh writable endpoint.");
@@ -121,6 +131,14 @@ public sealed class RedisConnectionManager : IDisposable
         finally
         {
             _reconnectLock.Release();
+        }
+    }
+
+    private void OnMultiplexerConnectionRestored(object? sender, ConnectionFailedEventArgs args)
+    {
+        if (!_disposed && sender is IConnectionMultiplexer connection)
+        {
+            ConnectionRestored?.Invoke(connection);
         }
     }
 }

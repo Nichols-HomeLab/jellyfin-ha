@@ -83,7 +83,10 @@ namespace Emby.Server.Implementations.Library
         private readonly ExtraResolver _extraResolver;
         private readonly IPathManager _pathManager;
         private readonly ICatalogOwnership _catalogOwnership;
+        private readonly ICatalogChangeNotifier _catalogChangeNotifier;
         private readonly FastConcurrentLru<Guid, BaseItem> _cache;
+        private readonly Lock _catalogChangeLock = new();
+        private long _lastCatalogChangeSequence;
 
         /// <summary>
         /// The _root folder sync lock.
@@ -157,7 +160,8 @@ namespace Emby.Server.Implementations.Library
                 directoryService,
                 peopleRepository,
                 pathManager,
-                new SingleInstanceCatalogOwnership())
+                new SingleInstanceCatalogOwnership(),
+                NullCatalogChangeNotifier.Instance)
         {
         }
 
@@ -183,6 +187,52 @@ namespace Emby.Server.Implementations.Library
             IPeopleRepository peopleRepository,
             IPathManager pathManager,
             ICatalogOwnership catalogOwnership)
+            : this(
+                appHost,
+                loggerFactory,
+                taskManager,
+                userManager,
+                configurationManager,
+                userDataManager,
+                libraryMonitorFactory,
+                fileSystem,
+                providerManagerFactory,
+                userViewManagerFactory,
+                mediaEncoder,
+                itemRepository,
+                imageProcessor,
+                namingOptions,
+                directoryService,
+                peopleRepository,
+                pathManager,
+                catalogOwnership,
+                NullCatalogChangeNotifier.Instance)
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="LibraryManager"/> class with distributed catalog propagation.
+        /// </summary>
+        public LibraryManager(
+            IServerApplicationHost appHost,
+            ILoggerFactory loggerFactory,
+            ITaskManager taskManager,
+            IUserManager userManager,
+            IServerConfigurationManager configurationManager,
+            IUserDataManager userDataManager,
+            Lazy<ILibraryMonitor> libraryMonitorFactory,
+            IFileSystem fileSystem,
+            Lazy<IProviderManager> providerManagerFactory,
+            Lazy<IUserViewManager> userViewManagerFactory,
+            IMediaEncoder mediaEncoder,
+            IItemRepository itemRepository,
+            IImageProcessor imageProcessor,
+            NamingOptions namingOptions,
+            IDirectoryService directoryService,
+            IPeopleRepository peopleRepository,
+            IPathManager pathManager,
+            ICatalogOwnership catalogOwnership,
+            ICatalogChangeNotifier catalogChangeNotifier)
         {
             _appHost = appHost;
             _logger = loggerFactory.CreateLogger<LibraryManager>();
@@ -204,6 +254,8 @@ namespace Emby.Server.Implementations.Library
             _peopleRepository = peopleRepository;
             _pathManager = pathManager;
             _catalogOwnership = catalogOwnership;
+            _catalogChangeNotifier = catalogChangeNotifier;
+            _catalogChangeNotifier.Changed += OnRemoteCatalogChange;
             _extraResolver = new ExtraResolver(loggerFactory.CreateLogger<ExtraResolver>(), namingOptions, directoryService);
 
             _configurationManager.ConfigurationUpdated += ConfigurationUpdated;
@@ -411,6 +463,11 @@ namespace Emby.Server.Implementations.Library
             }
 
             _itemRepository.DeleteItem([.. pathMaps.Select(f => f.Item.Id)]);
+            foreach (var (item, _, _) in pathMaps)
+            {
+                _cache.TryRemove(item.Id, out _);
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, item.Id, item.ParentId));
+            }
         }
 
         public void DeleteItem(BaseItem item, DeleteOptions options, BaseItem parent, bool notifyParentItem)
@@ -512,6 +569,11 @@ namespace Emby.Server.Implementations.Library
             }
 
             ReportItemRemoved(item, parent);
+            _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, item.Id, parent.Id));
+            foreach (var child in children)
+            {
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, child.Id, item.Id));
+            }
         }
 
         private void DeleteItemPath(BaseItem item, bool isRequiredForDelete, FileSystemMetadata fileSystemInfo)
@@ -1218,13 +1280,13 @@ namespace Emby.Server.Implementations.Library
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             // Quickly scan CollectionFolders for changes
-            var toDelete = new List<Guid>();
+            var toDelete = new List<BaseItem>();
             foreach (var child in rootFolder.Children!.OfType<Folder>())
             {
                 // If the user has somehow deleted the collection directory, remove the metadata from the database.
                 if (child is CollectionFolder collectionFolder && !Directory.Exists(collectionFolder.Path))
                 {
-                    toDelete.Add(collectionFolder.Id);
+                    toDelete.Add(collectionFolder);
                 }
                 else
                 {
@@ -1234,8 +1296,25 @@ namespace Emby.Server.Implementations.Library
 
             if (toDelete.Count > 0)
             {
-                _catalogOwnership.RequireCatalogWriteToken();
-                _itemRepository.DeleteItem(toDelete.ToArray());
+                DeleteItemsFromCatalog(toDelete, rootFolder);
+            }
+        }
+
+        internal void DeleteItemsFromCatalog(IReadOnlyList<BaseItem> items, BaseItem parent)
+        {
+            _catalogOwnership.RequireCatalogWriteToken();
+            _itemRepository.DeleteItem([.. items.Select(item => item.Id)]);
+            if (parent is Folder parentFolder)
+            {
+                parentFolder.Children = null;
+                parentFolder.UserData = null;
+            }
+
+            foreach (var item in items)
+            {
+                _cache.TryRemove(item.Id, out _);
+                ReportItemRemoved(item, parent);
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Removed, item.Id, parent.Id));
             }
         }
 
@@ -2083,6 +2162,11 @@ namespace Emby.Server.Implementations.Library
                     }
                 }
             }
+
+            foreach (var item in items)
+            {
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Added, item.Id, parent?.Id ?? Guid.Empty));
+            }
         }
 
         private bool ImageNeedsRefresh(ItemImageInfo image)
@@ -2201,6 +2285,7 @@ namespace Emby.Server.Implementations.Library
             _itemRepository.SaveImages(item);
 
             RegisterItem(item);
+            _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Updated, item.Id, item.ParentId));
         }
 
         /// <inheritdoc />
@@ -2252,6 +2337,11 @@ namespace Emby.Server.Implementations.Library
                     }
                 }
             }
+
+            foreach (var item in items)
+            {
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Updated, item.Id, parent.Id));
+            }
         }
 
         /// <inheritdoc />
@@ -2297,6 +2387,116 @@ namespace Emby.Server.Implementations.Library
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error in ItemRemoved event handler");
+                }
+            }
+        }
+
+        private void OnRemoteCatalogChange(CatalogChange change)
+        {
+            lock (_catalogChangeLock)
+            {
+                if (change.Kind == CatalogChangeKind.FullResync)
+                {
+                    _lastCatalogChangeSequence = change.Sequence;
+                    _cache.Clear();
+                    if (_rootFolder is not null)
+                    {
+                        _rootFolder.Children = null;
+                    }
+
+                    if (_userRootFolder is not null)
+                    {
+                        _userRootFolder.Children = null;
+                    }
+
+                    _rootFolder = null;
+                    _userRootFolder = null;
+                    _logger.LogInformation(
+                        "Discarded local catalog caches after Redis delivery recovery at sequence {Sequence}.",
+                        change.Sequence);
+                    return;
+                }
+
+                if (change.Sequence > 0 && change.Sequence <= _lastCatalogChangeSequence)
+                {
+                    return;
+                }
+
+                if (change.Sequence > 0)
+                {
+                    _lastCatalogChangeSequence = change.Sequence;
+                }
+
+                _cache.TryRemove(change.ItemId, out var previousItem);
+
+                BaseItem? parent = null;
+                if (!change.ParentId.IsEmpty())
+                {
+                    if (_cache.TryGet(change.ParentId, out var cachedParent))
+                    {
+                        parent = cachedParent;
+                        if (cachedParent is Folder cachedFolder)
+                        {
+                            cachedFolder.Children = null;
+                            cachedFolder.UserData = null;
+                        }
+                    }
+                    else
+                    {
+                        parent = RetrieveItem(change.ParentId);
+                        if (parent is not null)
+                        {
+                            RegisterItem(parent);
+                        }
+                    }
+                }
+
+                if (change.Kind == CatalogChangeKind.Removed)
+                {
+                    if (previousItem is not null && parent is not null)
+                    {
+                        ReportItemRemoved(previousItem, parent);
+                    }
+
+                    return;
+                }
+
+                var item = RetrieveItem(change.ItemId);
+                if (item is null)
+                {
+                    return;
+                }
+
+                RegisterItem(item);
+                parent ??= item.GetParent();
+                if (parent is null)
+                {
+                    return;
+                }
+
+                var eventArgs = new ItemChangeEventArgs
+                {
+                    Item = item,
+                    Parent = parent,
+                    UpdateReason = change.Kind == CatalogChangeKind.MediaSegments
+                        ? ItemUpdateType.MetadataImport
+                        : ItemUpdateType.None
+                };
+
+                try
+                {
+                    if (change.Kind == CatalogChangeKind.Added)
+                    {
+                        ItemAdded?.Invoke(this, eventArgs);
+                    }
+                    else
+                    {
+                        ItemUpdated?.Invoke(this, eventArgs);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error replaying remote catalog change for item {ItemId}", change.ItemId);
                 }
             }
         }
