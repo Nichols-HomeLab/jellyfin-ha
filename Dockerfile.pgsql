@@ -14,6 +14,12 @@ RUN dotnet restore Jellyfin.Server/Jellyfin.Server.csproj \
         --no-restore \
         --output /out/server
 
+RUN dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
+    && dotnet publish Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
+        --configuration Release \
+        --no-restore \
+        --output /out/hot-cache-worker
+
 WORKDIR /plugin
 COPY plugins/Jellyfin.Pgsql/ .
 
@@ -45,6 +51,7 @@ RUN apt-get update \
 # the HA hooks span Jellyfin.Api, MediaBrowser.Controller, and both server
 # implementation assemblies.
 COPY --from=build /out/server/ /jellyfin/
+COPY --from=build /out/hot-cache-worker/ /jellyfin/hot-cache-worker/
 COPY --from=build /out/plugin/ /jellyfin-pgsql/plugin/
 COPY plugins/Jellyfin.Pgsql/docker/database.xml /jellyfin-pgsql/database.xml
 COPY plugins/Jellyfin.Pgsql/docker/entrypoint.sh /entrypoint-pgsql.sh
