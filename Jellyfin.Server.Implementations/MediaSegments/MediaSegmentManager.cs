@@ -12,6 +12,7 @@ using Jellyfin.Extensions;
 using MediaBrowser.Common.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaSegments;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model;
@@ -30,6 +31,7 @@ public class MediaSegmentManager : IMediaSegmentManager
     private readonly ILogger<MediaSegmentManager> _logger;
     private readonly IDbContextFactory<JellyfinDbContext> _dbProvider;
     private readonly IMediaSegmentProvider[] _segmentProviders;
+    private readonly ICatalogChangeNotifier _catalogChangeNotifier;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MediaSegmentManager"/> class.
@@ -41,9 +43,26 @@ public class MediaSegmentManager : IMediaSegmentManager
         ILogger<MediaSegmentManager> logger,
         IDbContextFactory<JellyfinDbContext> dbProvider,
         IEnumerable<IMediaSegmentProvider> segmentProviders)
+        : this(logger, dbProvider, segmentProviders, NullCatalogChangeNotifier.Instance)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MediaSegmentManager"/> class with distributed catalog propagation.
+    /// </summary>
+    /// <param name="logger">Logger.</param>
+    /// <param name="dbProvider">EFCore Database factory.</param>
+    /// <param name="segmentProviders">List of all media segment providers.</param>
+    /// <param name="catalogChangeNotifier">Distributes committed segment changes.</param>
+    public MediaSegmentManager(
+        ILogger<MediaSegmentManager> logger,
+        IDbContextFactory<JellyfinDbContext> dbProvider,
+        IEnumerable<IMediaSegmentProvider> segmentProviders,
+        ICatalogChangeNotifier catalogChangeNotifier)
     {
         _logger = logger;
         _dbProvider = dbProvider;
+        _catalogChangeNotifier = catalogChangeNotifier;
 
         _segmentProviders = segmentProviders
             .OrderBy(i => i is IHasOrder hasOrder ? hasOrder.Order : 0)
@@ -53,6 +72,7 @@ public class MediaSegmentManager : IMediaSegmentManager
     /// <inheritdoc/>
     public async Task RunSegmentPluginProviders(BaseItem baseItem, LibraryOptions libraryOptions, bool forceOverwrite, CancellationToken cancellationToken)
     {
+        var changed = false;
         var providers = _segmentProviders
             .Where(e => !libraryOptions.DisabledMediaSegmentProviders.Contains(GetProviderId(e.Name)))
             .OrderBy(i =>
@@ -76,7 +96,7 @@ public class MediaSegmentManager : IMediaSegmentManager
             if (forceOverwrite)
             {
                 // delete all existing media segments if forceOverwrite is set.
-                await db.MediaSegments.Where(e => e.ItemId.Equals(baseItem.Id)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                changed = await db.MediaSegments.Where(e => e.ItemId.Equals(baseItem.Id)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false) > 0;
             }
 
             foreach (var provider in providers)
@@ -124,7 +144,7 @@ public class MediaSegmentManager : IMediaSegmentManager
                         }
 
                         // delete existing media segments that were re-generated.
-                        await existingSegments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+                        changed |= await existingSegments.ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false) > 0;
                     }
 
                     if (segments.Count == 0 && !requestItem.ExistingSegments.Any())
@@ -143,7 +163,8 @@ public class MediaSegmentManager : IMediaSegmentManager
                     foreach (var segment in segments)
                     {
                         segment.ItemId = baseItem.Id;
-                        await CreateSegmentAsync(segment, providerId).ConfigureAwait(false);
+                        await CreateSegmentInternalAsync(segment, providerId, false).ConfigureAwait(false);
+                        changed = true;
                     }
                 }
                 catch (Exception ex)
@@ -151,11 +172,19 @@ public class MediaSegmentManager : IMediaSegmentManager
                     _logger.LogError(ex, "Provider {ProviderName} failed to extract segments from {MediaPath}", provider.Name, baseItem.Path);
                 }
             }
+
+            if (changed)
+            {
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, baseItem.Id, baseItem.ParentId));
+            }
         }
     }
 
     /// <inheritdoc />
-    public async Task<MediaSegmentDto> CreateSegmentAsync(MediaSegmentDto mediaSegment, string segmentProviderId)
+    public Task<MediaSegmentDto> CreateSegmentAsync(MediaSegmentDto mediaSegment, string segmentProviderId)
+        => CreateSegmentInternalAsync(mediaSegment, segmentProviderId, true);
+
+    private async Task<MediaSegmentDto> CreateSegmentInternalAsync(MediaSegmentDto mediaSegment, string segmentProviderId, bool publish)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(mediaSegment.EndTicks, mediaSegment.StartTicks);
 
@@ -164,6 +193,11 @@ public class MediaSegmentManager : IMediaSegmentManager
         {
             db.MediaSegments.Add(Map(mediaSegment, segmentProviderId));
             await db.SaveChangesAsync().ConfigureAwait(false);
+        }
+
+        if (publish)
+        {
+            _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, mediaSegment.ItemId));
         }
 
         return mediaSegment;
@@ -175,7 +209,16 @@ public class MediaSegmentManager : IMediaSegmentManager
         var db = await _dbProvider.CreateDbContextAsync().ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
-            await db.MediaSegments.Where(e => e.Id.Equals(segmentId)).ExecuteDeleteAsync().ConfigureAwait(false);
+            var itemId = await db.MediaSegments
+                .Where(e => e.Id.Equals(segmentId))
+                .Select(e => (Guid?)e.ItemId)
+                .SingleOrDefaultAsync()
+                .ConfigureAwait(false);
+            if (itemId.HasValue
+                && await db.MediaSegments.Where(e => e.Id.Equals(segmentId)).ExecuteDeleteAsync().ConfigureAwait(false) > 0)
+            {
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, itemId.Value));
+            }
         }
     }
 
@@ -185,7 +228,10 @@ public class MediaSegmentManager : IMediaSegmentManager
         var db = await _dbProvider.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
-            await db.MediaSegments.Where(e => e.ItemId.Equals(itemId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false);
+            if (await db.MediaSegments.Where(e => e.ItemId.Equals(itemId)).ExecuteDeleteAsync(cancellationToken).ConfigureAwait(false) > 0)
+            {
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.MediaSegments, itemId));
+            }
         }
     }
 

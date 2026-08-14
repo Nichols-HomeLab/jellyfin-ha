@@ -24,6 +24,19 @@ public sealed class UserDataCacheTests
     }
 
     [Fact]
+    public void CatalogFallbackRegistrationDoesNotReplaceHaNotifier()
+    {
+        var services = new ServiceCollection();
+        var notifier = new FakeCatalogChangeNotifier();
+        services.AddSingleton<ICatalogChangeNotifier>(notifier);
+
+        services.AddCatalogChangeNotifierFallback();
+
+        using var provider = services.BuildServiceProvider();
+        Assert.Same(notifier, provider.GetRequiredService<ICatalogChangeNotifier>());
+    }
+
+    [Fact]
     public void PublishInvalidationEvictsOnlyRemoteReplicaCache()
     {
         var hub = new FakeInvalidationHub();
@@ -64,6 +77,19 @@ public sealed class UserDataCacheTests
                     invalidator.Receive(cacheKey);
                 }
             }
+        }
+    }
+
+    private sealed class FakeCatalogChangeNotifier : ICatalogChangeNotifier
+    {
+        public event Action<CatalogChange>? Changed
+        {
+            add { }
+            remove { }
+        }
+
+        public void Publish(CatalogChange change)
+        {
         }
     }
 
