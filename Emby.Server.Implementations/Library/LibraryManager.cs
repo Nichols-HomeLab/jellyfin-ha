@@ -2941,22 +2941,59 @@ namespace Emby.Server.Implementations.Library
 
         public IReadOnlyList<Person> GetPeopleItems(InternalPeopleQuery query)
         {
-            return _peopleRepository.GetPeopleNames(query)
-            .Select(i =>
+            var names = _peopleRepository.GetPeopleNames(query);
+            if (names.Count == 0)
+            {
+                return [];
+            }
+
+            var personIdsByName = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
             {
                 try
                 {
-                    return GetPerson(i);
+                    personIdsByName.Add(name, GetItemByNameId<Person>(Person.GetPath(name)));
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error getting person");
-                    return null;
+                    _logger.LogError(ex, "Error getting person {Name}", name);
                 }
-            })
-            .Where(i => i is not null)
-            .Where(i => query.User is null || i!.IsVisible(query.User))
-            .ToList()!; // null values are filtered out
+            }
+
+            if (personIdsByName.Count == 0)
+            {
+                return [];
+            }
+
+            // Resolving every credit through GetPerson issues one PostgreSQL
+            // query (plus navigation queries) per name. Resolve all deterministic
+            // Person ids in one repository query instead; this keeps the same
+            // visibility and ordering semantics without the remote-database N+1.
+            IReadOnlyList<BaseItem> people;
+            try
+            {
+                people = GetItemList(new InternalItemsQuery
+                {
+                    ItemIds = personIdsByName.Values.Distinct().ToArray(),
+                    IncludeItemTypes = [BaseItemKind.Person],
+                    DtoOptions = new DtoOptions(true)
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting people");
+                return [];
+            }
+
+            var peopleById = people
+                .OfType<Person>()
+                .Where(person => query.User is null || person.IsVisible(query.User))
+                .ToDictionary(person => person.Id);
+
+            return names
+                .Select(name => personIdsByName.TryGetValue(name, out var id) ? peopleById.GetValueOrDefault(id) : null)
+                .Where(person => person is not null)
+                .ToArray()!;
         }
 
         public IReadOnlyList<string> GetPeopleNames(InternalPeopleQuery query)
