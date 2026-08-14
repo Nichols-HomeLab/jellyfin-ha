@@ -80,6 +80,11 @@ public sealed class HotCacheWorker
     }
     private async Task PromoteAsync(HotCacheJob job, string workerId, CancellationToken ct)
     {
+        if (!await _store.RenewAsync(job.Id, workerId, _options.LeaseDuration, ct).ConfigureAwait(false))
+        {
+            throw new IOException("Worker lease expired before promotion.");
+        }
+
         var source = Contained(_options.CanonicalRoot, job.CanonicalPath); var relative = Path.GetRelativePath(Path.GetFullPath(_options.CanonicalRoot), source); var target = Contained(_options.HotRoot, Path.Combine(_options.HotRoot, relative));
         var before = _files.GetFileInfo(source); if (before.Length != job.SourceLength || before.LastWriteTimeUtc != job.SourceModifiedUtc) throw new IOException("Source changed before promotion.");
         if (_files.FileExists(target)) return;

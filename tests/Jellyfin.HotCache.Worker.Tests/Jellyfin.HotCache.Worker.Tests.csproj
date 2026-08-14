@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net9.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><RunAnalyzersDuringBuild>false</RunAnalyzersDuringBuild></PropertyGroup>
+  <ItemGroup><PackageReference Include="Microsoft.NET.Test.Sdk" /><PackageReference Include="xunit" /><PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" /></ItemGroup>
+  <ItemGroup><ProjectReference Include="../../Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj" /></ItemGroup>
+</Project>
