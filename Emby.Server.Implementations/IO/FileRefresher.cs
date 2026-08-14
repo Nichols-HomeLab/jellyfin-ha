@@ -17,19 +17,26 @@ namespace Emby.Server.Implementations.IO
         private readonly ILogger _logger;
         private readonly ILibraryManager _libraryManager;
         private readonly IServerConfigurationManager _configurationManager;
+        private readonly ICatalogOwnership _catalogOwnership;
 
         private readonly List<string> _affectedPaths = new();
         private readonly Lock _timerLock = new();
         private Timer? _timer;
         private bool _disposed;
 
-        public FileRefresher(string path, IServerConfigurationManager configurationManager, ILibraryManager libraryManager, ILogger logger)
+        public FileRefresher(
+            string path,
+            IServerConfigurationManager configurationManager,
+            ILibraryManager libraryManager,
+            ICatalogOwnership catalogOwnership,
+            ILogger logger)
         {
             logger.LogDebug("New file refresher created for {0}", path);
             Path = path;
 
             _configurationManager = configurationManager;
             _libraryManager = libraryManager;
+            _catalogOwnership = catalogOwnership;
             _logger = logger;
             AddPath(path);
         }
@@ -119,6 +126,12 @@ namespace Emby.Server.Implementations.IO
 
             try
             {
+                if (!_catalogOwnership.TryGetCatalogWriteToken(out _))
+                {
+                    _logger.LogDebug("Skipping filesystem refresh for {Path} because this instance no longer owns catalog writes", Path);
+                    return;
+                }
+
                 ProcessPathChanges(paths);
             }
             catch (Exception ex)

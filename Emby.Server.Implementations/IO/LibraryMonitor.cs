@@ -21,6 +21,7 @@ namespace Emby.Server.Implementations.IO
         private readonly ILibraryManager _libraryManager;
         private readonly IServerConfigurationManager _configurationManager;
         private readonly IFileSystem _fileSystem;
+        private readonly ICatalogOwnership _catalogOwnership;
 
         /// <summary>
         /// The file system watchers.
@@ -46,18 +47,21 @@ namespace Emby.Server.Implementations.IO
         /// <param name="libraryManager">The library manager.</param>
         /// <param name="configurationManager">The configuration manager.</param>
         /// <param name="fileSystem">The filesystem.</param>
+        /// <param name="catalogOwnership">The cluster-wide catalog ownership.</param>
         /// <param name="appLifetime">The <see cref="IHostApplicationLifetime"/>.</param>
         public LibraryMonitor(
             ILogger<LibraryMonitor> logger,
             ILibraryManager libraryManager,
             IServerConfigurationManager configurationManager,
             IFileSystem fileSystem,
+            ICatalogOwnership catalogOwnership,
             IHostApplicationLifetime appLifetime)
         {
             _libraryManager = libraryManager;
             _logger = logger;
             _configurationManager = configurationManager;
             _fileSystem = fileSystem;
+            _catalogOwnership = catalogOwnership;
 
             appLifetime.ApplicationStarted.Register(Start);
         }
@@ -347,6 +351,12 @@ namespace Emby.Server.Implementations.IO
         {
             ArgumentException.ThrowIfNullOrEmpty(path);
 
+            if (!_catalogOwnership.TryGetCatalogWriteToken(out _))
+            {
+                _logger.LogDebug("Ignoring filesystem change at {Path} because this instance does not own catalog writes", path);
+                return;
+            }
+
             if (IgnorePatterns.ShouldIgnore(path))
             {
                 return;
@@ -418,7 +428,7 @@ namespace Emby.Server.Implementations.IO
                     }
                 }
 
-                var newRefresher = new FileRefresher(path, _configurationManager, _libraryManager, _logger);
+                var newRefresher = new FileRefresher(path, _configurationManager, _libraryManager, _catalogOwnership, _logger);
                 newRefresher.Completed += OnNewRefresherCompleted;
                 _activeRefreshers.Add(newRefresher);
             }

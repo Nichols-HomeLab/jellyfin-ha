@@ -13,6 +13,7 @@ using Jellyfin.Data.Events;
 using Jellyfin.Extensions.Json;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Extensions;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Tasks;
 using Microsoft.Extensions.Logging;
 
@@ -27,6 +28,7 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     private readonly IApplicationPaths _applicationPaths;
     private readonly ILogger _logger;
     private readonly ITaskManager _taskManager;
+    private readonly ICatalogOwnership _catalogOwnership;
     private readonly Lock _lastExecutionResultSyncLock = new();
     private bool _readFromFile;
     private TaskResult _lastExecutionResult;
@@ -40,6 +42,7 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     /// <param name="scheduledTask">The scheduled task.</param>
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="taskManager">The task manager.</param>
+    /// <param name="catalogOwnership">The cluster-wide catalog ownership.</param>
     /// <param name="logger">The logger.</param>
     /// <exception cref="ArgumentNullException">
     /// scheduledTask
@@ -52,16 +55,23 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     /// or
     /// logger.
     /// </exception>
-    public ScheduledTaskWorker(IScheduledTask scheduledTask, IApplicationPaths applicationPaths, ITaskManager taskManager, ILogger logger)
+    public ScheduledTaskWorker(
+        IScheduledTask scheduledTask,
+        IApplicationPaths applicationPaths,
+        ITaskManager taskManager,
+        ICatalogOwnership catalogOwnership,
+        ILogger logger)
     {
         ArgumentNullException.ThrowIfNull(scheduledTask);
         ArgumentNullException.ThrowIfNull(applicationPaths);
         ArgumentNullException.ThrowIfNull(taskManager);
+        ArgumentNullException.ThrowIfNull(catalogOwnership);
         ArgumentNullException.ThrowIfNull(logger);
 
         ScheduledTask = scheduledTask;
         _applicationPaths = applicationPaths;
         _taskManager = taskManager;
+        _catalogOwnership = catalogOwnership;
         _logger = logger;
 
         InitTriggerEvents();
@@ -306,9 +316,15 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
             throw new InvalidOperationException("Cannot execute a Task that is already running");
         }
 
+        if (!_catalogOwnership.TryGetCatalogWriteToken(out var ownershipLost))
+        {
+            _logger.LogDebug("Skipping scheduled task {Name} because this instance does not own catalog writes", Name);
+            return;
+        }
+
         var progress = new Progress<double>();
 
-        CurrentCancellationTokenSource = new CancellationTokenSource();
+        CurrentCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(ownershipLost);
 
         _logger.LogDebug("Executing {0}", Name);
 

@@ -489,6 +489,7 @@ namespace Emby.Server.Implementations
             serviceCollection.AddSingleton(NetManager);
 
             serviceCollection.AddSingleton<ITaskManager, TaskManager>();
+            serviceCollection.AddSingleton<ICatalogOwnership, SingleInstanceCatalogOwnership>();
 
             serviceCollection.AddSingleton(_xmlSerializer);
 

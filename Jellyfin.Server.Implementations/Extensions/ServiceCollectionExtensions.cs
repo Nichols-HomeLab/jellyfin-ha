@@ -8,11 +8,14 @@ using Jellyfin.Database.Implementations.DbConfiguration;
 using Jellyfin.Database.Implementations.Locking;
 using Jellyfin.Database.Providers.PostgreSQL;
 using Jellyfin.Database.Providers.Sqlite;
+using Jellyfin.Server.Implementations.Catalog;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Npgsql;
 using JellyfinDbProviderFactory = System.Func<System.IServiceProvider, Jellyfin.Database.Implementations.IJellyfinDatabaseProvider>;
 
@@ -174,6 +177,18 @@ public static class ServiceCollectionExtensions
 
                 return dataSourceBuilder.Build();
             });
+
+            var catalogProbeSeconds = Math.Clamp(
+                configuration.GetValue<double?>("Jellyfin:CatalogOwnership:ProbeIntervalSeconds") ?? 2,
+                0.05,
+                30);
+            serviceCollection.AddSingleton<PostgreSqlCatalogOwnership>(sp => new PostgreSqlCatalogOwnership(
+                sp.GetRequiredService<NpgsqlDataSource>(),
+                Environment.GetEnvironmentVariable("JELLYFIN_INSTANCE_ID") ?? Environment.MachineName,
+                TimeSpan.FromSeconds(catalogProbeSeconds),
+                sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PostgreSqlCatalogOwnership>>()));
+            serviceCollection.AddSingleton<ICatalogOwnership>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
+            serviceCollection.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
         }
 
         switch (efCoreConfiguration.LockingBehavior)
