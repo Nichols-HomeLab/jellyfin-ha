@@ -23,5 +23,6 @@ builder.Services.AddSingleton<PostgreSqlHotCacheJobStore>();
 builder.Services.AddSingleton<IHotCacheJobStore>(sp => sp.GetRequiredService<PostgreSqlHotCacheJobStore>());
 builder.Services.AddSingleton<IFileOperations, PhysicalFileOperations>();
 builder.Services.AddSingleton<HotCacheWorker>();
+builder.Services.AddHostedService<HotCacheSchemaMigrationService>();
 builder.Services.AddHostedService<HotCacheHostedService>();
 await builder.Build().RunAsync();

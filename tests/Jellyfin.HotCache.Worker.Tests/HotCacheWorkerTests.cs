@@ -7,28 +7,234 @@ namespace Jellyfin.HotCache.Worker.Tests;
 public sealed class HotCacheWorkerTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "hot-cache-tests-" + Guid.NewGuid());
-    public HotCacheWorkerTests() { Directory.CreateDirectory(Path.Combine(_root, "cold")); Directory.CreateDirectory(Path.Combine(_root, "hot")); }
-    [Fact] public async Task ProcessDeathMidCopy_FailsAndLeavesNoPartial()
-    { var job = Promotion("video.bin", "abc"); var files = new TestFiles { ThrowDuringCopy = true }; var store = new Store(job); await Worker(store, files).ExecuteOnceAsync("one", default); Assert.Equal(1, store.Failures); Assert.Empty(Directory.EnumerateFiles(Path.Combine(_root, "hot"), "*.partial", SearchOption.AllDirectories)); }
-    [Fact] public async Task LeaseExpiry_AllowsAnotherWorkerToClaim()
-    { var store = new Store(Promotion("video.bin", "abc")) { LeaseExpired = true }; Assert.NotNull(await store.ClaimAsync("one", TimeSpan.FromMinutes(1), default)); Assert.NotNull(await store.ClaimAsync("two", TimeSpan.FromMinutes(1), default)); }
-    [Fact] public async Task DuplicateWorkers_OnlyOneClaimsLiveLease()
-    { var store = new Store(Promotion("video.bin", "abc")); Assert.NotNull(await store.ClaimAsync("one", TimeSpan.FromMinutes(1), default)); Assert.Null(await store.ClaimAsync("two", TimeSpan.FromMinutes(1), default)); }
-    [Fact] public async Task FullFilesystem_FailsToColdWithoutPublish()
-    { var store = new Store(Promotion("video.bin", "abc")); await Worker(store, new TestFiles { ThrowDuringCopy = true }).ExecuteOnceAsync("one", default); Assert.Equal(1, store.Failures); Assert.False(File.Exists(Path.Combine(_root, "hot", "video.bin"))); }
-    [Fact] public async Task SourceMutation_DuringCopyDoesNotPublish()
-    { var store = new Store(Promotion("video.bin", "abc")); var files = new TestFiles { MutateSource = Path.Combine(_root, "cold", "video.bin") }; await Worker(store, files).ExecuteOnceAsync("one", default); Assert.Equal(1, store.Failures); Assert.False(File.Exists(Path.Combine(_root, "hot", "video.bin"))); }
-    [Fact] public async Task MountLoss_FailsToCold()
-    { var store = new Store(Promotion("video.bin", "abc")); await Worker(store, new TestFiles { ThrowOnInfo = true }).ExecuteOnceAsync("one", default); Assert.Equal(1, store.Failures); }
-    [Fact] public async Task LongCopy_RenewsLeaseWithoutBlockingProgress()
-    { var store = new Store(Promotion("video.bin", new string('x', 2_000_000))); await Worker(store, new TestFiles(), TimeSpan.FromTicks(1)).ExecuteOnceAsync("one", default); Assert.True(store.Renewals > 1); }
-    [Fact] public async Task Eviction_IsIdempotentAndProtectsPinned()
-    { File.WriteAllText(Path.Combine(_root, "hot", "old.bin"), "x"); var job = new HotCacheJob(Guid.NewGuid(), HotCacheJobKind.Eviction, "", Path.Combine(_root, "hot", "old.bin"), 0, DateTime.UtcNow, 0, false, false, false, DateTime.UtcNow.AddDays(-1), 0); var store = new Store(job); var worker=Worker(store,new TestFiles()); await worker.ExecuteOnceAsync("one",default); await worker.ExecuteOnceAsync("two",default); Assert.False(File.Exists(Path.Combine(_root,"hot","old.bin"))); }
-    [Fact] public async Task CapacityEviction_UsesLruAndCleansAbandonedPartials()
-    { var old=Path.Combine(_root,"hot","old.bin"); File.WriteAllText(old,"x"); var partial=Path.Combine(_root,"hot",".dead.partial"); File.WriteAllText(partial,"x"); File.SetLastWriteTimeUtc(partial,DateTime.UtcNow.AddHours(-2)); var e=new HotCacheJob(Guid.NewGuid(),HotCacheJobKind.Eviction,"",old,0,DateTime.UtcNow,0,false,false,false,DateTime.UtcNow.AddDays(-1),0); var store=new Store(null){ Candidates=[e] }; await Worker(store,new TestFiles{ Available=0, Total=100 }).ExecuteOnceAsync("one",default); Assert.False(File.Exists(old)); Assert.False(File.Exists(partial)); }
-    private HotCacheJob Promotion(string name,string content) { var source=Path.Combine(_root,"cold",name); File.WriteAllText(source,content); var info=new FileInfo(source); return new(Guid.NewGuid(),HotCacheJobKind.Promotion,source,null,info.Length,info.LastWriteTimeUtc,0,false,false,false,DateTime.UtcNow,0); }
-    private HotCacheWorker Worker(Store store, TestFiles files, TimeSpan? leaseDuration = null) => new(store, files, new HotCacheOptions { CanonicalRoot=Path.Combine(_root,"cold"), HotRoot=Path.Combine(_root,"hot"), HighWatermark=.5, LowWatermark=.1, PartialFileMaxAge=TimeSpan.FromHours(1), LeaseDuration=leaseDuration ?? TimeSpan.FromMinutes(2) }, NullLogger<HotCacheWorker>.Instance);
-    public void Dispose() { Directory.Delete(_root, true); }
-    private sealed class Store(HotCacheJob? next) : IHotCacheJobStore { private HotCacheJob? _next=next; public bool LeaseExpired; public int Failures; public int Renewals; public List<HotCacheJob> Candidates { get; set; }=[]; public Task<HotCacheJob?> ClaimAsync(string workerId,TimeSpan leaseDuration,CancellationToken c) { if(_next is null)return Task.FromResult<HotCacheJob?>(null); if(!LeaseExpired && _next.Attempts>0)return Task.FromResult<HotCacheJob?>(null); _next=_next with { Attempts=_next.Attempts+1}; return Task.FromResult<HotCacheJob?>(_next); } public Task<bool> RenewAsync(Guid a,string b,TimeSpan c,CancellationToken d){Renewals++;return Task.FromResult(true);} public Task ProgressAsync(Guid a,string b,long c,CancellationToken d)=>Task.CompletedTask; public Task CompleteAsync(Guid a,string b,CancellationToken c){_next=null;return Task.CompletedTask;} public Task FailAsync(Guid a,string b,string c,CancellationToken d){Failures++;_next=null;return Task.CompletedTask;} public Task<IReadOnlyList<HotCacheJob>> EvictionCandidatesAsync(CancellationToken c)=>Task.FromResult<IReadOnlyList<HotCacheJob>>(Candidates); public Task EventAsync(Guid a,string b,string c,CancellationToken d)=>Task.CompletedTask; }
-    private sealed class TestFiles : IFileOperations { private readonly PhysicalFileOperations _inner=new(); public bool ThrowDuringCopy; public bool ThrowOnInfo; public string? MutateSource; public long Available=100; public long Total=100; public long GetAvailableSpace(string p)=>Available; public long GetTotalSpace(string p)=>Total; public bool FileExists(string p)=>_inner.FileExists(p); public FileInfo GetFileInfo(string p){if(ThrowOnInfo)throw new IOException("mount lost");return _inner.GetFileInfo(p);} public IEnumerable<string> EnumerateFiles(string r,string p)=>_inner.EnumerateFiles(r,p); public void CreateDirectory(string p)=>_inner.CreateDirectory(p); public async Task CopyAsync(string s,string d,Func<long,CancellationToken,Task> p,CancellationToken c){if(ThrowDuringCopy)throw new IOException("full filesystem");await _inner.CopyAsync(s,d,p,c);if(MutateSource is not null)File.AppendAllText(MutateSource,"!");} public void MoveNoReplace(string s,string d)=>_inner.MoveNoReplace(s,d); public void Delete(string p)=>_inner.Delete(p); }
+
+    public HotCacheWorkerTests()
+    {
+        Directory.CreateDirectory(ColdRoot);
+        Directory.CreateDirectory(HotRoot);
+    }
+
+    private string ColdRoot => Path.Combine(_root, "cold");
+
+    private string HotRoot => Path.Combine(_root, "hot");
+
+    [Fact]
+    public async Task ProcessDeathMidCopyFailsWithoutPartial()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"));
+        await CreateWorker(store, new TestFiles { ThrowDuringCopy = true }).ExecuteOnceAsync("one", default);
+        Assert.Equal(1, store.Failures);
+        Assert.Empty(Directory.EnumerateFiles(HotRoot, "*.partial", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task ExpiredLeaseAllowsReplacementWorker()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc")) { LeaseExpired = true };
+        Assert.NotNull(await store.ClaimAsync("one", TimeSpan.FromMinutes(1), default));
+        Assert.NotNull(await store.ClaimAsync("two", TimeSpan.FromMinutes(1), default));
+    }
+
+    [Fact]
+    public async Task LiveLeaseExcludesDuplicateWorker()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"));
+        Assert.NotNull(await store.ClaimAsync("one", TimeSpan.FromMinutes(1), default));
+        Assert.Null(await store.ClaimAsync("two", TimeSpan.FromMinutes(1), default));
+    }
+
+    [Fact]
+    public async Task FullFilesystemDegradesToColdPlayback()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"));
+        await CreateWorker(store, new TestFiles { ThrowDuringCopy = true }).ExecuteOnceAsync("one", default);
+        Assert.Equal(1, store.Failures);
+        Assert.False(File.Exists(Path.Combine(HotRoot, "video.bin")));
+    }
+
+    [Fact]
+    public async Task SourceMutationDoesNotPublish()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"));
+        var files = new TestFiles { MutateSource = Path.Combine(ColdRoot, "video.bin") };
+        await CreateWorker(store, files).ExecuteOnceAsync("one", default);
+        Assert.Equal(1, store.Failures);
+        Assert.False(File.Exists(Path.Combine(HotRoot, "video.bin")));
+    }
+
+    [Fact]
+    public async Task MountLossDegradesToColdPlayback()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"));
+        await CreateWorker(store, new TestFiles { ThrowOnInfo = true }).ExecuteOnceAsync("one", default);
+        Assert.Equal(1, store.Failures);
+    }
+
+    [Fact]
+    public async Task LongCopyRenewsLease()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", new string('x', 2_000_000)));
+        await CreateWorker(store, new TestFiles(), TimeSpan.FromTicks(1)).ExecuteOnceAsync("one", default);
+        Assert.True(store.Renewals > 1);
+    }
+
+    [Fact]
+    public async Task EvictionIsIdempotent()
+    {
+        var path = Path.Combine(HotRoot, "old.bin");
+        await File.WriteAllTextAsync(path, "x");
+        var store = new TestStore(CreateEviction(path));
+        var worker = CreateWorker(store, new TestFiles());
+        await worker.ExecuteOnceAsync("one", default);
+        await worker.ExecuteOnceAsync("two", default);
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task CapacityEvictionUsesLruAndCleansPartials()
+    {
+        var path = Path.Combine(HotRoot, "old.bin");
+        var partial = Path.Combine(HotRoot, ".dead.partial");
+        await File.WriteAllTextAsync(path, "x");
+        await File.WriteAllTextAsync(partial, "x");
+        File.SetLastWriteTimeUtc(partial, DateTime.UtcNow.AddHours(-2));
+        var store = new TestStore(null) { Candidates = [CreateEviction(path)] };
+        await CreateWorker(store, new TestFiles { Available = 0, Total = 100 }).ExecuteOnceAsync("one", default);
+        Assert.False(File.Exists(path));
+        Assert.False(File.Exists(partial));
+    }
+
+    public void Dispose()
+    {
+        Directory.Delete(_root, true);
+    }
+
+    private HotCacheWorker CreateWorker(TestStore store, TestFiles files, TimeSpan? leaseDuration = null)
+        => new(
+            store,
+            files,
+            new HotCacheOptions
+            {
+                CanonicalRoot = ColdRoot,
+                HotRoot = HotRoot,
+                HighWatermark = .5,
+                LowWatermark = .1,
+                PartialFileMaxAge = TimeSpan.FromHours(1),
+                LeaseDuration = leaseDuration ?? TimeSpan.FromMinutes(2),
+            },
+            NullLogger<HotCacheWorker>.Instance);
+
+    private HotCacheJob CreatePromotion(string name, string content)
+    {
+        var path = Path.Combine(ColdRoot, name);
+        File.WriteAllText(path, content);
+        var info = new FileInfo(path);
+        return new HotCacheJob(Guid.NewGuid(), HotCacheJobKind.Promotion, path, null, info.Length, info.LastWriteTimeUtc, 0, false, false, false, DateTime.UtcNow, 0);
+    }
+
+    private static HotCacheJob CreateEviction(string path)
+        => new(Guid.NewGuid(), HotCacheJobKind.Eviction, string.Empty, path, 0, DateTime.UtcNow, 0, false, false, false, DateTime.UtcNow.AddDays(-1), 0);
+
+    private sealed class TestStore(HotCacheJob? next) : IHotCacheJobStore
+    {
+        private HotCacheJob? _next = next;
+
+        public List<HotCacheJob> Candidates { get; set; } = [];
+
+        public int Failures { get; private set; }
+
+        public bool LeaseExpired { get; init; }
+
+        public int Renewals { get; private set; }
+
+        public Task<HotCacheJob?> ClaimAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+        {
+            if (_next is null || (!LeaseExpired && _next.Attempts > 0))
+            {
+                return Task.FromResult<HotCacheJob?>(null);
+            }
+
+            _next = _next with { Attempts = _next.Attempts + 1 };
+            return Task.FromResult<HotCacheJob?>(_next);
+        }
+
+        public Task<bool> RenewAsync(Guid jobId, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+        {
+            Renewals++;
+            return Task.FromResult(true);
+        }
+
+        public Task ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task CompleteAsync(Guid jobId, string workerId, CancellationToken cancellationToken)
+        {
+            _next = null;
+            return Task.CompletedTask;
+        }
+
+        public Task FailAsync(Guid jobId, string workerId, string error, CancellationToken cancellationToken)
+        {
+            Failures++;
+            _next = null;
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<HotCacheJob>> EvictionCandidatesAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<HotCacheJob>>(Candidates);
+
+        public Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    private sealed class TestFiles : IFileOperations
+    {
+        private readonly PhysicalFileOperations _inner = new();
+
+        public long Available { get; init; } = 100;
+
+        public string? MutateSource { get; init; }
+
+        public bool ThrowDuringCopy { get; init; }
+
+        public bool ThrowOnInfo { get; init; }
+
+        public long Total { get; init; } = 100;
+
+        public long GetAvailableSpace(string path) => Available;
+
+        public long GetTotalSpace(string path) => Total;
+
+        public bool FileExists(string path) => _inner.FileExists(path);
+
+        public FileInfo GetFileInfo(string path)
+        {
+            if (ThrowOnInfo)
+            {
+                throw new IOException("mount lost");
+            }
+
+            return _inner.GetFileInfo(path);
+        }
+
+        public IEnumerable<string> EnumerateFiles(string root, string pattern) => _inner.EnumerateFiles(root, pattern);
+
+        public void CreateDirectory(string path) => _inner.CreateDirectory(path);
+
+        public async Task CopyAsync(string source, string destination, Func<long, CancellationToken, Task> progress, CancellationToken cancellationToken)
+        {
+            if (ThrowDuringCopy)
+            {
+                throw new IOException("full filesystem");
+            }
+
+            await _inner.CopyAsync(source, destination, progress, cancellationToken);
+            if (MutateSource is not null)
+            {
+                await File.AppendAllTextAsync(MutateSource, "!", cancellationToken);
+            }
+        }
+
+        public void MoveNoReplace(string source, string destination) => _inner.MoveNoReplace(source, destination);
+
+        public void Delete(string path) => _inner.Delete(path);
+    }
 }

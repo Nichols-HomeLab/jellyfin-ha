@@ -10,4 +10,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Npgsql" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="sql/001_hot_cache.sql" />
+  </ItemGroup>
 </Project>
