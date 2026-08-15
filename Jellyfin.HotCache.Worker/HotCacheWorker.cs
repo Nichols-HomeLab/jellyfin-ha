@@ -20,6 +20,11 @@ public sealed class HotCacheOptions
     public TimeSpan PartialFileMaxAge { get; init; } = TimeSpan.FromHours(1);
     public string Backend { get; init; } = "unraid-temp";
 
+    /// <summary>
+    /// Gets a value indicating whether the worker is limited to migrations, backend observations, and metrics.
+    /// </summary>
+    public bool ObserveOnly { get; init; } = true;
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(CanonicalRoot) || string.IsNullOrWhiteSpace(HotRoot))
@@ -103,17 +108,17 @@ public sealed class HotCacheWorker
     }
     public async Task ExecuteOnceAsync(string workerId, CancellationToken ct)
     {
-        CleanupPartials();
         var settings = await _store.GetSettingsAsync(ct).ConfigureAwait(false);
         await ObserveBackendAsync(ct).ConfigureAwait(false);
-        if (settings.Paused || !string.Equals(settings.Backend, _options.Backend, StringComparison.Ordinal))
+        if (_options.ObserveOnly || settings.Paused || !string.Equals(settings.Backend, _options.Backend, StringComparison.Ordinal))
         {
-            // A backend switch drains by stopping new claims on the former backend.
+            // Observe-only, a pause, or a backend switch stops all I/O and new claims.
             // Existing cache files remain immutable and safely fall back to canonical storage.
             RecordSnapshot(await _store.SnapshotAsync(ct).ConfigureAwait(false));
             return;
         }
 
+        CleanupPartials();
         var job = await _store.ClaimAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false);
         if (job is not null) await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false);
         await EnforceCapacityAsync(workerId, settings, ct).ConfigureAwait(false);

@@ -20,6 +20,7 @@ builder.Services.AddSingleton(new HotCacheOptions
     Backend = builder.Configuration["Jellyfin__HotCache__Backend"] ?? "unraid-temp",
     HighWatermark = double.TryParse(builder.Configuration["Jellyfin__HotCache__HighWatermark"], out var high) ? high : .90,
     LowWatermark = double.TryParse(builder.Configuration["Jellyfin__HotCache__LowWatermark"], out var low) ? low : .75,
+    ObserveOnly = !bool.TryParse(builder.Configuration["Jellyfin__HotCache__ObserveOnly"], out var observeOnly) || observeOnly,
 });
 builder.Services.AddSingleton<PostgreSqlHotCacheJobStore>();
 builder.Services.AddSingleton<IHotCacheJobStore>(sp => sp.GetRequiredService<PostgreSqlHotCacheJobStore>());

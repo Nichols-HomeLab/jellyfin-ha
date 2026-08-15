@@ -124,6 +124,24 @@ public sealed class HotCacheWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task ObserveOnlyWorkerRecordsBackendWithoutClaimingOrEvicting()
+    {
+        var path = Path.Combine(HotRoot, "protected.bin");
+        await File.WriteAllTextAsync(path, "cache");
+        var store = new TestStore(CreatePromotion("video.bin", "abc"))
+        {
+            Candidates = [CreateEviction(path)],
+        };
+
+        await CreateWorker(store, new TestFiles { Available = 0, Total = 100 }, observeOnly: true).ExecuteOnceAsync("one", default);
+
+        Assert.Equal(0, store.Claims);
+        Assert.Single(store.Candidates);
+        Assert.True(File.Exists(path));
+        Assert.Equal(("unraid-temp", true, true, 100L, 0L), store.BackendObservation);
+    }
+
+    [Fact]
     public async Task FormerBackendDrainsByStoppingNewClaims()
     {
         var store = new TestStore(CreatePromotion("video.bin", "abc"))
@@ -147,7 +165,7 @@ public sealed class HotCacheWorkerTests : IDisposable
         Directory.Delete(_root, true);
     }
 
-    private HotCacheWorker CreateWorker(TestStore store, TestFiles files, TimeSpan? leaseDuration = null)
+    private HotCacheWorker CreateWorker(TestStore store, TestFiles files, TimeSpan? leaseDuration = null, bool observeOnly = false)
         => new(
             store,
             files,
@@ -160,6 +178,7 @@ public sealed class HotCacheWorkerTests : IDisposable
                 LowWatermark = .1,
                 PartialFileMaxAge = TimeSpan.FromHours(1),
                 LeaseDuration = leaseDuration ?? TimeSpan.FromMinutes(2),
+                ObserveOnly = observeOnly,
             },
             NullLogger<HotCacheWorker>.Instance);
 
