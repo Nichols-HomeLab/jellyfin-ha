@@ -33,7 +33,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         command.Parameters.AddWithValue("high", settings.HighWatermark);
         command.Parameters.AddWithValue("low", settings.LowWatermark);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-        await HistoryAsync("settings", $"backend={settings.Backend}; paused={settings.Paused}; high={settings.HighWatermark}; low={settings.LowWatermark}", cancellationToken).ConfigureAwait(false);
+        await HistoryAsync("settings", $"backend={settings.Backend}; paused={settings.Paused}; high={settings.HighWatermark}; low={settings.LowWatermark}; switch=former-backend-drains", cancellationToken).ConfigureAwait(false);
     }
 
     public async Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken)
@@ -104,7 +104,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
 
     private async Task<IReadOnlyList<HotCacheQueueSummary>> ReadQueueAsync(CancellationToken ct)
     {
-        const string sql = "SELECT state,COUNT(*),COALESCE(SUM(source_length),0) FROM hot_cache_jobs GROUP BY state ORDER BY state";
+        const string sql = "SELECT CASE WHEN state='pending' THEN 'queued' WHEN state='running' AND kind='promotion' THEN 'copying' WHEN state='running' AND kind='eviction' THEN 'evicting' WHEN state='completed' AND kind='promotion' THEN 'copied' WHEN state='completed' AND kind='eviction' THEN 'evicted' ELSE 'failed' END,COUNT(*),COALESCE(SUM(source_length),0) FROM hot_cache_jobs GROUP BY 1 ORDER BY 1";
         var results = new List<HotCacheQueueSummary>();
         await using var command = dataSource.CreateCommand(sql);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);

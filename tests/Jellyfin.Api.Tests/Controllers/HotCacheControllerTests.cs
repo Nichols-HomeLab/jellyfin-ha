@@ -45,6 +45,10 @@ public sealed class HotCacheControllerTests
         Assert.Contains("Jellyfin Hot Cache", page.Content, StringComparison.Ordinal);
         Assert.Contains("Unraid /temp", page.Content, StringComparison.Ordinal);
         Assert.Contains("CephFS 300 GiB", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Inventory by series", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheHistoryKind", page.Content, StringComparison.Ordinal);
+        Assert.Contains("confirmBulkEviction", page.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
     }
 
     private sealed class Store : IHotCacheAdministration

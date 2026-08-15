@@ -112,6 +112,36 @@ public sealed class HotCacheWorkerTests : IDisposable
         Assert.False(File.Exists(partial));
     }
 
+    [Fact]
+    public async Task PausedSettingsDoNotClaimOrEvictWork()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"))
+        {
+            Settings = new HotCacheWorkerSettings("unraid-temp", true, .5, .1),
+        };
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
+        Assert.Equal(0, store.Claims);
+    }
+
+    [Fact]
+    public async Task FormerBackendDrainsByStoppingNewClaims()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"))
+        {
+            Settings = new HotCacheWorkerSettings("cephfs", false, .5, .1),
+        };
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
+        Assert.Equal(0, store.Claims);
+    }
+
+    [Fact]
+    public async Task WorkerRecordsBackendObservationInSharedStore()
+    {
+        var store = new TestStore(null);
+        await CreateWorker(store, new TestFiles { Available = 40, Total = 100 }).ExecuteOnceAsync("one", default);
+        Assert.Equal(("unraid-temp", true, true, 100L, 40L), store.BackendObservation);
+    }
+
     public void Dispose()
     {
         Directory.Delete(_root, true);
@@ -125,6 +155,7 @@ public sealed class HotCacheWorkerTests : IDisposable
             {
                 CanonicalRoot = ColdRoot,
                 HotRoot = HotRoot,
+                Backend = "unraid-temp",
                 HighWatermark = .5,
                 LowWatermark = .1,
                 PartialFileMaxAge = TimeSpan.FromHours(1),
@@ -151,6 +182,12 @@ public sealed class HotCacheWorkerTests : IDisposable
 
         public int Failures { get; private set; }
 
+        public int Claims { get; private set; }
+
+        public HotCacheWorkerSettings Settings { get; init; } = new("unraid-temp", false, .5, .1);
+
+        public (string Backend, bool Mounted, bool Healthy, long Total, long Available)? BackendObservation { get; private set; }
+
         public bool LeaseExpired { get; init; }
 
         public int Renewals { get; private set; }
@@ -159,6 +196,7 @@ public sealed class HotCacheWorkerTests : IDisposable
 
         public Task<HotCacheJob?> ClaimAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
         {
+            Claims++;
             if (_next is null || (!LeaseExpired && _next.Attempts > 0))
             {
                 return Task.FromResult<HotCacheJob?>(null);
@@ -206,7 +244,13 @@ public sealed class HotCacheWorkerTests : IDisposable
         public Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken)
             => Task.FromResult(new HotCacheQueueSnapshot(_next is null ? 0 : 1, TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0, 0));
 
-        public Task ObserveBackendAsync(string backend, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<HotCacheWorkerSettings> GetSettingsAsync(CancellationToken cancellationToken) => Task.FromResult(Settings);
+
+        public Task ObserveBackendAsync(string backend, bool mounted, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken)
+        {
+            BackendObservation = (backend, mounted, healthy, totalBytes, availableBytes);
+            return Task.CompletedTask;
+        }
 
         public Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken) => Task.CompletedTask;
     }

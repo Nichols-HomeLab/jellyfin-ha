@@ -24,9 +24,37 @@ public sealed class PostgreSqlHotCacheJobStore(NpgsqlDataSource dataSource) : IH
     public Task<bool> CanEvictAsync(Guid id, string owner, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET updated_at=now() WHERE id=@id AND state='running' AND lease_owner=@owner AND lease_expires_at>now() AND NOT is_active AND NOT is_pinned AND priority<=0", id, owner, ct);
     public async Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken ct)
     { const string sql="WITH retained AS (DELETE FROM hot_cache_events WHERE created_at < now() - interval '30 days' RETURNING id) SELECT count(*) FILTER (WHERE state IN ('pending','running')), COALESCE(EXTRACT(EPOCH FROM now()-min(created_at) FILTER (WHERE state IN ('pending','running'))),0), COALESCE(EXTRACT(EPOCH FROM now()-min(updated_at) FILTER (WHERE state='running' AND lease_expires_at>now())),0), pg_total_relation_size('hot_cache_events') + pg_total_relation_size('hot_cache_jobs'), (SELECT count(*) FROM hot_cache_events), (SELECT count(*) FROM hot_cache_events WHERE kind='validate-or-repair' AND detail='hot-miss' AND created_at > now() - interval '15 minutes'), (SELECT count(*) FROM hot_cache_events WHERE kind='validate-or-repair' AND detail <> 'hot-miss' AND created_at > now() - interval '15 minutes') FROM hot_cache_jobs"; await using var cmd=dataSource.CreateCommand(sql); await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false); await r.ReadAsync(ct).ConfigureAwait(false); return new(r.GetInt64(0), TimeSpan.FromSeconds(r.GetDouble(1)), TimeSpan.FromSeconds(r.GetDouble(2)), r.GetInt64(3), r.GetInt64(4), r.GetInt64(5), r.GetInt64(6)); }
-    public async Task ObserveBackendAsync(string backend, bool healthy, long totalBytes, long availableBytes, CancellationToken ct)
-    { await using var cmd = dataSource.CreateCommand("INSERT INTO hot_cache_backend_observations(backend,mounted,healthy,total_bytes,used_bytes,available_bytes,observed_at) VALUES(@backend,true,@healthy,@total,@used,@available,now()) ON CONFLICT(backend) DO UPDATE SET mounted=excluded.mounted,healthy=excluded.healthy,total_bytes=excluded.total_bytes,used_bytes=excluded.used_bytes,available_bytes=excluded.available_bytes,observed_at=excluded.observed_at"); cmd.Parameters.AddWithValue("backend", backend); cmd.Parameters.AddWithValue("healthy", healthy); cmd.Parameters.AddWithValue("total", totalBytes); cmd.Parameters.AddWithValue("used", Math.Max(0, totalBytes - availableBytes)); cmd.Parameters.AddWithValue("available", availableBytes); await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); }
     public async Task EventAsync(Guid id, string kind, string detail, CancellationToken ct) { await using var cmd = dataSource.CreateCommand("INSERT INTO hot_cache_events(job_id,kind,detail) VALUES(@id,@kind,@detail)"); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("kind", kind); cmd.Parameters.AddWithValue("detail", detail); await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); }
     private async Task<bool> ExecuteOwnedAsync(string sql, Guid id, string owner, CancellationToken ct, params (string Name, object Value)[] values) { await using var cmd = dataSource.CreateCommand(sql); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("owner", owner); foreach (var value in values) cmd.Parameters.AddWithValue(value.Name, value.Value); return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1; }
     private static HotCacheJob Read(NpgsqlDataReader r) => new(r.GetGuid(0), Enum.Parse<HotCacheJobKind>(r.GetString(1), true), r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3), r.GetInt64(4), r.GetDateTime(5), r.GetInt32(6), r.GetBoolean(7), r.GetBoolean(8), r.GetBoolean(9), r.GetDateTime(10), r.GetInt32(11));
+    public async Task<HotCacheWorkerSettings> GetSettingsAsync(CancellationToken ct)
+    {
+        await using var cmd = dataSource.CreateCommand("SELECT backend,paused,high_watermark,low_watermark FROM hot_cache_settings WHERE id=true");
+        await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        return await reader.ReadAsync(ct).ConfigureAwait(false)
+            ? new HotCacheWorkerSettings(reader.GetString(0), reader.GetBoolean(1), reader.GetDouble(2), reader.GetDouble(3))
+            : new HotCacheWorkerSettings("unraid-temp", false, .90, .75);
+    }
+    public async Task ObserveBackendAsync(string backend, bool mounted, bool healthy, long totalBytes, long availableBytes, CancellationToken ct)
+    {
+        await using var previous = dataSource.CreateCommand("SELECT mounted,healthy FROM hot_cache_backend_observations WHERE backend=@backend");
+        previous.Parameters.AddWithValue("backend", backend);
+        await using var reader = await previous.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        var changed = !await reader.ReadAsync(ct).ConfigureAwait(false)
+            || reader.GetBoolean(0) != mounted
+            || reader.GetBoolean(1) != healthy;
+
+        const string sql = "INSERT INTO hot_cache_backend_observations(backend,mounted,healthy,total_bytes,used_bytes,available_bytes,observed_at) VALUES(@backend,@mounted,@healthy,@total,@used,@available,now()) ON CONFLICT(backend) DO UPDATE SET mounted=excluded.mounted,healthy=excluded.healthy,total_bytes=excluded.total_bytes,used_bytes=excluded.used_bytes,available_bytes=excluded.available_bytes,observed_at=excluded.observed_at";
+        await using var cmd = dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("backend", backend); cmd.Parameters.AddWithValue("mounted", mounted); cmd.Parameters.AddWithValue("healthy", healthy); cmd.Parameters.AddWithValue("total", totalBytes); cmd.Parameters.AddWithValue("used", Math.Max(0, totalBytes - availableBytes)); cmd.Parameters.AddWithValue("available", availableBytes);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        if (!changed)
+        {
+            return;
+        }
+
+        await using var history = dataSource.CreateCommand("INSERT INTO hot_cache_admin_history(kind,detail) VALUES('backend',@detail)");
+        history.Parameters.AddWithValue("detail", $"backend={backend}; mounted={mounted}; healthy={healthy}");
+        await history.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+    }
 }

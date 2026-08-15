@@ -8,6 +8,7 @@ public enum HotCacheJobKind { Promotion, Eviction }
 
 public sealed record HotCacheJob(Guid Id, HotCacheJobKind Kind, string CanonicalPath, string? HotPath, long SourceLength, DateTime SourceModifiedUtc, int Priority, bool IsActive, bool IsPinned, bool IsCopying, DateTime LastAccessUtc, int Attempts);
 public sealed record HotCacheQueueSnapshot(long Depth, TimeSpan OldestAge, TimeSpan OldestLeaseAge, long DatabaseBytes, long EventRows, long NormalFallbacks, long UnhealthyFallbacks);
+public sealed record HotCacheWorkerSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark);
 
 public sealed class HotCacheOptions
 {
@@ -26,7 +27,8 @@ public sealed class HotCacheOptions
             throw new InvalidOperationException("Hot-cache roots must be configured.");
         }
 
-        if (Path.GetFullPath(CanonicalRoot).Equals(Path.GetFullPath(HotRoot), StringComparison.Ordinal)
+        if (Backend is not ("unraid-temp" or "cephfs")
+            || Path.GetFullPath(CanonicalRoot).Equals(Path.GetFullPath(HotRoot), StringComparison.Ordinal)
             || HighWatermark is <= 0 or > 1
             || LowWatermark is < 0 or >= 1
             || LowWatermark >= HighWatermark
@@ -47,7 +49,8 @@ public interface IHotCacheJobStore
     Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
     Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken);
-    Task ObserveBackendAsync(string backend, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken);
+    Task<HotCacheWorkerSettings> GetSettingsAsync(CancellationToken cancellationToken);
+    Task ObserveBackendAsync(string backend, bool mounted, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken);
     Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken);
 }
 
@@ -101,16 +104,20 @@ public sealed class HotCacheWorker
     public async Task ExecuteOnceAsync(string workerId, CancellationToken ct)
     {
         CleanupPartials();
-        var totalBytes = _files.GetTotalSpace(_options.HotRoot);
-        var availableBytes = _files.GetAvailableSpace(_options.HotRoot);
-        HotCacheMetrics.Storage(true, totalBytes, availableBytes);
-        await _store.ObserveBackendAsync(_options.Backend, true, totalBytes, availableBytes, ct).ConfigureAwait(false);
+        var settings = await _store.GetSettingsAsync(ct).ConfigureAwait(false);
+        await ObserveBackendAsync(ct).ConfigureAwait(false);
+        if (settings.Paused || !string.Equals(settings.Backend, _options.Backend, StringComparison.Ordinal))
+        {
+            // A backend switch drains by stopping new claims on the former backend.
+            // Existing cache files remain immutable and safely fall back to canonical storage.
+            RecordSnapshot(await _store.SnapshotAsync(ct).ConfigureAwait(false));
+            return;
+        }
+
         var job = await _store.ClaimAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false);
         if (job is not null) await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false);
-        await EnforceCapacityAsync(workerId, ct).ConfigureAwait(false);
-        var snapshot = await _store.SnapshotAsync(ct).ConfigureAwait(false);
-        HotCacheMetrics.Queue(snapshot);
-        HotCacheMetrics.Database(snapshot.DatabaseBytes, snapshot.EventRows, snapshot.NormalFallbacks, snapshot.UnhealthyFallbacks);
+        await EnforceCapacityAsync(workerId, settings, ct).ConfigureAwait(false);
+        RecordSnapshot(await _store.SnapshotAsync(ct).ConfigureAwait(false));
         HotCacheMetrics.Backend(true);
     }
     private async Task ExecuteJobAsync(HotCacheJob job, string workerId, CancellationToken ct)
@@ -207,8 +214,29 @@ public sealed class HotCacheWorker
     }
     private async Task EvictAsync(HotCacheJob job, string workerId, CancellationToken ct)
     { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); HotCacheMetrics.Evicted("capacity"); await _store.EventAsync(job.Id, "evicted", ItemId(job), ct).ConfigureAwait(false); }
-    private async Task EnforceCapacityAsync(string workerId, CancellationToken ct)
-    { if (UsedRatio() < _options.HighWatermark) return; while (UsedRatio() > _options.LowWatermark) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
+    private async Task EnforceCapacityAsync(string workerId, HotCacheWorkerSettings settings, CancellationToken ct)
+    { if (UsedRatio() < settings.HighWatermark) return; while (UsedRatio() > settings.LowWatermark) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
+    private async Task ObserveBackendAsync(CancellationToken ct)
+    {
+        try
+        {
+            var total = _files.GetTotalSpace(_options.HotRoot);
+            var available = _files.GetAvailableSpace(_options.HotRoot);
+            HotCacheMetrics.Storage(true, total, available);
+            await _store.ObserveBackendAsync(_options.Backend, true, total > 0 && available >= 0 && available <= total, total, available, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            await _store.ObserveBackendAsync(_options.Backend, false, false, 0, 0, ct).ConfigureAwait(false);
+            HotCacheMetrics.Backend(false);
+            HotCacheMetrics.Storage(false);
+        }
+    }
+    private static void RecordSnapshot(HotCacheQueueSnapshot snapshot)
+    {
+        HotCacheMetrics.Queue(snapshot);
+        HotCacheMetrics.Database(snapshot.DatabaseBytes, snapshot.EventRows, snapshot.NormalFallbacks, snapshot.UnhealthyFallbacks);
+    }
     private double UsedRatio() => 1d - ((double)_files.GetAvailableSpace(_options.HotRoot) / _files.GetTotalSpace(_options.HotRoot));
     private void CleanupPartials() { foreach (var path in _files.EnumerateFiles(_options.HotRoot, "*.partial")) if (DateTime.UtcNow - _files.GetFileInfo(path).LastWriteTimeUtc > _options.PartialFileMaxAge) _files.Delete(path); }
     private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative)) throw new IOException("Path escapes configured root."); return fullPath; }
