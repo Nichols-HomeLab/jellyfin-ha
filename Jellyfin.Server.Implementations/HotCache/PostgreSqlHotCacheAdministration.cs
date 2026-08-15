@@ -34,12 +34,14 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
     public async Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken)
     {
         Validate(settings);
-        const string sql = "UPDATE hot_cache_settings SET backend=@backend,paused=@paused,high_watermark=@high,low_watermark=@low,updated_at=now() WHERE id=true";
+        const string sql = "UPDATE hot_cache_settings SET backend=@backend,paused=@paused,high_watermark=@high,low_watermark=@low,max_lookahead=@lookahead,reserve_free_bytes=@reserve,updated_at=now() WHERE id=true";
         await using var command = dataSource.CreateCommand(sql);
         command.Parameters.AddWithValue("backend", settings.Backend);
         command.Parameters.AddWithValue("paused", settings.Paused);
         command.Parameters.AddWithValue("high", settings.HighWatermark);
         command.Parameters.AddWithValue("low", settings.LowWatermark);
+        command.Parameters.AddWithValue("lookahead", settings.MaxLookahead);
+        command.Parameters.AddWithValue("reserve", settings.ReserveFreeBytes);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         await HistoryAsync("settings", $"backend={settings.Backend}; paused={settings.Paused}; high={settings.HighWatermark}; low={settings.LowWatermark}; switch=former-backend-drains", cancellationToken).ConfigureAwait(false);
     }
@@ -98,9 +100,9 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
 
     private async Task<HotCacheSettings> ReadSettingsAsync(CancellationToken ct)
     {
-        await using var command = dataSource.CreateCommand("SELECT backend,paused,high_watermark,low_watermark FROM hot_cache_settings WHERE id=true");
+        await using var command = dataSource.CreateCommand("SELECT backend,paused,high_watermark,low_watermark,max_lookahead,reserve_free_bytes FROM hot_cache_settings WHERE id=true");
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        return await reader.ReadAsync(ct).ConfigureAwait(false) ? new(reader.GetString(0), reader.GetBoolean(1), reader.GetDouble(2), reader.GetDouble(3)) : new("unraid-temp", false, .90, .75);
+        return await reader.ReadAsync(ct).ConfigureAwait(false) ? new(reader.GetString(0), reader.GetBoolean(1), reader.GetDouble(2), reader.GetDouble(3), reader.GetInt32(4), reader.GetInt64(5)) : new("unraid-temp", false, .90, .75);
     }
 
     private async Task<IReadOnlyList<HotCacheBackendStatus>> ReadBackendsAsync(CancellationToken ct)
@@ -176,7 +178,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
             throw new ArgumentException("Unknown backend.");
         }
 
-        if (settings.LowWatermark <= 0 || settings.HighWatermark >= 1 || settings.LowWatermark >= settings.HighWatermark)
+        if (settings.LowWatermark <= 0 || settings.HighWatermark >= 1 || settings.LowWatermark >= settings.HighWatermark || settings.MaxLookahead < 0 || settings.ReserveFreeBytes < 0)
         {
             throw new ArgumentException("Watermarks must be between zero and one, with low below high.");
         }

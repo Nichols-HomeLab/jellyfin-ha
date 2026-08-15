@@ -30,10 +30,10 @@ public sealed class PostgreSqlHotCacheJobStore(NpgsqlDataSource dataSource) : IH
     private static HotCacheJob Read(NpgsqlDataReader r) => new(r.GetGuid(0), Enum.Parse<HotCacheJobKind>(r.GetString(1), true), r.GetString(2), r.IsDBNull(3) ? null : r.GetString(3), r.GetInt64(4), r.GetDateTime(5), r.GetInt32(6), r.GetBoolean(7), r.GetBoolean(8), r.GetBoolean(9), r.GetDateTime(10), r.GetInt32(11), r.IsDBNull(12) ? null : r.GetGuid(12));
     public async Task<HotCacheWorkerSettings> GetSettingsAsync(CancellationToken ct)
     {
-        await using var cmd = dataSource.CreateCommand("SELECT backend,paused,high_watermark,low_watermark FROM hot_cache_settings WHERE id=true");
+        await using var cmd = dataSource.CreateCommand("SELECT backend,paused,high_watermark,low_watermark,reserve_free_bytes FROM hot_cache_settings WHERE id=true");
         await using var reader = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         return await reader.ReadAsync(ct).ConfigureAwait(false)
-            ? new HotCacheWorkerSettings(reader.GetString(0), reader.GetBoolean(1), reader.GetDouble(2), reader.GetDouble(3))
+            ? new HotCacheWorkerSettings(reader.GetString(0), reader.GetBoolean(1), reader.GetDouble(2), reader.GetDouble(3), reader.GetInt64(4))
             : new HotCacheWorkerSettings("unraid-temp", false, .90, .75);
     }
     public async Task ObserveBackendAsync(string backend, bool mounted, bool healthy, long totalBytes, long availableBytes, CancellationToken ct)

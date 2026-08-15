@@ -64,7 +64,7 @@ public interface IHotCacheAdministration
 }
 
 /// <summary>Durable administrator settings.</summary>
-public sealed record HotCacheSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark);
+public sealed record HotCacheSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark, int MaxLookahead = 6, long ReserveFreeBytes = 161061273600);
 /// <summary>Administrator command whose item identifier is never interpreted as a path.</summary>
 public sealed record HotCacheAction(string Kind, Guid? ItemId, bool ConfirmBulkEviction);
 /// <summary>Shared administrator view.</summary>

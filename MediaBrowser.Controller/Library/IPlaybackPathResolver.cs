@@ -6,6 +6,9 @@ public enum PlaybackPathPurpose
     /// <summary>The primary direct-play or transcoding input.</summary>
     MainMedia,
 
+    /// <summary>An FFmpeg transcoding input.</summary>
+    TranscodeInput,
+
     /// <summary>An external audio or subtitle stream.</summary>
     ExternalStream,
 

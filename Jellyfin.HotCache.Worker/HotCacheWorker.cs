@@ -8,7 +8,7 @@ public enum HotCacheJobKind { Promotion, Eviction }
 
 public sealed record HotCacheJob(Guid Id, HotCacheJobKind Kind, string CanonicalPath, string? HotPath, long SourceLength, DateTime SourceModifiedUtc, int Priority, bool IsActive, bool IsPinned, bool IsCopying, DateTime LastAccessUtc, int Attempts, Guid? ItemId = null);
 public sealed record HotCacheQueueSnapshot(long Depth, TimeSpan OldestAge, TimeSpan OldestLeaseAge, long DatabaseBytes, long EventRows, long NormalFallbacks, long UnhealthyFallbacks);
-public sealed record HotCacheWorkerSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark);
+public sealed record HotCacheWorkerSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark, long ReserveFreeBytes = 161061273600);
 
 public sealed class HotCacheOptions
 {
@@ -252,7 +252,7 @@ public sealed class HotCacheWorker
     private async Task<bool> EvictAsync(HotCacheJob job, string workerId, CancellationToken ct)
     { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return false; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); HotCacheMetrics.Evicted("capacity"); await _store.EventAsync(job.Id, "evicted", ItemId(job), ct).ConfigureAwait(false); return true; }
     private async Task EnforceCapacityAsync(string workerId, HotCacheWorkerSettings settings, CancellationToken ct)
-    { if (UsedRatio() < settings.HighWatermark) return; while (UsedRatio() > settings.LowWatermark) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
+    { if (UsedRatio() < settings.HighWatermark && _files.GetAvailableSpace(_options.HotRoot) >= settings.ReserveFreeBytes) return; while (UsedRatio() > settings.LowWatermark || _files.GetAvailableSpace(_options.HotRoot) < settings.ReserveFreeBytes) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
     private async Task ObserveBackendAsync(CancellationToken ct)
     {
         try

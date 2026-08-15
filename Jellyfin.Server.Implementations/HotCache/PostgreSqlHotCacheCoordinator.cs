@@ -175,6 +175,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 
     private async Task ReconcileUserAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Jellyfin.Database.Implementations.Entities.User user, CancellationToken cancellationToken)
     {
+        var effectiveLookahead = await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
         var resume = _libraryManager.GetItemList(new InternalItemsQuery(user)
         {
             IncludeItemTypes = [BaseItemKind.Episode],
@@ -217,7 +218,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                     IncludeItemTypes = [BaseItemKind.Episode],
                     ParentId = episode.SeasonId,
                     MinParentAndIndexNumber = (episode.ParentIndexNumber ?? 0, (episode.IndexNumber ?? 0) + 1),
-                    Limit = 3,
+                    Limit = effectiveLookahead,
                     OrderBy = [(ItemSortBy.SortName, SortOrder.Ascending)]
                 });
                 var priority = 80;
@@ -228,6 +229,15 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                 }
             }
         }
+    }
+
+    // The configured maximum is six by default. Capacity independently limits
+    // lookahead from the currently selected backend, leaving the reserve intact.
+    private static async Task<int> GetEffectiveLookaheadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
+    {
+        const string sql = "SELECT LEAST(s.max_lookahead, GREATEST(0, FLOOR(GREATEST(0, COALESCE((SELECT available_bytes FROM hot_cache_backend_observations WHERE backend=s.backend AND healthy ORDER BY observed_at DESC LIMIT 1), 0) - s.reserve_free_bytes) / GREATEST(COALESCE((SELECT AVG(source_length) FROM hot_cache_jobs WHERE source_length > 0), 1), 1)))::integer FROM hot_cache_settings s WHERE s.id=true";
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        return (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as int?) ?? 0;
     }
 
     private async Task RecordCandidateAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, Guid userId, string reason, int priority, CancellationToken cancellationToken)
