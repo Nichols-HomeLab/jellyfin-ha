@@ -33,7 +33,7 @@ namespace MediaBrowser.Model.Dto
 
         public string Path { get; set; }
 
-        /// <summary>Canonical local path retained while a transient serving path is substituted.</summary>
+        /// <summary>Gets or sets the canonical local path retained while a transient serving path is substituted.</summary>
         [JsonIgnore]
         public string CanonicalPath { get; set; }
 
