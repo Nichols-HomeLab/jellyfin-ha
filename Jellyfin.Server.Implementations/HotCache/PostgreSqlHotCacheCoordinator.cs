@@ -26,6 +26,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private readonly IUserDataManager _userDataManager;
     private readonly HashSet<Guid>? _includedUsers;
     private readonly Guid? _canarySeriesId;
+    private readonly bool _canaryConfigured;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -44,14 +45,16 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         _libraryManager = libraryManager;
         _userDataManager = userDataManager;
         _includedUsers = ParseIncludedUsers(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_INCLUDED_USER_IDS"));
-        _canarySeriesId = Guid.TryParse(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_CANARY_SERIES_ID"), out var canarySeriesId) ? canarySeriesId : null;
+        var canaryRaw = Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_CANARY_SERIES_ID");
+        _canaryConfigured = canaryRaw is not null;
+        _canarySeriesId = Guid.TryParse(canaryRaw, out var canarySeriesId) ? canarySeriesId : null;
         _logger = logger;
     }
 
     /// <inheritdoc />
     public async Task RecordPlaybackAsync(PlaybackProgressEventArgs playback, HotCachePlaybackEvent lifecycle, CancellationToken cancellationToken)
     {
-        if (playback.Item is null || playback.Users is null || playback.Users.Count == 0)
+        if (playback.Item is null || playback.Users is null || playback.Users.Count == 0 || !IsCanaryItem(playback.Item))
         {
             return;
         }
@@ -241,24 +244,25 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static Task UpsertJobAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, int priority, CancellationToken cancellationToken)
     {
         var source = new FileInfo(item.Path);
-        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name), ("episode", item.Name));
+        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", BoundDisplay(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)), ("episode", BoundDisplay(item.Name)));
     }
 
     private bool IsIncluded(Jellyfin.Database.Implementations.Entities.User user) => _includedUsers is null || _includedUsers.Contains(user.Id);
 
-    private bool IsCanaryItem(BaseItem item) => _canarySeriesId is null
-        || item.Id.Equals(_canarySeriesId.Value)
-        || (item is MediaBrowser.Controller.Entities.TV.Episode episode && episode.SeriesId.Equals(_canarySeriesId.Value));
+    private bool IsCanaryItem(BaseItem item) => !_canaryConfigured || (_canarySeriesId is Guid seriesId && (item.Id.Equals(seriesId) || (item is MediaBrowser.Controller.Entities.TV.Episode episode && episode.SeriesId.Equals(seriesId))));
+
+    private static string BoundDisplay(string value) => value.Length <= 512 ? value : value[..512];
 
     private static HashSet<Guid>? ParseIncludedUsers(string? raw)
     {
-        if (string.IsNullOrWhiteSpace(raw))
+        if (raw is null)
         {
             return null;
         }
 
         var users = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(Guid.Parse)
+            .Select(value => Guid.TryParse(value, out var id) ? id : Guid.Empty)
+            .Where(id => !id.Equals(Guid.Empty))
             .ToHashSet();
         return users;
     }

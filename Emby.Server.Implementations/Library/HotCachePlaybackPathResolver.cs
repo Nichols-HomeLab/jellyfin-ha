@@ -117,7 +117,7 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
             }
 
             current = Path.Combine(current, part);
-            if (File.Exists(current) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
             {
                 return true;
             }
