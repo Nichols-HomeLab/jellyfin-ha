@@ -153,7 +153,9 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         const string sql = "WITH history AS (SELECT id,kind,detail,created_at FROM hot_cache_admin_history UNION ALL SELECT -id,CASE WHEN kind IN ('published','already-published') THEN 'copied' WHEN kind='evicted' THEN 'evicted' WHEN kind='failed' THEN 'failed' ELSE kind END,detail,created_at FROM hot_cache_events WHERE kind IN ('published','already-published','evicted','failed')) SELECT id,kind,detail,created_at FROM history WHERE (@kind IS NULL OR kind=@kind) ORDER BY created_at DESC,id DESC LIMIT 500";
         var results = new List<HotCacheHistoryEntry>();
         await using var command = dataSource.CreateCommand(sql);
-        command.Parameters.AddWithValue("kind", (object?)kind ?? DBNull.Value);
+        // PostgreSQL cannot infer a type for a NULL-only predicate parameter.
+        // The unfiltered administrator view deliberately passes null here.
+        command.Parameters.Add("kind", NpgsqlTypes.NpgsqlDbType.Text).Value = (object?)kind ?? DBNull.Value;
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
