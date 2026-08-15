@@ -8,8 +8,12 @@ public static class HotCacheSchema
         CREATE TABLE IF NOT EXISTS hot_cache_schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now());
         CREATE TABLE IF NOT EXISTS hot_cache_jobs (id uuid PRIMARY KEY, item_id uuid, kind text NOT NULL CHECK (kind IN ('promotion','eviction')), state text NOT NULL DEFAULT 'pending' CHECK (state IN ('pending','running','completed','failed')), canonical_path text NOT NULL, hot_path text, source_length bigint NOT NULL DEFAULT 0, source_modified_utc timestamptz NOT NULL DEFAULT now(), priority integer NOT NULL DEFAULT 0, is_active boolean NOT NULL DEFAULT false, is_pinned boolean NOT NULL DEFAULT false, is_copying boolean NOT NULL DEFAULT false, last_access_utc timestamptz NOT NULL DEFAULT now(), bytes_copied bigint NOT NULL DEFAULT 0, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 3, last_error varchar(512), lease_owner text, lease_expires_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
         ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS item_id uuid;
+        ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS series_name varchar(512);
+        ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS episode_name varchar(512);
+        ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS backend varchar(32);
         CREATE UNIQUE INDEX IF NOT EXISTS hot_cache_jobs_item_unique_idx ON hot_cache_jobs(item_id) WHERE item_id IS NOT NULL;
-        CREATE INDEX IF NOT EXISTS hot_cache_jobs_claim_idx ON hot_cache_jobs (state, priority DESC, created_at) WHERE state IN ('pending', 'running');
+        CREATE INDEX IF NOT EXISTS hot_cache_jobs_claim_idx ON hot_cache_jobs (state, priority DESC, created_at, id) WHERE state IN ('pending', 'running');
+        CREATE INDEX IF NOT EXISTS hot_cache_jobs_eviction_idx ON hot_cache_jobs (last_access_utc, id) WHERE state='completed' AND hot_path IS NOT NULL;
         CREATE TABLE IF NOT EXISTS hot_cache_events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, job_id uuid NOT NULL REFERENCES hot_cache_jobs(id), kind text NOT NULL, detail varchar(512) NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
         CREATE INDEX IF NOT EXISTS hot_cache_events_created_at_idx ON hot_cache_events(created_at);
         CREATE TABLE IF NOT EXISTS hot_cache_interests (item_id uuid NOT NULL, user_id uuid NOT NULL, reason text NOT NULL, priority integer NOT NULL, first_observed_utc timestamptz NOT NULL DEFAULT now(), last_observed_utc timestamptz NOT NULL DEFAULT now(), expires_at_utc timestamptz NOT NULL, PRIMARY KEY(item_id,user_id,reason));
@@ -19,6 +23,7 @@ public static class HotCacheSchema
         INSERT INTO hot_cache_settings(id) VALUES(true) ON CONFLICT (id) DO NOTHING;
         CREATE TABLE IF NOT EXISTS hot_cache_backend_observations (backend text PRIMARY KEY CHECK (backend IN ('unraid-temp','cephfs')), mounted boolean NOT NULL, healthy boolean NOT NULL, total_bytes bigint NOT NULL CHECK (total_bytes >= 0), used_bytes bigint NOT NULL CHECK (used_bytes >= 0), available_bytes bigint NOT NULL CHECK (available_bytes >= 0), observed_at timestamptz NOT NULL DEFAULT now());
         CREATE TABLE IF NOT EXISTS hot_cache_admin_history (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, kind text NOT NULL CHECK (kind IN ('copied','evicted','failed','settings','backend','promoted','retry','reconcile')), detail varchar(512) NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+        CREATE INDEX IF NOT EXISTS hot_cache_admin_history_created_at_idx ON hot_cache_admin_history(created_at);
         INSERT INTO hot_cache_schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING;
         """;
 }

@@ -24,7 +24,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         }
 
         var settings = await ReadSettingsAsync(cancellationToken).ConfigureAwait(false);
-        return new HotCacheAdministrationSnapshot(settings, await ReadBackendsAsync(cancellationToken).ConfigureAwait(false), await ReadQueueAsync(cancellationToken).ConfigureAwait(false), await ReadInventoryAsync(settings.Backend, cancellationToken).ConfigureAwait(false), await ReadHistoryAsync(historyKind, cancellationToken).ConfigureAwait(false));
+        return new HotCacheAdministrationSnapshot(settings, await ReadBackendsAsync(cancellationToken).ConfigureAwait(false), await ReadQueueAsync(cancellationToken).ConfigureAwait(false), await ReadInventoryAsync(cancellationToken).ConfigureAwait(false), await ReadHistoryAsync(historyKind, cancellationToken).ConfigureAwait(false));
     }
 
     /// <summary>Updates the shared worker controls and validated watermarks.</summary>
@@ -127,16 +127,15 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         return results;
     }
 
-    private async Task<IReadOnlyList<HotCacheInventoryItem>> ReadInventoryAsync(string backend, CancellationToken ct)
+    private async Task<IReadOnlyList<HotCacheInventoryItem>> ReadInventoryAsync(CancellationToken ct)
     {
-        const string sql = "SELECT j.id,COALESCE(i.reason,''),COALESCE(i.users,0),j.priority,j.source_length,@backend,j.created_at,j.updated_at,j.state FROM hot_cache_jobs j LEFT JOIN (SELECT item_id,STRING_AGG(DISTINCT reason,',' ) reason,COUNT(DISTINCT user_id) users FROM hot_cache_interests WHERE expires_at_utc > now() GROUP BY item_id) i ON i.item_id=j.item_id ORDER BY j.updated_at DESC LIMIT 500";
+        const string sql = "SELECT j.id,COALESCE(j.series_name,'Uncatalogued'),COALESCE(j.episode_name,j.id::text),COALESCE(i.reason,''),COALESCE(i.users,0),j.priority,j.source_length,COALESCE(j.backend,''),j.created_at,j.updated_at,CASE WHEN j.state='pending' THEN 'queued' WHEN j.state='running' AND j.kind='promotion' THEN 'copying' WHEN j.state='running' AND j.kind='eviction' THEN 'evicting' WHEN j.state='completed' AND j.kind='promotion' THEN 'copied' WHEN j.state='completed' AND j.kind='eviction' THEN 'evicted' ELSE 'failed' END FROM hot_cache_jobs j LEFT JOIN (SELECT item_id,STRING_AGG(DISTINCT reason,',' ) reason,COUNT(DISTINCT user_id) users FROM hot_cache_interests WHERE expires_at_utc > now() GROUP BY item_id) i ON i.item_id=j.item_id ORDER BY j.updated_at DESC,j.id LIMIT 500";
         var results = new List<HotCacheInventoryItem>();
         await using var command = dataSource.CreateCommand(sql);
-        command.Parameters.AddWithValue("backend", backend);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {
-            results.Add(new(reader.GetGuid(0), "Uncatalogued", reader.GetGuid(0).ToString(), reader.GetString(1), checked((int)reader.GetInt64(2)), reader.GetInt32(3), reader.GetInt64(4), reader.GetString(5), reader.GetDateTime(6), reader.GetDateTime(7), reader.GetString(8)));
+            results.Add(new(reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3), checked((int)reader.GetInt64(4)), reader.GetInt32(5), reader.GetInt64(6), reader.GetString(7), reader.GetDateTime(8), reader.GetDateTime(9), reader.GetString(10)));
         }
 
         return results;
@@ -144,7 +143,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
 
     private async Task<IReadOnlyList<HotCacheHistoryEntry>> ReadHistoryAsync(string? kind, CancellationToken ct)
     {
-        const string sql = "SELECT id,kind,detail,created_at FROM hot_cache_admin_history WHERE (@kind IS NULL OR kind=@kind) ORDER BY id DESC LIMIT 500";
+        const string sql = "WITH history AS (SELECT id,kind,detail,created_at FROM hot_cache_admin_history UNION ALL SELECT -id,CASE WHEN kind IN ('published','already-published') THEN 'copied' WHEN kind='evicted' THEN 'evicted' WHEN kind='failed' THEN 'failed' ELSE kind END,detail,created_at FROM hot_cache_events WHERE kind IN ('published','already-published','evicted','failed')) SELECT id,kind,detail,created_at FROM history WHERE (@kind IS NULL OR kind=@kind) ORDER BY created_at DESC,id DESC LIMIT 500";
         var results = new List<HotCacheHistoryEntry>();
         await using var command = dataSource.CreateCommand(sql);
         command.Parameters.AddWithValue("kind", (object?)kind ?? DBNull.Value);

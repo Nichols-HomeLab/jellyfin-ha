@@ -6,7 +6,7 @@ namespace Jellyfin.HotCache.Worker;
 
 public enum HotCacheJobKind { Promotion, Eviction }
 
-public sealed record HotCacheJob(Guid Id, HotCacheJobKind Kind, string CanonicalPath, string? HotPath, long SourceLength, DateTime SourceModifiedUtc, int Priority, bool IsActive, bool IsPinned, bool IsCopying, DateTime LastAccessUtc, int Attempts);
+public sealed record HotCacheJob(Guid Id, HotCacheJobKind Kind, string CanonicalPath, string? HotPath, long SourceLength, DateTime SourceModifiedUtc, int Priority, bool IsActive, bool IsPinned, bool IsCopying, DateTime LastAccessUtc, int Attempts, Guid? ItemId = null);
 public sealed record HotCacheQueueSnapshot(long Depth, TimeSpan OldestAge, TimeSpan OldestLeaseAge, long DatabaseBytes, long EventRows, long NormalFallbacks, long UnhealthyFallbacks);
 public sealed record HotCacheWorkerSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark);
 
@@ -49,7 +49,7 @@ public interface IHotCacheJobStore
     Task<HotCacheJob?> ClaimAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> RenewAsync(Guid jobId, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken);
-    Task CompleteAsync(Guid jobId, string workerId, string? hotPath, CancellationToken cancellationToken);
+    Task CompleteAsync(Guid jobId, string workerId, string? hotPath, string backend, CancellationToken cancellationToken);
     Task FailAsync(Guid jobId, string workerId, string error, CancellationToken cancellationToken);
     Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
@@ -150,12 +150,13 @@ public sealed class HotCacheWorker
                 }
             }
 
-            await _store.CompleteAsync(job.Id, workerId, hotPath, ct).ConfigureAwait(false);
+            await _store.CompleteAsync(job.Id, workerId, hotPath, _options.Backend, ct).ConfigureAwait(false);
             HotCacheMetrics.JobCompleted(job, DateTime.UtcNow - started);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
             await _store.FailAsync(job.Id, workerId, Bound(ex.Message), CancellationToken.None).ConfigureAwait(false);
+            await _store.EventAsync(job.Id, "failed", ItemId(job), CancellationToken.None).ConfigureAwait(false);
             HotCacheMetrics.JobFailed(job, DateTime.UtcNow - started);
             _logger.LogWarning(ex, "Hot-cache job {JobId} for item {ItemId} degraded to cold playback", job.Id, ItemId(job));
         }
@@ -214,6 +215,10 @@ public sealed class HotCacheWorker
             }
 
             _files.SetLastWriteTimeUtc(partial, before.LastWriteTimeUtc);
+            if (!await _store.RenewAsync(job.Id, workerId, _options.LeaseDuration, ct).ConfigureAwait(false))
+            {
+                throw new IOException("Worker lease expired before publishing promotion.");
+            }
             if (_files.FileExists(target))
             {
                 _files.MoveReplace(partial, target);
@@ -264,7 +269,7 @@ public sealed class HotCacheWorker
     private bool TargetMatchesSource(string target, FileInfo source) { var targetInfo = _files.GetFileInfo(target); return targetInfo.Length == source.Length && targetInfo.LastWriteTimeUtc == source.LastWriteTimeUtc; }
     private void CleanupPartials() { foreach (var path in _files.EnumerateFiles(_options.HotRoot, "*.partial")) if (DateTime.UtcNow - _files.GetFileInfo(path).LastWriteTimeUtc > _options.PartialFileMaxAge) _files.Delete(path); }
     private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative)) throw new IOException("Path escapes configured root."); return fullPath; }
-    private static string ItemId(HotCacheJob job) => job.Id.ToString("N");
+    private static string ItemId(HotCacheJob job) => $"job={job.Id:N};item={job.ItemId?.ToString("N") ?? "none"}";
     private static string Bound(string value) => value.Length <= 512 ? value : value[..512];
 }
 

@@ -297,7 +297,7 @@ public sealed class HotCacheWorkerTests : IDisposable
 
         public Task ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task CompleteAsync(Guid jobId, string workerId, string? hotPath, CancellationToken cancellationToken)
+        public Task CompleteAsync(Guid jobId, string workerId, string? hotPath, string backend, CancellationToken cancellationToken)
         {
             CompletedHotPath = hotPath;
             _next = null;
