@@ -1,1 +1,94 @@
-dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uQ29sbGVjdGlvbnMuR2VuZXJpYzsKdXNpbmcgU3lzdGVtLlRocmVhZGluZzsKdXNpbmcgU3lzdGVtLlRocmVhZGluZy5UYXNrczsKCiNwcmFnbWEgd2FybmluZyBkaXNhYmxlIFNBMTQwMiAvLyBIb3QtY2FjaGUgYWRtaW5pc3RyYXRpb24gY29udHJhY3RzIGFyZSBpbnRlbnRpb25hbGx5IGNvLWxvY2F0ZWQuCgpuYW1lc3BhY2UgTWVkaWFCcm93c2VyLkNvbnRyb2xsZXIuTGlicmFyeTsKCi8vLyA8c3VtbWFyeT5QbGF5YmFjayBsaWZlY3ljbGUgdHJhbnNpdGlvbi48L3N1bW1hcnk+CnB1YmxpYyBlbnVtIEhvdENhY2hlUGxheWJhY2tFdmVudAp7CiAgICAvLy8gPHN1bW1hcnk+UGxheWJhY2sgYmVnYW4uPC9zdW1tYXJ5PgogICAgU3RhcnRlZCwKCiAgICAvLy8gPHN1bW1hcnk+UGxheWJhY2sgcmVtYWlucyBhY3RpdmUuPC9zdW1tYXJ5PgogICAgUHJvZ3Jlc3NlZCwKCiAgICAvLy8gPHN1bW1hcnk+UGxheWJhY2sgZW5kZWQuPC9zdW1tYXJ5PgogICAgU3RvcHBlZAp9CgovLy8gPHN1bW1hcnk+Q29vcmRpbmF0ZXMgZHVyYWJsZSBob3QtY2FjaGUgaW50ZXJlc3QsIGV2aWN0aW9uIHByb3RlY3Rpb24sIGFuZCBwbGF5YmFjayBvYnNlcnZhdGlvbnMuPC9zdW1tYXJ5PgpwdWJsaWMgaW50ZXJmYWNlIElIb3RDYWNoZUNvb3JkaW5hdG9yCnsKICAgIC8vLyA8c3VtbWFyeT5SZWNvcmRzIGEgcGxheWJhY2sgbGlmZWN5Y2xlIG9ic2VydmF0aW9uLjwvc3VtbWFyeT4KICAgIC8vLyA8cGFyYW0gbmFtZT0icGxheWJhY2siPlRoZSBKZWxseWZpbiBwbGF5YmFjayBldmVudC48L3BhcmFtPgogICAgLy8vIDxwYXJhbSBuYW1lPSJsaWZlY3ljbGUiPlRoZSBsaWZlY3ljbGUgdHJhbnNpdGlvbi48L3BhcmFtPgogICAgLy8vIDxwYXJhbSBuYW1lPSJjYW5jZWxsYXRpb25Ub2tlbiI+VGhlIGNhbmNlbGxhdGlvbiB0b2tlbi48L3BhcmFtPgogICAgLy8vIDxyZXR1cm5zPkEgdGFzayB0aGF0IGNvbXBsZXRlcyB3aGVuIGR1cmFibGUgc3RhdGUgaGFzIGNoYW5nZWQuPC9yZXR1cm5zPgogICAgVGFzayBSZWNvcmRQbGF5YmFja0FzeW5jKFBsYXliYWNrUHJvZ3Jlc3NFdmVudEFyZ3MgcGxheWJhY2ssIEhvdENhY2hlUGxheWJhY2tFdmVudCBsaWZlY3ljbGUsIENhbmNlbGxhdGlvblRva2VuIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAvLy8gPHN1bW1hcnk+UmVjb25jaWxlcyB0aGUgaW5jbHVkZWQgdXNlcnMnIHJlc3VtZSwgbmV4dC11cCwgYW5kIHJlY2VudGx5IGFjdGl2ZSBzZXJpZXMgaW50ZXJlc3RzLjwvc3VtbWFyeT4KICAgIC8vLyA8cGFyYW0gbmFtZT0iY2FuY2VsbGF0aW9uVG9rZW4iPlRoZSBjYW5jZWxsYXRpb24gdG9rZW4uPC9wYXJhbT4KICAgIC8vLyA8cmV0dXJucz5BIHRhc2sgdGhhdCBjb21wbGV0ZXMgd2hlbiByZWNvbmNpbGlhdGlvbiBoYXMgZmluaXNoZWQuPC9yZXR1cm5zPgogICAgVGFzayBSZWNvbmNpbGVBc3luYyhDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbik7CgogICAgLy8vIDxzdW1tYXJ5PlF1ZXVlcyBvbmUgbGlicmFyeSBlcGlzb2RlIG9yIGV2ZXJ5IGVwaXNvZGUgaW4gYSBsaWJyYXJ5IHNlYXNvbiBmb3IgcHJvbW90aW9uLjwvc3VtbWFyeT4KICAgIC8vLyA8cGFyYW0gbmFtZT0iaXRlbUlkIj5UaGUgSmVsbHlmaW4gbGlicmFyeSBpdGVtIGlkZW50aWZpZXIsIG5ldmVyIGEgZmlsZXN5c3RlbSBwYXRoLjwvcGFyYW0+CiAgICAvLy8gPHBhcmFtIG5hbWU9ImluY2x1ZGVTZWFzb24iPldoZXRoZXIgYSBzZWFzb24gaWRlbnRpZmllciBzaG91bGQgZXhwYW5kIHRvIGl0cyBlcGlzb2Rlcy48L3BhcmFtPgogICAgLy8vIDxwYXJhbSBuYW1lPSJjYW5jZWxsYXRpb25Ub2tlbiI+VGhlIGNhbmNlbGxhdGlvbiB0b2tlbi48L3BhcmFtPgogICAgLy8vIDxyZXR1cm5zPlRoZSBudW1iZXIgb2YgZXBpc29kZXMgYWNjZXB0ZWQgZm9yIGNhY2hpbmcuPC9yZXR1cm5zPgogICAgVGFzazxpbnQ+IENhY2hlTGlicmFyeUl0ZW1Bc3luYyhHdWlkIGl0ZW1JZCwgYm9vbCBpbmNsdWRlU2Vhc29uLCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbik7CgogICAgLy8vIDxzdW1tYXJ5PlF1ZXVlcyBhIG5vbi1ibG9ja2luZyByZXNvbHZlciBvYnNlcnZhdGlvbi48L3N1bW1hcnk+CiAgICAvLy8gPHBhcmFtIG5hbWU9InJlcXVlc3QiPlRoZSBjYW5vbmljYWwgcmVhZCByZXF1ZXN0LjwvcGFyYW0+CiAgICAvLy8gPHBhcmFtIG5hbWU9InJlc29sdXRpb24iPlRoZSBzZWxlY3RlZCByZXN1bHQuPC9wYXJhbT4KICAgIHZvaWQgT2JzZXJ2ZVJlc29sdXRpb24oaW4gUGxheWJhY2tQYXRoUmVxdWVzdCByZXF1ZXN0LCBpbiBQbGF5YmFja1BhdGhSZXNvbHV0aW9uIHJlc29sdXRpb24pOwp9CgovLy8gPHN1bW1hcnk+QWRtaW5pc3RyYXRpdmUgcmVhZCBhbmQgY29tbWFuZCBzdXJmYWNlIGJhY2tlZCBieSBkdXJhYmxlIGhvdC1jYWNoZSBzdGF0ZS48L3N1bW1hcnk+CnB1YmxpYyBpbnRlcmZhY2UgSUhvdENhY2hlQWRtaW5pc3RyYXRpb24KewogICAgLy8vIDxzdW1tYXJ5PkdldHMgc2hhcmVkIHNldHRpbmdzLCBiYWNrZW5kIG9ic2VydmF0aW9ucywgcXVldWUgdG90YWxzLCBpbnZlbnRvcnksIGFuZCBoaXN0b3J5Ljwvc3VtbWFyeT4KICAgIC8vLyA8cGFyYW0gbmFtZT0iaGlzdG9yeUtpbmQiPk9wdGlvbmFsIGFwcGVuZC1vbmx5IGhpc3Rvcnkga2luZCBmaWx0ZXIuPC9wYXJhbT4KICAgIC8vLyA8cGFyYW0gbmFtZT0iY2FuY2VsbGF0aW9uVG9rZW4iPlRoZSBjYW5jZWxsYXRpb24gdG9rZW4uPC9wYXJhbT4KICAgIC8vLyA8cmV0dXJucz5UaGUgc2hhcmVkIGFkbWluaXN0cmF0b3Igc25hcHNob3QuPC9yZXR1cm5zPgogICAgVGFzazxIb3RDYWNoZUFkbWluaXN0cmF0aW9uU25hcHNob3Q+IEdldFNuYXBzaG90QXN5bmMoc3RyaW5nPyBoaXN0b3J5S2luZCwgQ2FuY2VsbGF0aW9uVG9rZW4gY2FuY2VsbGF0aW9uVG9rZW4pOwoKICAgIC8vLyA8c3VtbWFyeT5WYWxpZGF0ZXMgYW5kIHBlcnNpc3RzIGFkbWluaXN0cmF0b3Igc2V0dGluZ3MuPC9zdW1tYXJ5PgogICAgLy8vIDxwYXJhbSBuYW1lPSJzZXR0aW5ncyI+VGhlIHJlcXVlc3RlZCBkdXJhYmxlIHNldHRpbmdzLjwvcGFyYW0+CiAgICAvLy8gPHBhcmFtIG5hbWU9ImNhbmNlbGxhdGlvblRva2VuIj5UaGUgY2FuY2VsbGF0aW9uIHRva2VuLjwvcGFyYW0+CiAgICAvLy8gPHJldHVybnM+QSB0YXNrIHRoYXQgY29tcGxldGVzIGFmdGVyIHBlcnNpc3RlbmNlLjwvcmV0dXJucz4KICAgIFRhc2sgVXBkYXRlU2V0dGluZ3NBc3luYyhIb3RDYWNoZVNldHRpbmdzIHNldHRpbmdzLCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbik7CgogICAgLy8vIDxzdW1tYXJ5PlF1ZXVlcyBhbiBhZG1pbmlzdHJhdG9yIGNvbW1hbmQgZm9yIGFuIGV4aXN0aW5nIGludmVudG9yeSBpdGVtLjwvc3VtbWFyeT4KICAgIC8vLyA8cGFyYW0gbmFtZT0iYWN0aW9uIj5UaGUgdmFsaWRhdGVkIGFkbWluaXN0cmF0b3IgY29tbWFuZC48L3BhcmFtPgogICAgLy8vIDxwYXJhbSBuYW1lPSJjYW5jZWxsYXRpb25Ub2tlbiI+VGhlIGNhbmNlbGxhdGlvbiB0b2tlbi48L3BhcmFtPgogICAgLy8vIDxyZXR1cm5zPkEgdGFzayB0aGF0IGNvbXBsZXRlcyBhZnRlciBxdWV1aW5nLjwvcmV0dXJucz4KICAgIFRhc2sgUXVldWVBY3Rpb25Bc3luYyhIb3RDYWNoZUFjdGlvbiBhY3Rpb24sIENhbmNlbGxhdGlvblRva2VuIGNhbmNlbGxhdGlvblRva2VuKTsKCiAgICAvLy8gPHN1bW1hcnk+UXVldWVzIGFuIGFkbWluaXN0cmF0b3Itc2VsZWN0ZWQgbGlicmFyeSBlcGlzb2RlIG9yIHNlYXNvbiBmb3IgY2FjaGluZy48L3N1bW1hcnk+CiAgICAvLy8gPHBhcmFtIG5hbWU9InJlcXVlc3QiPlRoZSBsaWJyYXJ5IGl0ZW0gYW5kIGV4cGFuc2lvbiBzY29wZS48L3BhcmFtPgogICAgLy8vIDxwYXJhbSBuYW1lPSJjYW5jZWxsYXRpb25Ub2tlbiI+VGhlIGNhbmNlbGxhdGlvbiB0b2tlbi48L3BhcmFtPgogICAgLy8vIDxyZXR1cm5zPlRoZSBudW1iZXIgb2YgYWNjZXB0ZWQgZXBpc29kZXMuPC9yZXR1cm5zPgogICAgVGFzazxpbnQ+IENhY2hlTGlicmFyeUl0ZW1Bc3luYyhIb3RDYWNoZU1hbnVhbENhY2hlUmVxdWVzdCByZXF1ZXN0LCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbik7Cn0KCi8vLyA8c3VtbWFyeT5EdXJhYmxlIGFkbWluaXN0cmF0b3Igc2V0dGluZ3MuPC9zdW1tYXJ5PgpwdWJsaWMgc2VhbGVkIHJlY29yZCBIb3RDYWNoZVNldHRpbmdzKHN0cmluZyBCYWNrZW5kLCBib29sIFBhdXNlZCwgZG91YmxlIEhpZ2hXYXRlcm1hcmssIGRvdWJsZSBMb3dXYXRlcm1hcmssIGludCBNYXhMb29rYWhlYWQgPSA2LCBsb25nIFJlc2VydmVGcmVlQnl0ZXMgPSAxNjEwNjEyNzM2MDApOwovLy8gPHN1bW1hcnk+QWRtaW5pc3RyYXRvciBjb21tYW5kIHdob3NlIGl0ZW0gaWRlbnRpZmllciBpcyBuZXZlciBpbnRlcnByZXRlZCBhcyBhIHBhdGguPC9zdW1tYXJ5PgpwdWJsaWMgc2VhbGVkIHJlY29yZCBIb3RDYWNoZUFjdGlvbihzdHJpbmcgS2luZCwgR3VpZD8gSXRlbUlkLCBib29sIENvbmZpcm1CdWxrRXZpY3Rpb24pOwovLy8gPHN1bW1hcnk+TWFudWFsIGNhY2hlIHJlcXVlc3QgdGFyZ2V0aW5nIGEgSmVsbHlmaW4gbGlicmFyeSBpdGVtLjwvc3VtbWFyeT4KcHVibGljIHNlYWxlZCByZWNvcmQgSG90Q2FjaGVNYW51YWxDYWNoZVJlcXVlc3QoR3VpZCBJdGVtSWQsIGJvb2wgSW5jbHVkZVNlYXNvbik7Ci8vLyA8c3VtbWFyeT5TaGFyZWQgYWRtaW5pc3RyYXRvciB2aWV3Ljwvc3VtbWFyeT4KcHVibGljIHNlYWxlZCByZWNvcmQgSG90Q2FjaGVBZG1pbmlzdHJhdGlvblNuYXBzaG90KEhvdENhY2hlU2V0dGluZ3MgU2V0dGluZ3MsIElSZWFkT25seUxpc3Q8SG90Q2FjaGVCYWNrZW5kU3RhdHVzPiBCYWNrZW5kcywgSVJlYWRPbmx5TGlzdDxIb3RDYWNoZVF1ZXVlU3VtbWFyeT4gUXVldWUsIElSZWFkT25seUxpc3Q8SG90Q2FjaGVJbnZlbnRvcnlJdGVtPiBJbnZlbnRvcnksIElSZWFkT25seUxpc3Q8SG90Q2FjaGVIaXN0b3J5RW50cnk+IEhpc3RvcnkpOwovLy8gPHN1bW1hcnk+T2JzZXJ2ZWQgYmFja2VuZCBjYXBhY2l0eSBhbmQgaGVhbHRoLjwvc3VtbWFyeT4KcHVibGljIHNlYWxlZCByZWNvcmQgSG90Q2FjaGVCYWNrZW5kU3RhdHVzKHN0cmluZyBOYW1lLCBib29sIE1vdW50ZWQsIGJvb2wgSGVhbHRoeSwgYm9vbCBTdGFsZSwgbG9uZyBUb3RhbEJ5dGVzLCBsb25nIFVzZWRCeXRlcywgbG9uZyBBdmFpbGFibGVCeXRlcywgRGF0ZVRpbWUgT2JzZXJ2ZWRBdFV0Yyk7Ci8vLyA8c3VtbWFyeT5RdWV1ZSBjb3VudCBhbmQgYnl0ZSB0b3RhbCBmb3IgYSBzdGF0ZS48L3N1bW1hcnk+CnB1YmxpYyBzZWFsZWQgcmVjb3JkIEhvdENhY2hlUXVldWVTdW1tYXJ5KHN0cmluZyBTdGF0ZSwgbG9uZyBDb3VudCwgbG9uZyBCeXRlcyk7Ci8vLyA8c3VtbWFyeT5JbnZlbnRvcnkgcm93IGdyb3VwZWQgaW4gdGhlIFVJIGJ5IHNlcmllcy48L3N1bW1hcnk+CnB1YmxpYyBzZWFsZWQgcmVjb3JkIEhvdENhY2hlSW52ZW50b3J5SXRlbShHdWlkIEl0ZW1JZCwgc3RyaW5nIFNlcmllc05hbWUsIHN0cmluZyBFcGlzb2RlLCBzdHJpbmcgUmVhc29uLCBpbnQgSW50ZXJlc3RlZFVzZXJzLCBpbnQgUHJpb3JpdHksIGxvbmcgU2l6ZUJ5dGVzLCBzdHJpbmcgQmFja2VuZCwgRGF0ZVRpbWUgQ3JlYXRlZEF0VXRjLCBEYXRlVGltZSBVcGRhdGVkQXRVdGMsIHN0cmluZyBTdGF0ZSk7Ci8vLyA8c3VtbWFyeT5BcHBlbmQtb25seSBhZG1pbmlzdHJhdG9yIGhpc3RvcnkgZW50cnkuPC9zdW1tYXJ5PgpwdWJsaWMgc2VhbGVkIHJlY29yZCBIb3RDYWNoZUhpc3RvcnlFbnRyeShsb25nIElkLCBzdHJpbmcgS2luZCwgc3RyaW5nIERldGFpbCwgRGF0ZVRpbWUgQ3JlYXRlZEF0VXRjKTsK
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+
+#pragma warning disable SA1402 // Hot-cache administration contracts are intentionally co-located.
+
+namespace MediaBrowser.Controller.Library;
+
+/// <summary>Playback lifecycle transition.</summary>
+public enum HotCachePlaybackEvent
+{
+    /// <summary>Playback began.</summary>
+    Started,
+
+    /// <summary>Playback remains active.</summary>
+    Progressed,
+
+    /// <summary>Playback ended.</summary>
+    Stopped
+}
+
+/// <summary>Coordinates durable hot-cache interest, eviction protection, and playback observations.</summary>
+public interface IHotCacheCoordinator
+{
+    /// <summary>Records a playback lifecycle observation.</summary>
+    /// <param name="playback">The Jellyfin playback event.</param>
+    /// <param name="lifecycle">The lifecycle transition.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when durable state has changed.</returns>
+    Task RecordPlaybackAsync(PlaybackProgressEventArgs playback, HotCachePlaybackEvent lifecycle, CancellationToken cancellationToken);
+
+    /// <summary>Reconciles the included users' resume, next-up, and recently active series interests.</summary>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when reconciliation has finished.</returns>
+    Task ReconcileAsync(CancellationToken cancellationToken);
+
+    /// <summary>Queues one library episode or every episode in a library season for promotion.</summary>
+    /// <param name="itemId">The Jellyfin library item identifier, never a filesystem path.</param>
+    /// <param name="includeSeason">Whether a season identifier should expand to its episodes.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of episodes accepted for caching.</returns>
+    Task<int> CacheLibraryItemAsync(Guid itemId, bool includeSeason, CancellationToken cancellationToken);
+
+    /// <summary>Queues a non-blocking resolver observation.</summary>
+    /// <param name="request">The canonical read request.</param>
+    /// <param name="resolution">The selected result.</param>
+    void ObserveResolution(in PlaybackPathRequest request, in PlaybackPathResolution resolution);
+}
+
+/// <summary>Administrative read and command surface backed by durable hot-cache state.</summary>
+public interface IHotCacheAdministration
+{
+    /// <summary>Gets shared settings, backend observations, queue totals, inventory, and history.</summary>
+    /// <param name="historyKind">Optional append-only history kind filter.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The shared administrator snapshot.</returns>
+    Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken);
+
+    /// <summary>Validates and persists administrator settings.</summary>
+    /// <param name="settings">The requested durable settings.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes after persistence.</returns>
+    Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken);
+
+    /// <summary>Queues an administrator command for an existing inventory item.</summary>
+    /// <param name="action">The validated administrator command.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes after queuing.</returns>
+    Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken);
+
+    /// <summary>Queues an administrator-selected library episode or season for caching.</summary>
+    /// <param name="request">The library item and expansion scope.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of accepted episodes.</returns>
+    Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken);
+}
+
+/// <summary>Durable administrator settings.</summary>
+public sealed record HotCacheSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark, int MaxLookahead = 6, long ReserveFreeBytes = 161061273600);
+/// <summary>Administrator command whose item identifier is never interpreted as a path.</summary>
+public sealed record HotCacheAction(string Kind, Guid? ItemId, bool ConfirmBulkEviction);
+/// <summary>Manual cache request targeting a Jellyfin library item.</summary>
+public sealed record HotCacheManualCacheRequest(Guid ItemId, bool IncludeSeason);
+/// <summary>Shared administrator view.</summary>
+public sealed record HotCacheAdministrationSnapshot(HotCacheSettings Settings, IReadOnlyList<HotCacheBackendStatus> Backends, IReadOnlyList<HotCacheQueueSummary> Queue, IReadOnlyList<HotCacheInventoryItem> Inventory, IReadOnlyList<HotCacheHistoryEntry> History);
+/// <summary>Observed backend capacity and health.</summary>
+public sealed record HotCacheBackendStatus(string Name, bool Mounted, bool Healthy, bool Stale, long TotalBytes, long UsedBytes, long AvailableBytes, DateTime ObservedAtUtc);
+/// <summary>Queue count and byte total for a state.</summary>
+public sealed record HotCacheQueueSummary(string State, long Count, long Bytes);
+/// <summary>Inventory row grouped in the UI by series.</summary>
+public sealed record HotCacheInventoryItem(Guid ItemId, string SeriesName, string Episode, string Reason, int InterestedUsers, int Priority, long SizeBytes, string Backend, DateTime CreatedAtUtc, DateTime UpdatedAtUtc, string State);
+/// <summary>Append-only administrator history entry.</summary>
+public sealed record HotCacheHistoryEntry(long Id, string Kind, string Detail, DateTime CreatedAtUtc);
