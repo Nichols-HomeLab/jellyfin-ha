@@ -66,16 +66,29 @@ public sealed class HotCacheSqlContractTests
     }
 
     [Fact]
-    public void ReconciliationNeverRepopulatesAnExplicitlyEvictedShowFromWatchHistory()
+    public void ReconciliationBuildsIndependentDeduplicatedTwoWeekUserLists()
     {
         var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
 
-        // Selection is playback-driven.  A periodic scan of every user's history
-        // would immediately enqueue an episode such as Cops after it is evicted.
-        Assert.DoesNotContain("_userManager.GetUsers()", coordinator, StringComparison.Ordinal);
-        Assert.DoesNotContain("ReconcileUserAsync", coordinator, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsPlayed = true", coordinator, StringComparison.Ordinal);
-        Assert.DoesNotContain("IsResumable = true", coordinator, StringComparison.Ordinal);
+        Contains("foreach (var user in _userManager.GetUsers())", coordinator);
+        Contains("IsPlayed = true", coordinator);
+        Contains("var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime)", coordinator);
+        Contains("lastPlayed < cutoff", coordinator);
+        Contains("var newestBySeries = new HashSet<Guid>()", coordinator);
+        Contains("DELETE FROM hot_cache_interests WHERE user_id=@user", coordinator);
+    }
+
+    [Fact]
+    public void CompletedEpisodeEvictsOnlyWhenNoUserOrPlaybackStillHoldsIt()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("ReleaseCompletedEpisodeAsync", coordinator);
+        Contains("WHERE item_id=@item AND user_id=@user", coordinator);
+        Contains("NOT EXISTS(SELECT 1 FROM hot_cache_interests interest", coordinator);
+        Contains("NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases lease", coordinator);
+        Contains("kind='eviction',state='pending'", coordinator);
+        Contains("PlaybackCurrentInterestLifetime", coordinator);
     }
 
     [Fact]

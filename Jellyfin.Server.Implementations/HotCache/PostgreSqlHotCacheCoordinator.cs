@@ -19,9 +19,12 @@ namespace Jellyfin.Server.Implementations.HotCache;
 public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 {
     private static readonly TimeSpan PlaybackLeaseLifetime = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan PlaybackCurrentInterestLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan PlaybackInterestLifetime = TimeSpan.FromDays(14);
     private readonly NpgsqlDataSource _dataSource;
+    private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
+    private readonly IUserDataManager _userDataManager;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -29,12 +32,16 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// Initializes a new instance of the <see cref="PostgreSqlHotCacheCoordinator"/> class.
     /// </summary>
     /// <param name="dataSource">The shared PostgreSQL data source.</param>
+    /// <param name="userManager">The Jellyfin user source.</param>
     /// <param name="libraryManager">The Jellyfin library query source.</param>
+    /// <param name="userDataManager">The per-user playback state source.</param>
     /// <param name="logger">The cold-degradation diagnostic logger.</param>
-    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, ILibraryManager libraryManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
+    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IUserDataManager userDataManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
     {
         _dataSource = dataSource;
+        _userManager = userManager;
         _libraryManager = libraryManager;
+        _userDataManager = userDataManager;
         _logger = logger;
     }
 
@@ -62,6 +69,11 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                 {
                     await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_playback_leases WHERE play_session_id=@session", cancellationToken, ("session", playback.PlaySessionId)).ConfigureAwait(false);
                 }
+
+                foreach (var user in users)
+                {
+                    await ReleaseCompletedEpisodeAsync(connection, transaction, playback.Item.Id, user.Id, cancellationToken).ConfigureAwait(false);
+                }
             }
             else
             {
@@ -74,7 +86,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 
                 foreach (var user in users)
                 {
-                    await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackInterestLifetime)).ConfigureAwait(false);
+                    await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackCurrentInterestLifetime)).ConfigureAwait(false);
                     await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
                     if (lifecycle == HotCachePlaybackEvent.Started)
                     {
@@ -102,6 +114,11 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         if (!(bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) ?? false))
         {
             return;
+        }
+
+        foreach (var user in _userManager.GetUsers())
+        {
+            await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
 
         await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running','completed');", cancellationToken).ConfigureAwait(false);
@@ -189,6 +206,59 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         }
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task ReconcileUserAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Jellyfin.Database.Implementations.Entities.User user, CancellationToken cancellationToken)
+    {
+        // This is the user's independent cache list. Refreshing it must never
+        // delete another user's interest in the same episode.
+        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE user_id=@user AND reason IN ('next-up','next-episode')", cancellationToken, ("user", user.Id)).ConfigureAwait(false);
+
+        var recent = _libraryManager.GetItemList(new InternalItemsQuery(user)
+        {
+            IncludeItemTypes = [BaseItemKind.Episode],
+            IsPlayed = true,
+            Limit = 100,
+            OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
+        });
+        var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime);
+        var newestBySeries = new HashSet<Guid>();
+        var selected = 0;
+        var lookahead = await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
+        foreach (var item in recent)
+        {
+            if (item is not MediaBrowser.Controller.Entities.TV.Episode episode
+                || _userDataManager.GetUserData(user, item)?.LastPlayedDate is not DateTime lastPlayed
+                || lastPlayed < cutoff
+                || !newestBySeries.Add(episode.SeriesId))
+            {
+                continue;
+            }
+
+            selected++;
+            await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, lookahead, cancellationToken).ConfigureAwait(false);
+        }
+
+        await LogReconcileAsync(connection, transaction, $"scan user={BoundDisplay(user.Username)}; recent-series={selected}; lookahead={lookahead}", cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task ReleaseCompletedEpisodeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid itemId, Guid userId, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH released AS (
+                DELETE FROM hot_cache_interests
+                WHERE item_id=@item AND user_id=@user AND reason IN ('playback','next-up','next-episode')
+            ), evicted AS (
+                UPDATE hot_cache_jobs j
+                SET kind='eviction',state='pending',priority=0,is_active=false,lease_owner=NULL,lease_expires_at=NULL,updated_at=now()
+                WHERE j.item_id=@item AND j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_pinned
+                  AND NOT EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now())
+                  AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now())
+                RETURNING j.id)
+            INSERT INTO hot_cache_events(job_id,kind,detail)
+            SELECT id,'release','all user interests completed' FROM evicted;
+            """;
+        await ExecuteAsync(connection, transaction, sql, cancellationToken, ("item", itemId), ("user", userId)).ConfigureAwait(false);
     }
 
     // The configured maximum is six by default. Capacity independently limits
