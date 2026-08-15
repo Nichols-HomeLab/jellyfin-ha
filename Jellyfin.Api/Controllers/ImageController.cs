@@ -88,6 +88,15 @@ public class ImageController : BaseJellyfinApiController
     /// <summary>
     /// Initializes a new instance of the <see cref="ImageController"/> class.
     /// </summary>
+    /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
+    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
+    /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
+    /// <param name="imageProcessor">Instance of the <see cref="IImageProcessor"/> interface.</param>
+    /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
+    /// <param name="logger">Instance of the <see cref="ILogger{ImageController}"/> interface.</param>
+    /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
+    /// <param name="appPaths">Instance of the <see cref="IApplicationPaths"/> interface.</param>
+    /// <param name="catalogOwnership">The cluster catalog ownership coordinator.</param>
     public ImageController(
         IUserManager userManager,
         ILibraryManager libraryManager,
@@ -480,15 +489,6 @@ public class ImageController : BaseJellyfinApiController
         _catalogOwnership.RequireCatalogWriteToken();
         await item.SwapImagesAsync(imageType, imageIndex, newIndex).ConfigureAwait(false);
         return NoContent();
-    }
-
-    private sealed class SingleInstanceImageControllerCatalogOwnership : ICatalogOwnership
-    {
-        public bool TryGetCatalogWriteToken(out CancellationToken ownershipLost)
-        {
-            ownershipLost = CancellationToken.None;
-            return true;
-        }
     }
 
     /// <summary>
@@ -2119,5 +2119,14 @@ public class ImageController : BaseJellyfinApiController
         }
 
         return false;
+    }
+
+    private sealed class SingleInstanceImageControllerCatalogOwnership : ICatalogOwnership
+    {
+        public bool TryGetCatalogWriteToken(out CancellationToken ownershipLost)
+        {
+            ownershipLost = CancellationToken.None;
+            return true;
+        }
     }
 }
