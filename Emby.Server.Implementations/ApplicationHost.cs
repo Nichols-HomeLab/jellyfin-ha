@@ -558,7 +558,8 @@ namespace Emby.Server.Implementations
             {
                 var canonicalRoot = Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_CANONICAL_ROOT");
                 var hotRoot = Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_ROOT");
-                return string.IsNullOrWhiteSpace(canonicalRoot) || string.IsNullOrWhiteSpace(hotRoot)
+                var enabled = bool.TryParse(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_ENABLED"), out var hotCacheEnabled) && hotCacheEnabled;
+                return !enabled || string.IsNullOrWhiteSpace(canonicalRoot) || string.IsNullOrWhiteSpace(hotRoot)
                     ? new CanonicalPlaybackPathResolver()
                     : new HotCachePlaybackPathResolver(canonicalRoot, hotRoot, sp.GetRequiredService<IHotCacheCoordinator>());
             });
