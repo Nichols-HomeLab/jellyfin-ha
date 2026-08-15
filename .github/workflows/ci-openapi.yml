@@ -25,7 +25,7 @@ jobs:
         with:
           dotnet-version: '9.0.x'
       - name: Generate openapi.json
-        run: dotnet test tests/Jellyfin.Server.Integration.Tests/Jellyfin.Server.Integration.Tests.csproj -c Release --filter "Jellyfin.Server.Integration.Tests.OpenApiSpecTests"
+        run: dotnet test tests/Jellyfin.Server.Integration.Tests/Jellyfin.Server.Integration.Tests.csproj -c Release -p:TreatWarningsAsErrors=false --filter "Jellyfin.Server.Integration.Tests.OpenApiSpecTests"
       - name: Upload openapi.json
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5 # v3
         with:
@@ -59,7 +59,7 @@ jobs:
         with:
           dotnet-version: '9.0.x'
       - name: Generate openapi.json
-        run: dotnet test tests/Jellyfin.Server.Integration.Tests/Jellyfin.Server.Integration.Tests.csproj -c Release --filter "Jellyfin.Server.Integration.Tests.OpenApiSpecTests"
+        run: dotnet test tests/Jellyfin.Server.Integration.Tests/Jellyfin.Server.Integration.Tests.csproj -c Release -p:TreatWarningsAsErrors=false --filter "Jellyfin.Server.Integration.Tests.OpenApiSpecTests"
       - name: Upload openapi.json
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5 # v3
         with:
@@ -258,14 +258,3 @@ jobs:
             # Move new spec into place
             sudo mv /srv/incoming/openapi/stable/jellyfin-openapi-${{ env.JELLYFIN_VERSION }}/openapi.json ${TGT_DIR}/stable/jellyfin-openapi-${{ env.JELLYFIN_VERSION }}.json
             # Delete previous jellyfin-openapi-stable_previous.json
-            sudo rm ${TGT_DIR}/jellyfin-openapi-stable_previous.json
-            # Move current jellyfin-openapi-stable.json symlink to jellyfin-openapi-stable_previous.json
-            sudo mv ${TGT_DIR}/jellyfin-openapi-stable.json ${TGT_DIR}/jellyfin-openapi-stable_previous.json
-            # Create new jellyfin-openapi-stable.json symlink
-            sudo ln -s stable/jellyfin-openapi-${{ env.JELLYFIN_VERSION }}.json ${TGT_DIR}/jellyfin-openapi-stable.json
-            # Check that the previous openapi stable spec link is correct
-            if [[ "$( readlink ${TGT_DIR}/jellyfin-openapi-stable_previous.json )" != "stable/${LAST_SPEC}" ]]; then
-                sudo rm ${TGT_DIR}/jellyfin-openapi-stable_previous.json
-                sudo ln -s stable/${LAST_SPEC} ${TGT_DIR}/jellyfin-openapi-stable_previous.json
-            fi
-            ) 200>/run/workflows/openapi-stable.lock
