@@ -71,6 +71,38 @@ public sealed class HotCacheWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task StaleHotCopyIsRepairedBeforePromotionCompletes()
+    {
+        var job = CreatePromotion("video.bin", "fresh-content");
+        var target = Path.Combine(HotRoot, "video.bin");
+        await File.WriteAllTextAsync(target, "stale");
+        var files = new TestFiles();
+        var store = new TestStore(job);
+
+        await CreateWorker(store, files).ExecuteOnceAsync("one", default);
+
+        Assert.Equal("fresh-content", await File.ReadAllTextAsync(target));
+        Assert.Equal(new FileInfo(job.CanonicalPath).LastWriteTimeUtc, new FileInfo(target).LastWriteTimeUtc);
+        Assert.Equal(1, files.Copies);
+    }
+
+    [Fact]
+    public async Task ValidHotCopyIsIdempotentlyReused()
+    {
+        var job = CreatePromotion("video.bin", "already-hot");
+        var target = Path.Combine(HotRoot, "video.bin");
+        await File.WriteAllTextAsync(target, "already-hot");
+        File.SetLastWriteTimeUtc(target, new FileInfo(job.CanonicalPath).LastWriteTimeUtc);
+        var files = new TestFiles();
+        var store = new TestStore(job);
+
+        await CreateWorker(store, files).ExecuteOnceAsync("one", default);
+
+        Assert.Equal(0, files.Copies);
+        Assert.Equal(target, store.CompletedHotPath);
+    }
+
+    [Fact]
     public async Task MountLossDegradesToColdPlayback()
     {
         var store = new TestStore(CreatePromotion("video.bin", "abc"));
@@ -96,6 +128,20 @@ public sealed class HotCacheWorkerTests : IDisposable
         await worker.ExecuteOnceAsync("one", default);
         await worker.ExecuteOnceAsync("two", default);
         Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public async Task ProtectionAddedAfterClaimDefersEvictionAndRetainsCopy()
+    {
+        var path = Path.Combine(HotRoot, "protected.bin");
+        await File.WriteAllTextAsync(path, "cache");
+        var store = new TestStore(CreateEviction(path)) { CanEvict = false };
+
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
+
+        Assert.True(File.Exists(path));
+        Assert.Equal(1, store.DeferredEvictions);
+        Assert.Null(store.CompletedHotPath);
     }
 
     [Fact]
@@ -203,6 +249,10 @@ public sealed class HotCacheWorkerTests : IDisposable
 
         public int Claims { get; private set; }
 
+        public bool CanEvict { get; init; } = true;
+
+        public int DeferredEvictions { get; private set; }
+
         public HotCacheWorkerSettings Settings { get; init; } = new("unraid-temp", false, .5, .1);
 
         public (string Backend, bool Mounted, bool Healthy, long Total, long Available)? BackendObservation { get; private set; }
@@ -258,7 +308,13 @@ public sealed class HotCacheWorkerTests : IDisposable
             return Task.FromResult(candidate);
         }
 
-        public Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken) => Task.FromResult(CanEvict);
+
+        public Task DeferEvictionAsync(Guid jobId, string workerId, CancellationToken cancellationToken)
+        {
+            DeferredEvictions++;
+            return Task.CompletedTask;
+        }
 
         public Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken)
             => Task.FromResult(new HotCacheQueueSnapshot(_next is null ? 0 : 1, TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0, 0));
@@ -285,6 +341,8 @@ public sealed class HotCacheWorkerTests : IDisposable
         public bool ThrowDuringCopy { get; init; }
 
         public bool ThrowOnInfo { get; init; }
+
+        public int Copies { get; private set; }
 
         public long Total { get; init; } = 100;
 
@@ -315,12 +373,15 @@ public sealed class HotCacheWorkerTests : IDisposable
                 throw new IOException("full filesystem");
             }
 
+            Copies++;
             await _inner.CopyAsync(source, destination, progress, cancellationToken);
             if (MutateSource is not null)
             {
                 await File.AppendAllTextAsync(MutateSource, "!", cancellationToken);
             }
         }
+
+        public void SetLastWriteTimeUtc(string path, DateTime value) => _inner.SetLastWriteTimeUtc(path, value);
 
         public void MoveNoReplace(string source, string destination) => _inner.MoveNoReplace(source, destination);
 

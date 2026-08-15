@@ -52,11 +52,17 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
                 return Observe(request, Cold(request.CanonicalPath, "hot-root-escape"));
             }
 
+            var canonicalInfo = new FileInfo(canonical);
             var hot = new FileInfo(final);
             if ((request.ExpectedLength.HasValue && hot.Length != request.ExpectedLength.Value)
-                || hot.Length != new FileInfo(canonical).Length)
+                || hot.Length != canonicalInfo.Length)
             {
                 return Observe(request, Cold(request.CanonicalPath, "hot-length-mismatch"));
+            }
+
+            if (hot.LastWriteTimeUtc != canonicalInfo.LastWriteTimeUtc)
+            {
+                return Observe(request, Cold(request.CanonicalPath, "hot-mtime-mismatch"));
             }
 
             using var stream = new FileStream(final, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 1, FileOptions.SequentialScan);

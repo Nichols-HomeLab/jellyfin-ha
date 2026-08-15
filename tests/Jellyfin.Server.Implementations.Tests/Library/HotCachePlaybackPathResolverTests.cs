@@ -15,6 +15,7 @@ public sealed class HotCachePlaybackPathResolverTests : IDisposable
     {
         var canonical = Create("media/episode.mkv", "bytes");
         var hot = Create("hot/episode.mkv", "bytes");
+        File.SetLastWriteTimeUtc(hot, new FileInfo(canonical).LastWriteTimeUtc);
         var resolver = new HotCachePlaybackPathResolver(Path.Combine(_root, "media"), Path.Combine(_root, "hot"), new NullHotCacheCoordinator());
 
         var result = resolver.Resolve(new PlaybackPathRequest(canonical, new FileInfo(canonical).Length, PlaybackPathPurpose.MainMedia));
@@ -36,6 +37,36 @@ public sealed class HotCachePlaybackPathResolverTests : IDisposable
         Assert.False(result.IsHot);
         Assert.Equal(canonical, result.Path);
         Assert.Equal("hot-length-mismatch", result.Reason);
+    }
+
+    [Fact]
+    public void DirectPlay_SameLengthStaleCopyFallsBackToCanonicalPath()
+    {
+        var canonical = Create("media/episode.mkv", "fresh");
+        var hot = Create("hot/episode.mkv", "stale");
+        File.SetLastWriteTimeUtc(hot, new FileInfo(canonical).LastWriteTimeUtc.AddMinutes(-1));
+        var resolver = new HotCachePlaybackPathResolver(Path.Combine(_root, "media"), Path.Combine(_root, "hot"), new NullHotCacheCoordinator());
+
+        var result = resolver.Resolve(new PlaybackPathRequest(canonical, new FileInfo(canonical).Length, PlaybackPathPurpose.MainMedia));
+
+        Assert.False(result.IsHot);
+        Assert.Equal(canonical, result.Path);
+        Assert.Equal("hot-mtime-mismatch", result.Reason);
+    }
+
+    [Fact]
+    public void Transcode_SameLengthStaleCopyFallsBackToCanonicalPath()
+    {
+        var canonical = Create("media/episode.mkv", "fresh");
+        var hot = Create("hot/episode.mkv", "stale");
+        File.SetLastWriteTimeUtc(hot, new FileInfo(canonical).LastWriteTimeUtc.AddMinutes(-1));
+        var resolver = new HotCachePlaybackPathResolver(Path.Combine(_root, "media"), Path.Combine(_root, "hot"), new NullHotCacheCoordinator());
+
+        var result = resolver.Resolve(new PlaybackPathRequest(canonical, new FileInfo(canonical).Length, PlaybackPathPurpose.TranscodeInput));
+
+        Assert.False(result.IsHot);
+        Assert.Equal(canonical, result.Path);
+        Assert.Equal("hot-mtime-mismatch", result.Reason);
     }
 
     public void Dispose()

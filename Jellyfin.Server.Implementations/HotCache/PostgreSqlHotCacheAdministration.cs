@@ -60,7 +60,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
             throw new ArgumentException("Bulk eviction requires confirmation.", nameof(action));
         }
 
-        if (action.Kind is not "reconcile" && action.ItemId is null)
+        if (action.Kind is not "reconcile" && action.Kind is not "evict" && action.ItemId is null)
         {
             throw new ArgumentException("An inventory item is required.", nameof(action));
         }
@@ -116,7 +116,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
 
     private async Task<IReadOnlyList<HotCacheQueueSummary>> ReadQueueAsync(CancellationToken ct)
     {
-        const string sql = "SELECT CASE WHEN state='pending' THEN 'queued' WHEN state='running' AND kind='promotion' THEN 'copying' WHEN state='running' AND kind='eviction' THEN 'evicting' WHEN state='completed' AND kind='promotion' THEN 'copied' WHEN state='completed' AND kind='eviction' THEN 'evicted' ELSE 'failed' END,COUNT(*),COALESCE(SUM(source_length),0) FROM hot_cache_jobs GROUP BY 1 ORDER BY 1";
+        const string sql = "WITH states(state) AS (VALUES ('queued'),('copying'),('evicting'),('copied'),('evicted'),('failed')), totals AS (SELECT CASE WHEN state='pending' THEN 'queued' WHEN state='running' AND kind='promotion' THEN 'copying' WHEN state='running' AND kind='eviction' THEN 'evicting' WHEN state='completed' AND kind='promotion' THEN 'copied' WHEN state='completed' AND kind='eviction' THEN 'evicted' ELSE 'failed' END AS state,COUNT(*) AS count,COALESCE(SUM(source_length),0) AS bytes FROM hot_cache_jobs GROUP BY 1) SELECT states.state,COALESCE(totals.count,0),COALESCE(totals.bytes,0) FROM states LEFT JOIN totals ON totals.state=states.state ORDER BY states.state";
         var results = new List<HotCacheQueueSummary>();
         await using var command = dataSource.CreateCommand(sql);
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);

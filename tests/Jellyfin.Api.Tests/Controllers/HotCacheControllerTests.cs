@@ -28,6 +28,18 @@ public sealed class HotCacheControllerTests
     }
 
     [Fact]
+    public async Task Action_ConfirmedBulkEviction_IsAccepted()
+    {
+        var store = new Store();
+        var controller = new HotCacheController(store);
+
+        var result = await controller.Action(new HotCacheAction("evict", null, true), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(new HotCacheAction("evict", null, true), store.Action);
+    }
+
+    [Fact]
     public async Task Action_UsesInventoryIdRatherThanPath()
     {
         var store = new Store();
@@ -48,6 +60,7 @@ public sealed class HotCacheControllerTests
         Assert.Contains("Inventory by series", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheHistoryKind", page.Content, StringComparison.Ordinal);
         Assert.Contains("confirmBulkEviction", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Used %", page.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
     }
 

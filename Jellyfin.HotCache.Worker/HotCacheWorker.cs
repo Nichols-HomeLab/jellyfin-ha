@@ -53,6 +53,7 @@ public interface IHotCacheJobStore
     Task FailAsync(Guid jobId, string workerId, string error, CancellationToken cancellationToken);
     Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
+    Task DeferEvictionAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
     Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken);
     Task<HotCacheWorkerSettings> GetSettingsAsync(CancellationToken cancellationToken);
     Task ObserveBackendAsync(string backend, bool mounted, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken);
@@ -68,6 +69,7 @@ public interface IFileOperations
     IEnumerable<string> EnumerateFiles(string root, string pattern);
     void CreateDirectory(string path);
     Task CopyAsync(string source, string destination, Func<long, CancellationToken, Task> progress, CancellationToken cancellationToken);
+    void SetLastWriteTimeUtc(string path, DateTime value);
     void MoveNoReplace(string source, string destination);
     void Delete(string path);
 }
@@ -94,6 +96,7 @@ public sealed class PhysicalFileOperations : IFileOperations
 
         await output.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
+    public void SetLastWriteTimeUtc(string path, DateTime value) => File.SetLastWriteTimeUtc(path, value);
     public void MoveNoReplace(string source, string destination) => File.Move(source, destination, false);
     public void Delete(string path) => File.Delete(path);
 }
@@ -137,7 +140,12 @@ public sealed class HotCacheWorker
             }
             else
             {
-                await EvictAsync(job, workerId, ct).ConfigureAwait(false);
+                if (!await EvictAsync(job, workerId, ct).ConfigureAwait(false))
+                {
+                    await _store.DeferEvictionAsync(job.Id, workerId, ct).ConfigureAwait(false);
+                    await _store.EventAsync(job.Id, "eviction-deferred", ItemId(job), ct).ConfigureAwait(false);
+                    return;
+                }
             }
 
             await _store.CompleteAsync(job.Id, workerId, hotPath, ct).ConfigureAwait(false);
@@ -166,10 +174,15 @@ public sealed class HotCacheWorker
             throw new IOException("Source changed before promotion.");
         }
 
-        if (_files.FileExists(target))
+        if (_files.FileExists(target) && TargetMatchesSource(target, before))
         {
             await _store.EventAsync(job.Id, "already-published", ItemId(job), ct).ConfigureAwait(false);
             return target;
+        }
+
+        if (_files.FileExists(target))
+        {
+            _files.Delete(target);
         }
 
         _files.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -203,6 +216,7 @@ public sealed class HotCacheWorker
                 throw new IOException("Source changed during promotion.");
             }
 
+            _files.SetLastWriteTimeUtc(partial, before.LastWriteTimeUtc);
             _files.MoveNoReplace(partial, target);
             await _store.EventAsync(job.Id, "published", ItemId(job), ct).ConfigureAwait(false);
             return target;
@@ -217,8 +231,8 @@ public sealed class HotCacheWorker
             throw;
         }
     }
-    private async Task EvictAsync(HotCacheJob job, string workerId, CancellationToken ct)
-    { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); HotCacheMetrics.Evicted("capacity"); await _store.EventAsync(job.Id, "evicted", ItemId(job), ct).ConfigureAwait(false); }
+    private async Task<bool> EvictAsync(HotCacheJob job, string workerId, CancellationToken ct)
+    { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return false; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); HotCacheMetrics.Evicted("capacity"); await _store.EventAsync(job.Id, "evicted", ItemId(job), ct).ConfigureAwait(false); return true; }
     private async Task EnforceCapacityAsync(string workerId, HotCacheWorkerSettings settings, CancellationToken ct)
     { if (UsedRatio() < settings.HighWatermark) return; while (UsedRatio() > settings.LowWatermark) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
     private async Task ObserveBackendAsync(CancellationToken ct)
@@ -243,6 +257,7 @@ public sealed class HotCacheWorker
         HotCacheMetrics.Database(snapshot.DatabaseBytes, snapshot.EventRows, snapshot.NormalFallbacks, snapshot.UnhealthyFallbacks);
     }
     private double UsedRatio() => 1d - ((double)_files.GetAvailableSpace(_options.HotRoot) / _files.GetTotalSpace(_options.HotRoot));
+    private bool TargetMatchesSource(string target, FileInfo source) { var targetInfo = _files.GetFileInfo(target); return targetInfo.Length == source.Length && targetInfo.LastWriteTimeUtc == source.LastWriteTimeUtc; }
     private void CleanupPartials() { foreach (var path in _files.EnumerateFiles(_options.HotRoot, "*.partial")) if (DateTime.UtcNow - _files.GetFileInfo(path).LastWriteTimeUtc > _options.PartialFileMaxAge) _files.Delete(path); }
     private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative)) throw new IOException("Path escapes configured root."); return fullPath; }
     private static string ItemId(HotCacheJob job) => job.Id.ToString("N");
