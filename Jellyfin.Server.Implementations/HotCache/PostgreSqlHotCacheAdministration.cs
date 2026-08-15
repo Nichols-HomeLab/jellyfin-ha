@@ -12,6 +12,10 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
 {
     private static readonly string[] ValidHistoryKinds = ["copied", "evicted", "failed", "settings", "backend", "promoted", "retry", "reconcile"];
 
+    /// <summary>Gets the current shared settings, backend observations, queue, inventory, and history.</summary>
+    /// <param name="historyKind">Optional history category filter.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The administration snapshot.</returns>
     public async Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken)
     {
         if (historyKind is not null && Array.IndexOf(ValidHistoryKinds, historyKind) < 0)
@@ -23,6 +27,10 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         return new HotCacheAdministrationSnapshot(settings, await ReadBackendsAsync(cancellationToken).ConfigureAwait(false), await ReadQueueAsync(cancellationToken).ConfigureAwait(false), await ReadInventoryAsync(settings.Backend, cancellationToken).ConfigureAwait(false), await ReadHistoryAsync(historyKind, cancellationToken).ConfigureAwait(false));
     }
 
+    /// <summary>Updates the shared worker controls and validated watermarks.</summary>
+    /// <param name="settings">The replacement settings.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the update.</returns>
     public async Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken)
     {
         Validate(settings);
@@ -36,6 +44,10 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         await HistoryAsync("settings", $"backend={settings.Backend}; paused={settings.Paused}; high={settings.HighWatermark}; low={settings.LowWatermark}; switch=former-backend-drains", cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Queues a safe action against existing hot-cache inventory.</summary>
+    /// <param name="action">The requested action.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task representing the action request.</returns>
     public async Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken)
     {
         if (action.Kind is not ("promote" or "evict" or "retry" or "reconcile"))

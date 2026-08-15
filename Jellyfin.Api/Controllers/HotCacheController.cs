@@ -16,7 +16,12 @@ namespace Jellyfin.Api.Controllers;
 [Route("HotCache")]
 public class HotCacheController(IHotCacheAdministration administration) : BaseJellyfinApiController
 {
+    internal static string PageHtml => GetPageHtml();
+
     /// <summary>Gets shared cache settings, observations, inventory, queue totals and history.</summary>
+    /// <param name="historyKind">Optional history category filter.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The current hot-cache administration snapshot.</returns>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -33,6 +38,9 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     }
 
     /// <summary>Updates the selected backend, pause state and validated watermarks.</summary>
+    /// <param name="settings">The shared hot-cache settings.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A no-content response.</returns>
     [HttpPut("Settings")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -50,6 +58,9 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     }
 
     /// <summary>Queues an administrator command for existing inventory only.</summary>
+    /// <param name="action">The requested inventory action.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A no-content response when the action is accepted.</returns>
     [HttpPost("Actions")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -72,11 +83,12 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     }
 
     /// <summary>Returns the dashboard view, which is intentionally served only to Jellyfin administrators.</summary>
+    /// <returns>The administrator dashboard HTML.</returns>
     [HttpGet("Page")]
     [Produces("text/html")]
     public ContentResult Page() => Content(PageHtml, "text/html");
 
-    internal const string PageHtml = """
+    private static string GetPageHtml() => """
         <div id="hotCachePage" class="page type-interior">
           <h1>Jellyfin Hot Cache</h1><p id="hotCacheStatus">Loading shared coordinator state…</p>
           <label>Backend <select id="hotCacheBackend"><option value="unraid-temp">Unraid /temp</option><option value="cephfs">CephFS 300 GiB</option></select></label>
