@@ -180,6 +180,41 @@ public sealed class HotCacheWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task ConfiguredHotRootSymlinkDoesNotDeleteOutsidePartial()
+    {
+        var outside = Path.Combine(_root, "outside-hot");
+        Directory.CreateDirectory(outside);
+        var partial = Path.Combine(outside, ".old.partial");
+        await File.WriteAllTextAsync(partial, "outside");
+        File.SetLastWriteTimeUtc(partial, DateTime.UtcNow.AddHours(-2));
+        Directory.Delete(HotRoot);
+        Directory.CreateSymbolicLink(HotRoot, outside);
+
+        await CreateWorker(new TestStore(null), new TestFiles()).ExecuteOnceAsync("one", default);
+
+        Assert.True(File.Exists(partial));
+    }
+
+    [Fact]
+    public async Task ConfiguredCanonicalRootSymlinkFailsPromotionWithoutOutsideCopy()
+    {
+        var outside = Path.Combine(_root, "outside-media");
+        Directory.CreateDirectory(outside);
+        Directory.Delete(ColdRoot);
+        Directory.CreateSymbolicLink(ColdRoot, outside);
+        var logicalPath = Path.Combine(ColdRoot, "episode.mkv");
+        var outsidePath = Path.Combine(outside, "episode.mkv");
+        await File.WriteAllTextAsync(outsidePath, "outside");
+        var info = new FileInfo(outsidePath);
+        var store = new TestStore(new HotCacheJob(Guid.NewGuid(), HotCacheJobKind.Promotion, logicalPath, null, info.Length, info.LastWriteTimeUtc, 0, false, false, false, DateTime.UtcNow, 0));
+
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
+
+        Assert.Equal(1, store.Failures);
+        Assert.False(File.Exists(Path.Combine(HotRoot, "episode.mkv")));
+    }
+
+    [Fact]
     public async Task PausedSettingsDoNotClaimOrEvictWork()
     {
         var store = new TestStore(CreatePromotion("video.bin", "abc"))
