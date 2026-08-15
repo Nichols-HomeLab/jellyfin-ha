@@ -52,6 +52,18 @@ public sealed class HotCacheSqlContractTests
         Contains("pg_advisory_xact_lock", migrator);
     }
 
+    [Fact]
+    public void WorkerUsesNormalizedConfigurationPathsForKubernetesEnvironmentVariables()
+    {
+        var program = Read("Jellyfin.HotCache.Worker/Program.cs");
+
+        Contains("Jellyfin:HotCache:CanonicalRoot", program);
+        Contains("Jellyfin:HotCache:HotRoot", program);
+        Contains("Jellyfin:HotCache:ObserveOnly", program);
+        Contains("Jellyfin:HotCache:MetricsPort", program);
+        Assert.DoesNotContain("Jellyfin__HotCache__CanonicalRoot", program, StringComparison.Ordinal);
+    }
+
     private static string Read(string relativePath)
     {
         var directory = AppContext.BaseDirectory;
