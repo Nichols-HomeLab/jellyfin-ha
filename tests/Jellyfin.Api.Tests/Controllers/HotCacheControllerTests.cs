@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Api.Controllers;
+using Jellyfin.Extensions.Json;
 using MediaBrowser.Controller.Library;
 using Microsoft.AspNetCore.Mvc;
 using Xunit;
@@ -65,7 +67,8 @@ public sealed class HotCacheControllerTests
     public void Page_IsAnAdministratorDashboardView()
     {
         var page = new HotCacheController(new Store()).Page();
-        Assert.Contains("Jellyfin Hot Cache", page.Content, StringComparison.Ordinal);
+        Assert.Contains("<h1>Hot Cache</h1>", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Storage control plane", page.Content, StringComparison.Ordinal);
         Assert.Contains("data-role=\"page\"", page.Content, StringComparison.Ordinal);
         Assert.Contains("pluginConfigurationPage", page.Content, StringComparison.Ordinal);
         Assert.Contains("data-role=\"content\"", page.Content, StringComparison.Ordinal);
@@ -75,12 +78,35 @@ public sealed class HotCacheControllerTests
         Assert.Contains("Inventory by series", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheHistoryKind", page.Content, StringComparison.Ordinal);
         Assert.Contains("confirmBulkEviction", page.Content, StringComparison.Ordinal);
-        Assert.Contains("Used %", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hc-meter", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheLookahead", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheReserve", page.Content, StringComparison.Ordinal);
         Assert.Contains("maxLookahead", page.Content, StringComparison.Ordinal);
         Assert.Contains("reserveFreeBytes", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hc-summary-grid", page.Content, StringComparison.Ordinal);
+        Assert.Contains("No cache candidates yet", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Unable to load hot-cache state", page.Content, StringComparison.Ordinal);
+        Assert.Contains("toLocaleString", page.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Page_SelectsCamelCaseJsonProfileForPopulatedDashboardData()
+    {
+        var snapshot = new HotCacheAdministrationSnapshot(
+            new HotCacheSettings("unraid-temp", false, .9, .75),
+            [new HotCacheBackendStatus("unraid-temp", true, true, false, 1000, 250, 750, DateTime.UtcNow)],
+            [new HotCacheQueueSummary("copied", 1, 250)],
+            [new HotCacheInventoryItem(Guid.NewGuid(), "Reacher", "Episode 1", "playback", 1, 100, 250, "unraid-temp", DateTime.UtcNow, DateTime.UtcNow, "copied")],
+            [new HotCacheHistoryEntry(1, "copied", "Reacher: Episode 1", DateTime.UtcNow)]);
+        var camelCaseJson = JsonSerializer.Serialize(snapshot, JsonDefaults.CamelCaseOptions);
+        var pascalCaseJson = JsonSerializer.Serialize(snapshot, JsonDefaults.PascalCaseOptions);
+        var page = new HotCacheController(new Store()).Page();
+
+        Assert.Contains("\"inventory\"", camelCaseJson, StringComparison.Ordinal);
+        Assert.Contains("\"Inventory\"", pascalCaseJson, StringComparison.Ordinal);
+        Assert.Contains("Reacher", camelCaseJson, StringComparison.Ordinal);
+        Assert.Contains("headers:{Accept:'application/json; profile=\"CamelCase\"'}", page.Content, StringComparison.Ordinal);
     }
 
     private sealed class Store : IHotCacheAdministration
