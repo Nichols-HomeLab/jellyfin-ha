@@ -71,6 +71,7 @@ public interface IFileOperations
     Task CopyAsync(string source, string destination, Func<long, CancellationToken, Task> progress, CancellationToken cancellationToken);
     void SetLastWriteTimeUtc(string path, DateTime value);
     void MoveNoReplace(string source, string destination);
+    void MoveReplace(string source, string destination);
     void Delete(string path);
 }
 
@@ -98,6 +99,7 @@ public sealed class PhysicalFileOperations : IFileOperations
     }
     public void SetLastWriteTimeUtc(string path, DateTime value) => File.SetLastWriteTimeUtc(path, value);
     public void MoveNoReplace(string source, string destination) => File.Move(source, destination, false);
+    public void MoveReplace(string source, string destination) => File.Move(source, destination, true);
     public void Delete(string path) => File.Delete(path);
 }
 
@@ -180,11 +182,6 @@ public sealed class HotCacheWorker
             return target;
         }
 
-        if (_files.FileExists(target))
-        {
-            _files.Delete(target);
-        }
-
         _files.CreateDirectory(Path.GetDirectoryName(target)!);
         var partial = Path.Combine(Path.GetDirectoryName(target)!, $".{Path.GetFileName(target)}.{job.Id:N}.partial");
         var nextRenewal = DateTime.UtcNow + TimeSpan.FromTicks(_options.LeaseDuration.Ticks / 3);
@@ -217,7 +214,14 @@ public sealed class HotCacheWorker
             }
 
             _files.SetLastWriteTimeUtc(partial, before.LastWriteTimeUtc);
-            _files.MoveNoReplace(partial, target);
+            if (_files.FileExists(target))
+            {
+                _files.MoveReplace(partial, target);
+            }
+            else
+            {
+                _files.MoveNoReplace(partial, target);
+            }
             await _store.EventAsync(job.Id, "published", ItemId(job), ct).ConfigureAwait(false);
             return target;
         }

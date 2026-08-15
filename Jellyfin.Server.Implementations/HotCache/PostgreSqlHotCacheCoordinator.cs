@@ -83,6 +83,8 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                     await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackInterestLifetime)).ConfigureAwait(false);
                     await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
                 }
+
+                await ExecuteAsync(connection, transaction, "UPDATE hot_cache_jobs SET is_active=true,last_access_utc=now(),updated_at=now() WHERE item_id=@item", cancellationToken, ("item", playback.Item.Id)).ConfigureAwait(false);
             }
 
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -109,7 +111,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
 
-        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running');", cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running','completed');", cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -142,12 +144,14 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         {
             await using var command = _dataSource.CreateCommand("""
                 WITH target AS (SELECT id FROM hot_cache_jobs WHERE canonical_path=@path ORDER BY updated_at DESC LIMIT 1),
+                touch AS (UPDATE hot_cache_jobs SET last_access_utc=now(),updated_at=now() WHERE id=(SELECT id FROM target) AND @hot RETURNING id),
                 repair AS (UPDATE hot_cache_jobs SET kind='promotion',state='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=(SELECT id FROM target) AND @repair AND state <> 'running' RETURNING id)
                 INSERT INTO hot_cache_events(job_id,kind,detail) SELECT id,@kind,@detail FROM target;
                 """);
             command.Parameters.AddWithValue("kind", observation.IsHot ? "playback-hit" : "validate-or-repair");
             command.Parameters.AddWithValue("detail", observation.Reason);
             command.Parameters.AddWithValue("path", observation.CanonicalPath);
+            command.Parameters.AddWithValue("hot", observation.IsHot);
             command.Parameters.AddWithValue("repair", !observation.IsHot);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -235,7 +239,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static Task UpsertJobAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, int priority, CancellationToken cancellationToken)
     {
         var source = new FileInfo(item.Path);
-        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority));
+        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority));
     }
 
     private bool IsIncluded(Jellyfin.Database.Implementations.Entities.User user) => _includedUsers is null || _includedUsers.Contains(user.Id);

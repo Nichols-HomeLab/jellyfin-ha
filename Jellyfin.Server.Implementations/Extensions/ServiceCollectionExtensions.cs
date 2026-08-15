@@ -202,10 +202,13 @@ public static class ServiceCollectionExtensions
                 sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<PostgreSqlCatalogOwnership>>()));
             serviceCollection.AddSingleton<ICatalogOwnership>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
             serviceCollection.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
-            serviceCollection.AddSingleton<PostgreSqlHotCacheCoordinator>();
-            serviceCollection.AddSingleton<IHotCacheCoordinator>(sp => sp.GetRequiredService<PostgreSqlHotCacheCoordinator>());
-            serviceCollection.AddSingleton<IHotCacheAdministration, PostgreSqlHotCacheAdministration>();
-            serviceCollection.AddSingleton<IHostedService, HotCacheHostedService>();
+            if (bool.TryParse(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_ENABLED"), out var hotCacheEnabled) && hotCacheEnabled)
+            {
+                serviceCollection.AddSingleton<PostgreSqlHotCacheCoordinator>();
+                serviceCollection.AddSingleton<IHotCacheCoordinator>(sp => sp.GetRequiredService<PostgreSqlHotCacheCoordinator>());
+                serviceCollection.AddSingleton<IHotCacheAdministration, PostgreSqlHotCacheAdministration>();
+                serviceCollection.AddSingleton<IHostedService, HotCacheHostedService>();
+            }
         }
 
         switch (efCoreConfiguration.LockingBehavior)

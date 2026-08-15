@@ -103,6 +103,20 @@ public sealed class HotCacheWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task FailedStaleCopyRepairRetainsExistingHotCopy()
+    {
+        var job = CreatePromotion("video.bin", "fresh-content");
+        var target = Path.Combine(HotRoot, "video.bin");
+        await File.WriteAllTextAsync(target, "stale");
+        var store = new TestStore(job);
+
+        await CreateWorker(store, new TestFiles { ThrowDuringCopy = true }).ExecuteOnceAsync("one", default);
+
+        Assert.Equal("stale", await File.ReadAllTextAsync(target));
+        Assert.Equal(1, store.Failures);
+    }
+
+    [Fact]
     public async Task MountLossDegradesToColdPlayback()
     {
         var store = new TestStore(CreatePromotion("video.bin", "abc"));
@@ -384,6 +398,8 @@ public sealed class HotCacheWorkerTests : IDisposable
         public void SetLastWriteTimeUtc(string path, DateTime value) => _inner.SetLastWriteTimeUtc(path, value);
 
         public void MoveNoReplace(string source, string destination) => _inner.MoveNoReplace(source, destination);
+
+        public void MoveReplace(string source, string destination) => _inner.MoveReplace(source, destination);
 
         public void Delete(string path) => _inner.Delete(path);
     }
