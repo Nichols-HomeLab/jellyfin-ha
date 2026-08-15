@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Concurrent;
+using System.IO;
 using MediaBrowser.Controller.Library;
 
 namespace Emby.Server.Implementations.Library;
@@ -11,7 +13,12 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     private readonly IHotCacheCoordinator _coordinator;
     private readonly ConcurrentDictionary<string, byte> _reported = new(StringComparer.Ordinal);
 
-    /// <summary>Initializes a resolver with fixed server-local mount roots.</summary>
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HotCachePlaybackPathResolver"/> class.
+    /// </summary>
+    /// <param name="canonicalRoot">The canonical media root.</param>
+    /// <param name="hotRoot">The disposable hot-cache root.</param>
+    /// <param name="coordinator">The hot-cache coordinator.</param>
     public HotCachePlaybackPathResolver(string canonicalRoot, string hotRoot, IHotCacheCoordinator coordinator)
     {
         _canonicalRoot = Path.GetFullPath(canonicalRoot);

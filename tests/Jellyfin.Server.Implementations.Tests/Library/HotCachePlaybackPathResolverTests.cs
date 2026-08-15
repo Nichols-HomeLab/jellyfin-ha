@@ -6,7 +6,7 @@ using Xunit;
 
 namespace Jellyfin.Server.Implementations.Tests.Library;
 
-public class HotCachePlaybackPathResolverTests : IDisposable
+public sealed class HotCachePlaybackPathResolverTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jellyfin-hot-cache-test-" + Guid.NewGuid().ToString("N"));
 
