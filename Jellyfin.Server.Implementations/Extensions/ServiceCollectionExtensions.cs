@@ -38,6 +38,16 @@ public static class ServiceCollectionExtensions
         return int.TryParse(value, out var parsed) ? parsed : defaultValue;
     }
 
+    /// <summary>
+    /// Determines whether the configured provider is PostgreSQL and therefore supports catalog ownership fencing.
+    /// </summary>
+    /// <param name="configuration">The configured database provider.</param>
+    /// <returns><c>true</c> when PostgreSQL catalog ownership must be registered.</returns>
+    internal static bool UsesPostgreSqlCatalogOwnership(DatabaseConfigurationOptions configuration)
+        => configuration.DatabaseType.Equals("Jellyfin-PostgreSQL", StringComparison.OrdinalIgnoreCase)
+            || (configuration.DatabaseType.Equals("PLUGIN_PROVIDER", StringComparison.OrdinalIgnoreCase)
+                && configuration.CustomProviderOptions?.PluginName.Equals("PostgreSQL", StringComparison.OrdinalIgnoreCase) == true);
+
     private static IDictionary<string, JellyfinDbProviderFactory> GetSupportedDbProviders()
     {
         var items = new Dictionary<string, JellyfinDbProviderFactory>(StringComparer.InvariantCultureIgnoreCase);
@@ -135,7 +145,7 @@ public static class ServiceCollectionExtensions
 
         serviceCollection.AddSingleton<IJellyfinDatabaseProvider>(providerFactory!);
 
-        if (efCoreConfiguration.DatabaseType.Equals("Jellyfin-PostgreSQL", StringComparison.OrdinalIgnoreCase))
+        if (UsesPostgreSqlCatalogOwnership(efCoreConfiguration))
         {
             serviceCollection.AddSingleton<NpgsqlDataSource>(static sp =>
             {
