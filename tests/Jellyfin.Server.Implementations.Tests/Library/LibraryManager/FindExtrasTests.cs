@@ -1,1 +1,334 @@
-dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uQ29sbGVjdGlvbnMuR2VuZXJpYzsKdXNpbmcgU3lzdGVtLklPOwp1c2luZyBTeXN0ZW0uTGlucTsKdXNpbmcgQXV0b0ZpeHR1cmU7CnVzaW5nIEF1dG9GaXh0dXJlLkF1dG9Nb3E7CnVzaW5nIEVtYnkuTmFtaW5nLkNvbW1vbjsKdXNpbmcgRW1ieS5TZXJ2ZXIuSW1wbGVtZW50YXRpb25zLkxpYnJhcnkuUmVzb2x2ZXJzLkF1ZGlvOwp1c2luZyBNZWRpYUJyb3dzZXIuQ29udHJvbGxlci5Db25maWd1cmF0aW9uOwp1c2luZyBNZWRpYUJyb3dzZXIuQ29udHJvbGxlci5FbnRpdGllczsKdXNpbmcgTWVkaWFCcm93c2VyLkNvbnRyb2xsZXIuRW50aXRpZXMuQXVkaW87CnVzaW5nIE1lZGlhQnJvd3Nlci5Db250cm9sbGVyLkVudGl0aWVzLk1vdmllczsKdXNpbmcgTWVkaWFCcm93c2VyLkNvbnRyb2xsZXIuRW50aXRpZXMuVFY7CnVzaW5nIE1lZGlhQnJvd3Nlci5Db250cm9sbGVyLkxpYnJhcnk7CnVzaW5nIE1lZGlhQnJvd3Nlci5Db250cm9sbGVyLlBlcnNpc3RlbmNlOwp1c2luZyBNZWRpYUJyb3dzZXIuQ29udHJvbGxlci5Qcm92aWRlcnM7CnVzaW5nIE1lZGlhQnJvd3Nlci5Db250cm9sbGVyLlJlc29sdmVyczsKdXNpbmcgTWVkaWFCcm93c2VyLkNvbnRyb2xsZXIuU29ydGluZzsKdXNpbmcgTWVkaWFCcm93c2VyLk1vZGVsLkVudGl0aWVzOwp1c2luZyBNZWRpYUJyb3dzZXIuTW9kZWwuSU87CnVzaW5nIE1vcTsKdXNpbmcgWHVuaXQ7CgpuYW1lc3BhY2UgSmVsbHlmaW4uU2VydmVyLkltcGxlbWVudGF0aW9ucy5UZXN0cy5MaWJyYXJ5LkxpYnJhcnlNYW5hZ2VyOwoKcHVibGljIGNsYXNzIEZpbmRFeHRyYXNUZXN0cwp7CiAgICBwcml2YXRlIHJlYWRvbmx5IEVtYnkuU2VydmVyLkltcGxlbWVudGF0aW9ucy5MaWJyYXJ5LkxpYnJhcnlNYW5hZ2VyIF9saWJyYXJ5TWFuYWdlcjsKICAgIHByaXZhdGUgcmVhZG9ubHkgTW9jazxJRmlsZVN5c3RlbT4gX2ZpbGVTeXN0ZW1Nb2NrOwoKICAgIHB1YmxpYyBGaW5kRXh0cmFzVGVzdHMoKQogICAgewogICAgICAgIHZhciBmaXh0dXJlID0gbmV3IEZpeHR1cmUoKS5DdXN0b21pemUobmV3IEF1dG9Nb3FDdXN0b21pemF0aW9uKCkpOwogICAgICAgIGZpeHR1cmUuUmVnaXN0ZXIoKCkgPT4gbmV3IE5hbWluZ09wdGlvbnMoKSk7CiAgICAgICAgdmFyIGNvbmZpZ01vY2sgPSBmaXh0dXJlLkZyZWV6ZTxNb2NrPElTZXJ2ZXJDb25maWd1cmF0aW9uTWFuYWdlcj4+KCk7CiAgICAgICAgY29uZmlnTW9jay5TZXR1cChjID0+IGMuQXBwbGljYXRpb25QYXRocy5Qcm9ncmFtRGF0YVBhdGgpLlJldHVybnMoIi9kYXRhIik7CiAgICAgICAgdmFyIGl0ZW1SZXBvc2l0b3J5ID0gZml4dHVyZS5GcmVlemU8TW9jazxJSXRlbVJlcG9zaXRvcnk+PigpOwogICAgICAgIGl0ZW1SZXBvc2l0b3J5LlNldHVwKGkgPT4gaS5SZXRyaWV2ZUl0ZW0oSXQuSXNBbnk8R3VpZD4oKSkpLlJldHVybnMoKEJhc2VJdGVtKW51bGwhKTsKICAgICAgICBfZmlsZVN5c3RlbU1vY2sgPSBmaXh0dXJlLkZyZWV6ZTxNb2NrPElGaWxlU3lzdGVtPj4oKTsKICAgICAgICBfZmlsZVN5c3RlbU1vY2suU2V0dXAoZiA9PiBmLkdldEZpbGVJbmZvKEl0LklzQW55PHN0cmluZz4oKSkpLlJldHVybnM8c3RyaW5nPihwYXRoID0+IG5ldyBGaWxlU3lzdGVtTWV0YWRhdGEgeyBGdWxsTmFtZSA9IHBhdGggfSk7CiAgICAgICAgX2xpYnJhcnlNYW5hZ2VyID0gZml4dHVyZS5CdWlsZDxFbWJ5LlNlcnZlci5JbXBsZW1lbnRhdGlvbnMuTGlicmFyeS5MaWJyYXJ5TWFuYWdlcj4oKS5EbyhzID0+IHMuQWRkUGFydHMoCiAgICAgICAgICAgICAgICBmaXh0dXJlLkNyZWF0ZTxJRW51bWVyYWJsZTxJUmVzb2x2ZXJJZ25vcmVSdWxlPj4oKSwKICAgICAgICAgICAgICAgIG5ldyBMaXN0PElJdGVtUmVzb2x2ZXI+IHsgbmV3IEF1ZGlvUmVzb2x2ZXIoZml4dHVyZS5DcmVhdGU8TmFtaW5nT3B0aW9ucz4oKSkgfSwKICAgICAgICAgICAgICAgIGZpeHR1cmUuQ3JlYXRlPElFbnVtZXJhYmxlPElJbnRyb1Byb3ZpZGVyPj4oKSwKICAgICAgICAgICAgICAgIGZpeHR1cmUuQ3JlYXRlPElFbnVtZXJhYmxlPElCYXNlSXRlbUNvbXBhcmVyPj4oKSwKICAgICAgICAgICAgICAgIGZpeHR1cmUuQ3JlYXRlPElFbnVtZXJhYmxlPElMaWJyYXJ5UG9zdFNjYW5UYXNrPj4oKSkpCiAgICAgICAgICAgIC5DcmVhdGUoKTsKCiAgICAgICAgLy8gVGhpcyBpcyBwcmV0dHkgdGVycmlibGUgYnV0IHVuYXZvaWRhYmxlCiAgICAgICAgQmFzZUl0ZW0uRmlsZVN5c3RlbSA/Pz0gZml4dHVyZS5DcmVhdGU8SUZpbGVTeXN0ZW0+KCk7CiAgICAgICAgQmFzZUl0ZW0uTWVkaWFTb3VyY2VNYW5hZ2VyID8/PSBmaXh0dXJlLkNyZWF0ZTxJTWVkaWFTb3VyY2VNYW5hZ2VyPigpOwogICAgfQoKICAgIFtGYWN0XQogICAgcHVibGljIHZvaWQgRmluZEV4dHJhc19TZXBhcmF0ZU1vdmllRm9sZGVyX0ZpbmRzQ29ycmVjdEV4dHJhcygpCiAgICB7CiAgICAgICAgdmFyIG93bmVyID0gbmV3IE1vdmllIHsgTmFtZSA9ICJVcCIsIFBhdGggPSAiL21vdmllcy9VcC9VcC5ta3YiIH07CiAgICAgICAgdmFyIHBhdGhzID0gbmV3IExpc3Q8c3RyaW5nPgogICAgICAgIHsKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvVXAubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvVXAgLSB0cmFpbGVyLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL1VwIC0gc2FtcGxlLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL1VwIHNvbWV0aGluZyBlbHNlLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL1VwLWV4dHJhLm1rdiIKICAgICAgICB9OwoKICAgICAgICB2YXIgZmlsZXMgPSBwYXRocy5TZWxlY3QocCA9PiBuZXcgRmlsZVN5c3RlbU1ldGFkYXRhCiAgICAgICAgewogICAgICAgICAgICBGdWxsTmFtZSA9IHAsCiAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gZmFsc2UKICAgICAgICB9KS5Ub0xpc3QoKTsKCiAgICAgICAgdmFyIGV4dHJhcyA9IF9saWJyYXJ5TWFuYWdlci5GaW5kRXh0cmFzKG93bmVyLCBmaWxlcywgbmV3IERpcmVjdG9yeVNlcnZpY2UoX2ZpbGVTeXN0ZW1Nb2NrLk9iamVjdCkpLk9yZGVyQnkoZSA9PiBlLkV4dHJhVHlwZSkuVG9MaXN0KCk7CgogICAgICAgIEFzc2VydC5FcXVhbCgzLCBleHRyYXMuQ291bnQpOwogICAgICAgIEFzc2VydC5FcXVhbChFeHRyYVR5cGUuVW5rbm93biwgZXh0cmFzWzBdLkV4dHJhVHlwZSk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKEV4dHJhVHlwZS5UcmFpbGVyLCBleHRyYXNbMV0uRXh0cmFUeXBlKTsKICAgICAgICBBc3NlcnQuRXF1YWwodHlwZW9mKFRyYWlsZXIpLCBleHRyYXNbMV0uR2V0VHlwZSgpKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLlNhbXBsZSwgZXh0cmFzWzJdLkV4dHJhVHlwZSk7CiAgICB9CgogICAgW0ZhY3RdCiAgICBwdWJsaWMgdm9pZCBGaW5kRXh0cmFzX1NlcGFyYXRlTW92aWVGb2xkZXJfQ2xlYW5FeHRyYU5hbWVzKCkKICAgIHsKICAgICAgICB2YXIgb3duZXIgPSBuZXcgTW92aWUgeyBOYW1lID0gIlVwIiwgUGF0aCA9ICIvbW92aWVzL1VwL1VwLm1rdiIgfTsKICAgICAgICB2YXIgcGF0aHMgPSBuZXcgTGlzdDxzdHJpbmc+CiAgICAgICAgewogICAgICAgICAgICAiL21vdmllcy9VcC9VcC5ta3YiLAogICAgICAgICAgICAiL21vdmllcy9VcC9SZWNvcmRpbmcgdGhlIGF1ZGlvW0JsdXJheV0tYmVoaW5kdGhlc2NlbmVzLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL0ludGVydmlldyB3aXRoIHRoZSBkb2ctaW50ZXJ2aWV3Lm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL3Nob3J0cy9CYWxsb29uc1sxMDgwcF0ubWt2IgogICAgICAgIH07CgogICAgICAgIHZhciBmaWxlcyA9IHBhdGhzLlNlbGVjdChwID0+IG5ldyBGaWxlU3lzdGVtTWV0YWRhdGEKICAgICAgICB7CiAgICAgICAgICAgIEZ1bGxOYW1lID0gcCwKICAgICAgICAgICAgSXNEaXJlY3RvcnkgPSBmYWxzZQogICAgICAgIH0pLlRvTGlzdCgpOwoKICAgICAgICB2YXIgZXh0cmFzID0gX2xpYnJhcnlNYW5hZ2VyLkZpbmRFeHRyYXMob3duZXIsIGZpbGVzLCBuZXcgRGlyZWN0b3J5U2VydmljZShfZmlsZVN5c3RlbU1vY2suT2JqZWN0KSkuT3JkZXJCeShlID0+IGUuRXh0cmFUeXBlKS5Ub0xpc3QoKTsKCiAgICAgICAgQXNzZXJ0LkVxdWFsKDMsIGV4dHJhcy5Db3VudCk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKEV4dHJhVHlwZS5CZWhpbmRUaGVTY2VuZXMsIGV4dHJhc1swXS5FeHRyYVR5cGUpOwogICAgICAgIEFzc2VydC5FcXVhbCgiUmVjb3JkaW5nIHRoZSBhdWRpbyIsIGV4dHJhc1swXS5OYW1lKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLkludGVydmlldywgZXh0cmFzWzFdLkV4dHJhVHlwZSk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKCJJbnRlcnZpZXcgd2l0aCB0aGUgZG9nIiwgZXh0cmFzWzFdLk5hbWUpOwogICAgICAgIEFzc2VydC5FcXVhbChFeHRyYVR5cGUuU2hvcnQsIGV4dHJhc1syXS5FeHRyYVR5cGUpOwogICAgICAgIEFzc2VydC5FcXVhbCgiQmFsbG9vbnMiLCBleHRyYXNbMl0uTmFtZSk7CiAgICB9CgogICAgW0ZhY3RdCiAgICBwdWJsaWMgdm9pZCBGaW5kRXh0cmFzX1NlcGFyYXRlTW92aWVGb2xkZXJXaXRoTWl4ZWRFeHRyYXNfRmluZHNDb3JyZWN0RXh0cmFzKCkKICAgIHsKICAgICAgICB2YXIgb3duZXIgPSBuZXcgTW92aWUgeyBOYW1lID0gIlVwIiwgUGF0aCA9ICIvbW92aWVzL1VwL1VwLm1rdiIgfTsKICAgICAgICB2YXIgcGF0aHMgPSBuZXcgTGlzdDxzdHJpbmc+CiAgICAgICAgewogICAgICAgICAgICAiL21vdmllcy9VcC9VcC5ta3YiLAogICAgICAgICAgICAiL21vdmllcy9VcC9VcCAtIHRyYWlsZXIubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvdHJhaWxlcnMiLAogICAgICAgICAgICAiL21vdmllcy9VcC90aGVtZS1tdXNpYyIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL3RoZW1lLm1wMyIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL25vdCBhIHRoZW1lLm1wMyIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL2JlaGluZCB0aGUgc2NlbmVzIiwKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvYmVoaW5kIHRoZSBzY2VuZXMubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvVXAgLSBzYW1wbGUubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvVXAgc29tZXRoaW5nIGVsc2UubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvZXh0cmFzIgogICAgICAgIH07CgogICAgICAgIF9maWxlU3lzdGVtTW9jay5TZXR1cChmID0+IGYuR2V0RmlsZXMoCiAgICAgICAgICAgICAgICAiL21vdmllcy9VcC90cmFpbGVycyIsCiAgICAgICAgICAgICAgICBJdC5Jc0FueTxzdHJpbmdbXT4oKSwKICAgICAgICAgICAgICAgIGZhbHNlLAogICAgICAgICAgICAgICAgZmFsc2UpKQogICAgICAgICAgICAuUmV0dXJucyhuZXcgTGlzdDxGaWxlU3lzdGVtTWV0YWRhdGE+CiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgIG5ldygpCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgRnVsbE5hbWUgPSAiL21vdmllcy9VcC90cmFpbGVycy9zb21lIHRyYWlsZXIubWt2IiwKICAgICAgICAgICAgICAgICAgICBOYW1lID0gInNvbWUgdHJhaWxlci5ta3YiLAogICAgICAgICAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gZmFsc2UKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSkuVmVyaWZpYWJsZSgpOwoKICAgICAgICBfZmlsZVN5c3RlbU1vY2suU2V0dXAoZiA9PiBmLkdldEZpbGVzKAogICAgICAgICAgICAgICAgIi9tb3ZpZXMvVXAvYmVoaW5kIHRoZSBzY2VuZXMiLAogICAgICAgICAgICAgICAgSXQuSXNBbnk8c3RyaW5nW10+KCksCiAgICAgICAgICAgICAgICBmYWxzZSwKICAgICAgICAgICAgICAgIGZhbHNlKSkKICAgICAgICAgICAgLlJldHVybnMobmV3IExpc3Q8RmlsZVN5c3RlbU1ldGFkYXRhPgogICAgICAgICAgICB7CiAgICAgICAgICAgICAgICBuZXcoKQogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgIEZ1bGxOYW1lID0gIi9tb3ZpZXMvVXAvYmVoaW5kIHRoZSBzY2VuZXMvdGhlIG1ha2luZyBvZiBVcC5ta3YiLAogICAgICAgICAgICAgICAgICAgIE5hbWUgPSAidGhlIG1ha2luZyBvZiBVcC5ta3YiLAogICAgICAgICAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gZmFsc2UKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSkuVmVyaWZpYWJsZSgpOwoKICAgICAgICBfZmlsZVN5c3RlbU1vY2suU2V0dXAoZiA9PiBmLkdldEZpbGVzKAogICAgICAgICAgICAgICAgIi9tb3ZpZXMvVXAvdGhlbWUtbXVzaWMiLAogICAgICAgICAgICAgICAgSXQuSXNBbnk8c3RyaW5nW10+KCksCiAgICAgICAgICAgICAgICBmYWxzZSwKICAgICAgICAgICAgICAgIGZhbHNlKSkKICAgICAgICAgICAgLlJldHVybnMobmV3IExpc3Q8RmlsZVN5c3RlbU1ldGFkYXRhPgogICAgICAgICAgICB7CiAgICAgICAgICAgICAgICBuZXcoKQogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgIEZ1bGxOYW1lID0gIi9tb3ZpZXMvVXAvdGhlbWUtbXVzaWMvdGhlbWUyLm1wMyIsCiAgICAgICAgICAgICAgICAgICAgTmFtZSA9ICJ0aGVtZTIubXAzIiwKICAgICAgICAgICAgICAgICAgICBJc0RpcmVjdG9yeSA9IGZhbHNlCiAgICAgICAgICAgICAgICB9CiAgICAgICAgICAgIH0pLlZlcmlmaWFibGUoKTsKCiAgICAgICAgX2ZpbGVTeXN0ZW1Nb2NrLlNldHVwKGYgPT4gZi5HZXRGaWxlcygKICAgICAgICAgICAgICAgICIvbW92aWVzL1VwL2V4dHJhcyIsCiAgICAgICAgICAgICAgICBJdC5Jc0FueTxzdHJpbmdbXT4oKSwKICAgICAgICAgICAgICAgIGZhbHNlLAogICAgICAgICAgICAgICAgZmFsc2UpKQogICAgICAgICAgICAuUmV0dXJucyhuZXcgTGlzdDxGaWxlU3lzdGVtTWV0YWRhdGE+CiAgICAgICAgICAgIHsKICAgICAgICAgICAgICAgIG5ldygpCiAgICAgICAgICAgICAgICB7CiAgICAgICAgICAgICAgICAgICAgRnVsbE5hbWUgPSAiL21vdmllcy9VcC9leHRyYXMvSG9uZXN0IFRyYWlsZXIubWt2IiwKICAgICAgICAgICAgICAgICAgICBOYW1lID0gIkhvbmVzdCBUcmFpbGVyLm1rdiIsCiAgICAgICAgICAgICAgICAgICAgSXNEaXJlY3RvcnkgPSBmYWxzZQogICAgICAgICAgICAgICAgfQogICAgICAgICAgICB9KS5WZXJpZmlhYmxlKCk7CgogICAgICAgIHZhciBmaWxlcyA9IHBhdGhzLlNlbGVjdChwID0+IG5ldyBGaWxlU3lzdGVtTWV0YWRhdGEKICAgICAgICB7CiAgICAgICAgICAgIEZ1bGxOYW1lID0gcCwKICAgICAgICAgICAgTmFtZSA9IFBhdGguR2V0RmlsZU5hbWUocCksCiAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gIVBhdGguSGFzRXh0ZW5zaW9uKHApCiAgICAgICAgfSkuVG9MaXN0KCk7CgogICAgICAgIHZhciBleHRyYXMgPSBfbGlicmFyeU1hbmFnZXIuRmluZEV4dHJhcyhvd25lciwgZmlsZXMsIG5ldyBEaXJlY3RvcnlTZXJ2aWNlKF9maWxlU3lzdGVtTW9jay5PYmplY3QpKS5PcmRlckJ5KGUgPT4gZS5FeHRyYVR5cGUpLlRvTGlzdCgpOwoKICAgICAgICBfZmlsZVN5c3RlbU1vY2suVmVyaWZ5KCk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKDcsIGV4dHJhcy5Db3VudCk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKEV4dHJhVHlwZS5Vbmtub3duLCBleHRyYXNbMF0uRXh0cmFUeXBlKTsKICAgICAgICBBc3NlcnQuRXF1YWwodHlwZW9mKFZpZGVvKSwgZXh0cmFzWzBdLkdldFR5cGUoKSk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKEV4dHJhVHlwZS5UcmFpbGVyLCBleHRyYXNbMV0uRXh0cmFUeXBlKTsKICAgICAgICBBc3NlcnQuRXF1YWwodHlwZW9mKFRyYWlsZXIpLCBleHRyYXNbMV0uR2V0VHlwZSgpKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLlRyYWlsZXIsIGV4dHJhc1syXS5FeHRyYVR5cGUpOwogICAgICAgIEFzc2VydC5FcXVhbCh0eXBlb2YoVHJhaWxlciksIGV4dHJhc1syXS5HZXRUeXBlKCkpOwogICAgICAgIEFzc2VydC5FcXVhbChFeHRyYVR5cGUuQmVoaW5kVGhlU2NlbmVzLCBleHRyYXNbM10uRXh0cmFUeXBlKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLlNhbXBsZSwgZXh0cmFzWzRdLkV4dHJhVHlwZSk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKEV4dHJhVHlwZS5UaGVtZVNvbmcsIGV4dHJhc1s1XS5FeHRyYVR5cGUpOwogICAgICAgIEFzc2VydC5FcXVhbCh0eXBlb2YoQXVkaW8pLCBleHRyYXNbNV0uR2V0VHlwZSgpKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLlRoZW1lU29uZywgZXh0cmFzWzZdLkV4dHJhVHlwZSk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKHR5cGVvZihBdWRpbyksIGV4dHJhc1s2XS5HZXRUeXBlKCkpOwogICAgfQoKICAgIFtGYWN0XQogICAgcHVibGljIHZvaWQgRmluZEV4dHJhc19TZXBhcmF0ZU1vdmllRm9sZGVyV2l0aE1peGVkRXh0cmFzX0ZpbmRzT25seUV4dHJhc0luTW92aWVGb2xkZXIoKQogICAgewogICAgICAgIHZhciBvd25lciA9IG5ldyBNb3ZpZSB7IE5hbWUgPSAiVXAiLCBQYXRoID0gIi9tb3ZpZXMvVXAvVXAubWt2IiB9OwogICAgICAgIHZhciBwYXRocyA9IG5ldyBMaXN0PHN0cmluZz4KICAgICAgICB7CiAgICAgICAgICAgICIvbW92aWVzL1VwL1VwLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL3RyYWlsZXIubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvQW5vdGhlciBNb3ZpZS90cmFpbGVyLm1rdiIKICAgICAgICB9OwoKICAgICAgICB2YXIgZmlsZXMgPSBwYXRocy5TZWxlY3QocCA9PiBuZXcgRmlsZVN5c3RlbU1ldGFkYXRhCiAgICAgICAgewogICAgICAgICAgICBGdWxsTmFtZSA9IHAsCiAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gZmFsc2UKICAgICAgICB9KS5Ub0xpc3QoKTsKCiAgICAgICAgdmFyIGV4dHJhcyA9IF9saWJyYXJ5TWFuYWdlci5GaW5kRXh0cmFzKG93bmVyLCBmaWxlcywgbmV3IERpcmVjdG9yeVNlcnZpY2UoX2ZpbGVTeXN0ZW1Nb2NrLk9iamVjdCkpLk9yZGVyQnkoZSA9PiBlLkV4dHJhVHlwZSkuVG9MaXN0KCk7CgogICAgICAgIEFzc2VydC5TaW5nbGUoZXh0cmFzKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLlRyYWlsZXIsIGV4dHJhc1swXS5FeHRyYVR5cGUpOwogICAgICAgIEFzc2VydC5FcXVhbCh0eXBlb2YoVHJhaWxlciksIGV4dHJhc1swXS5HZXRUeXBlKCkpOwogICAgICAgIEFzc2VydC5FcXVhbCgidHJhaWxlciIsIGV4dHJhc1swXS5GaWxlTmFtZVdpdGhvdXRFeHRlbnNpb24pOwogICAgICAgIEFzc2VydC5FcXVhbCgiL21vdmllcy9VcC90cmFpbGVyLm1rdiIsIGV4dHJhc1swXS5QYXRoKTsKICAgIH0KCiAgICBbRmFjdF0KICAgIHB1YmxpYyB2b2lkIEZpbmRFeHRyYXNfU2VwYXJhdGVNb3ZpZUZvbGRlcldpdGhQYXJ0c19GaW5kc0NvcnJlY3RFeHRyYXMoKQogICAgewogICAgICAgIHZhciBvd25lciA9IG5ldyBNb3ZpZSB7IE5hbWUgPSAiVXAiLCBQYXRoID0gIi9tb3ZpZXMvVXAvVXAgLSBwYXJ0MS5ta3YiIH07CiAgICAgICAgdmFyIHBhdGhzID0gbmV3IExpc3Q8c3RyaW5nPgogICAgICAgIHsKICAgICAgICAgICAgIi9tb3ZpZXMvVXAvVXAgLSBwYXJ0MS5ta3YiLAogICAgICAgICAgICAiL21vdmllcy9VcC9VcCAtIHBhcnQyLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL3RyYWlsZXIubWt2IiwKICAgICAgICAgICAgIi9tb3ZpZXMvQW5vdGhlciBNb3ZpZS90cmFpbGVyLm1rdiIKICAgICAgICB9OwoKICAgICAgICB2YXIgZmlsZXMgPSBwYXRocy5TZWxlY3QocCA9PiBuZXcgRmlsZVN5c3RlbU1ldGFkYXRhCiAgICAgICAgewogICAgICAgICAgICBGdWxsTmFtZSA9IHAsCiAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gZmFsc2UKICAgICAgICB9KS5Ub0xpc3QoKTsKCiAgICAgICAgdmFyIGV4dHJhcyA9IF9saWJyYXJ5TWFuYWdlci5GaW5kRXh0cmFzKG93bmVyLCBmaWxlcywgbmV3IERpcmVjdG9yeVNlcnZpY2UoX2ZpbGVTeXN0ZW1Nb2NrLk9iamVjdCkpLk9yZGVyQnkoZSA9PiBlLkV4dHJhVHlwZSkuVG9MaXN0KCk7CgogICAgICAgIEFzc2VydC5TaW5nbGUoZXh0cmFzKTsKICAgICAgICBBc3NlcnQuRXF1YWwoRXh0cmFUeXBlLlRyYWlsZXIsIGV4dHJhc1swXS5FeHRyYVR5cGUpOwogICAgICAgIEFzc2VydC5FcXVhbCh0eXBlb2YoVHJhaWxlciksIGV4dHJhc1swXS5HZXRUeXBlKCkpOwogICAgICAgIEFzc2VydC5FcXVhbCgidHJhaWxlciIsIGV4dHJhc1swXS5GaWxlTmFtZVdpdGhvdXRFeHRlbnNpb24pOwogICAgICAgIEFzc2VydC5FcXVhbCgiL21vdmllcy9VcC90cmFpbGVyLm1rdiIsIGV4dHJhc1swXS5QYXRoKTsKICAgIH0KCiAgICBbRmFjdF0KICAgIHB1YmxpYyB2b2lkIEZpbmRFeHRyYXNfV3JvbmdFeHRlbnNpb25zX0ZpbmRzTm9FeHRyYXMoKQogICAgewogICAgICAgIHZhciBvd25lciA9IG5ldyBNb3ZpZSB7IE5hbWUgPSAiVXAiLCBQYXRoID0gIi9tb3ZpZXMvVXAvVXAubWt2IiB9OwogICAgICAgIHZhciBwYXRocyA9IG5ldyBMaXN0PHN0cmluZz4KICAgICAgICB7CiAgICAgICAgICAgICIvbW92aWVzL1VwL1VwLm1rdiIsCiAgICAgICAgICAgICIvbW92aWVzL1VwL3RyYWlsZXIubm9leHQiLAogICAgICAgICAgICAiL21vdmllcy9VcC90aGVtZS5wbmciLAogICAgICAgICAgICAiL21vdmllcy9VcC90cmFpbGVycyIKICAgICAgICB9OwoKICAgICAgICB2YXIgZmlsZXMgPSBwYXRocy5TZWxlY3QocCA9PiBuZXcgRmlsZVN5c3RlbU1ldGFkYXRhCiAgICAgICAgewogICAgICAgICAgICBGdWxsTmFtZSA9IHAsCiAgICAgICAgICAgIE5hbWUgPSBQYXRoLkdldEZpbGVOYW1lKHApLAogICAgICAgICAgICBJc0RpcmVjdG9yeSA9ICFQYXRoLkhhc0V4dGVuc2lvbihwKQogICAgICAgIH0pLlRvTGlzdCgpOwoKICAgICAgICBfZmlsZVN5c3RlbU1vY2suU2V0dXAoZiA9PiBmLkdldEZpbGVzKAogICAgICAgICAgICAgICAgIi9tb3ZpZXMvVXAvdHJhaWxlcnMiLAogICAgICAgICAgICAgICAgSXQuSXNBbnk8c3RyaW5nW10+KCksCiAgICAgICAgICAgICAgICBmYWxzZSwKICAgICAgICAgICAgICAgIGZhbHNlKSkKICAgICAgICAgICAgLlJldHVybnMobmV3IExpc3Q8RmlsZVN5c3RlbU1ldGFkYXRhPgogICAgICAgICAgICB7CiAgICAgICAgICAgICAgICBuZXcoKQogICAgICAgICAgICAgICAgewogICAgICAgICAgICAgICAgICAgIEZ1bGxOYW1lID0gIi9tb3ZpZXMvVXAvdHJhaWxlcnMvdHJhaWxlci5qcGciLAogICAgICAgICAgICAgICAgICAgIE5hbWUgPSAidHJhaWxlci5qcGciLAogICAgICAgICAgICAgICAgICAgIElzRGlyZWN0b3J5ID0gZmFsc2UKICAgICAgICAgICAgICAgIH0KICAgICAgICAgICAgfSkuVmVyaWZpYWJsZSgpOwoKICAgICAgICB2YXIgZXh0cmFzID0gX2xpYnJhcnlNYW5hZ2VyLkZpbmRFeHRyYXMob3duZXIsIGZpbGVzLCBuZXcgRGlyZWN0b3J5U2VydmljZShfZmlsZVN5c3RlbU1vY2suT2JqZWN0KSkuT3JkZXJCeShlID0+IGUuRXh0cmFUeXBlKS5Ub0xpc3QoKTsKCiAgICAgICAgX2ZpbGVTeXN0ZW1Nb2NrLlZlcmlmeSgpOwogICAgICAgIEFzc2VydC5FbXB0eShleHRyYXMpOwogICAgfQoKICAgIFtGYWN0XQogICAgcHVibGljIHZvaWQgRmluZEV4dHJhc19TZXJpZXNXaXRoVHJhaWxlcnNfRmluZHNDb3JyZWN0RXh0cmFzKCkKICAgIHsKICAgICAgICB2YXIgb3duZXIgPSBuZXcgU2VyaWVzIHsgTmFtZSA9ICJEZXh0ZXIiLCBQYXRoID0gIi9zZXJpZXMvRGV4dGVyIiB9OwogICAgICAgIHZhciBwYXRocyA9IG5ldyBMaXN0PHN0cmluZz4KICAgICAgICB7CiAgICAgICAgICAgICIvc2VyaWVzL0RleHRlci9TZWFzb24gMS9TMDFFMDEubWt2IiwKICAgICAgICAgICAgIi9zZXJpZXMvRGV4dGVyL3RyYWlsZXIubWt2IiwKICAgICAgICAgICAgIi9zZXJpZXMvRGV4dGVyL3RyYWlsZXJzL3RyYWlsZXIyLm1rdiIsCiAgICAgICAgfTsKCiAgICAgICAgdmFyIGZpbGVzID0gcGF0aHMuU2VsZWN0KHAgPT4gbmV3IEZpbGVTeXN0ZW1NZXRhZGF0YQogICAgICAgIHsKICAgICAgICAgICAgRnVsbE5hbWUgPSBwLAogICAgICAgICAgICBJc0RpcmVjdG9yeSA9IHN0cmluZy5Jc051bGxPckVtcHR5KFBhdGguR2V0RXh0ZW5zaW9uKHApKQogICAgICAgIH0pLlRvTGlzdCgpOwoKICAgICAgICB2YXIgZXh0cmFzID0gX2xpYnJhcnlNYW5hZ2VyLkZpbmRFeHRyYXMob3duZXIsIGZpbGVzLCBuZXcgRGlyZWN0b3J5U2VydmljZShfZmlsZVN5c3RlbU1vY2suT2JqZWN0KSkuT3JkZXJCeShlID0+IGUuRXh0cmFUeXBlKS5Ub0xpc3QoKTsKCiAgICAgICAgQXNzZXJ0LkVxdWFsKDIsIGV4dHJhcy5Db3VudCk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKEV4dHJhVHlwZS5UcmFpbGVyLCBleHRyYXNbMF0uRXh0cmFUeXBlKTsKICAgICAgICBBc3NlcnQuRXF1YWwodHlwZW9mKFRyYWlsZXIpLCBleHRyYXNbMF0uR2V0VHlwZSgpKTsKICAgICAgICBBc3NlcnQuRXF1YWwoInRyYWlsZXIiLCBleHRyYXNbMF0uRmlsZU5hbWVXaXRob3V0RXh0ZW5zaW9uKTsKICAgICAgICBBc3NlcnQuRXF1YWwoIi9zZXJpZXMvRGV4dGVyL3RyYWlsZXIubWt2IiwgZXh0cmFzWzBdLlBhdGgpOwogICAgICAgIEFzc2VydC5FcXVhbCgiL3Nlcmllcy9EZXh0ZXIvdHJhaWxlcnMvdHJhaWxlcjIubWt2IiwgZXh0cmFzWzFdLlBhdGgpOwogICAgfQp9Cg==
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using AutoFixture;
+using AutoFixture.AutoMoq;
+using Emby.Naming.Common;
+using Emby.Server.Implementations.Library.Resolvers.Audio;
+using MediaBrowser.Controller.Configuration;
+using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Entities.Audio;
+using MediaBrowser.Controller.Entities.Movies;
+using MediaBrowser.Controller.Entities.TV;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Persistence;
+using MediaBrowser.Controller.Providers;
+using MediaBrowser.Controller.Resolvers;
+using MediaBrowser.Controller.Sorting;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.IO;
+using Moq;
+using Xunit;
+
+namespace Jellyfin.Server.Implementations.Tests.Library.LibraryManager;
+
+public class FindExtrasTests
+{
+    private readonly Emby.Server.Implementations.Library.LibraryManager _libraryManager;
+    private readonly Mock<IFileSystem> _fileSystemMock;
+
+    public FindExtrasTests()
+    {
+        var fixture = new Fixture().Customize(new AutoMoqCustomization());
+        fixture.Register(() => new NamingOptions());
+        var configMock = fixture.Freeze<Mock<IServerConfigurationManager>>();
+        configMock.Setup(c => c.ApplicationPaths.ProgramDataPath).Returns("/data");
+        var itemRepository = fixture.Freeze<Mock<IItemRepository>>();
+        itemRepository.Setup(i => i.RetrieveItem(It.IsAny<Guid>())).Returns((BaseItem)null!);
+        _fileSystemMock = fixture.Freeze<Mock<IFileSystem>>();
+        _fileSystemMock.Setup(f => f.GetFileInfo(It.IsAny<string>())).Returns<string>(path => new FileSystemMetadata { FullName = path });
+        _libraryManager = fixture.Build<Emby.Server.Implementations.Library.LibraryManager>().Do(s => s.AddParts(
+                fixture.Create<IEnumerable<IResolverIgnoreRule>>(),
+                new List<IItemResolver> { new AudioResolver(fixture.Create<NamingOptions>()) },
+                fixture.Create<IEnumerable<IIntroProvider>>(),
+                fixture.Create<IEnumerable<IBaseItemComparer>>(),
+                fixture.Create<IEnumerable<ILibraryPostScanTask>>()))
+            .Create();
+
+        // This is pretty terrible but unavoidable
+        BaseItem.FileSystem ??= fixture.Create<IFileSystem>();
+        BaseItem.MediaSourceManager ??= fixture.Create<IMediaSourceManager>();
+    }
+
+    [Fact]
+    public void FindExtras_SeparateMovieFolder_FindsCorrectExtras()
+    {
+        var owner = new Movie { Name = "Up", Path = "/movies/Up/Up.mkv" };
+        var paths = new List<string>
+        {
+            "/movies/Up/Up.mkv",
+            "/movies/Up/Up - trailer.mkv",
+            "/movies/Up/Up - sample.mkv",
+            "/movies/Up/Up something else.mkv",
+            "/movies/Up/Up-extra.mkv"
+        };
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            IsDirectory = false
+        }).ToList();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        Assert.Equal(3, extras.Count);
+        Assert.Equal(ExtraType.Unknown, extras[0].ExtraType);
+        Assert.Equal(ExtraType.Trailer, extras[1].ExtraType);
+        Assert.Equal(typeof(Trailer), extras[1].GetType());
+        Assert.Equal(ExtraType.Sample, extras[2].ExtraType);
+    }
+
+    [Fact]
+    public void FindExtras_SeparateMovieFolder_CleanExtraNames()
+    {
+        var owner = new Movie { Name = "Up", Path = "/movies/Up/Up.mkv" };
+        var paths = new List<string>
+        {
+            "/movies/Up/Up.mkv",
+            "/movies/Up/Recording the audio[Bluray]-behindthescenes.mkv",
+            "/movies/Up/Interview with the dog-interview.mkv",
+            "/movies/Up/shorts/Balloons[1080p].mkv"
+        };
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            IsDirectory = false
+        }).ToList();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        Assert.Equal(3, extras.Count);
+        Assert.Equal(ExtraType.BehindTheScenes, extras[0].ExtraType);
+        Assert.Equal("Recording the audio", extras[0].Name);
+        Assert.Equal(ExtraType.Interview, extras[1].ExtraType);
+        Assert.Equal("Interview with the dog", extras[1].Name);
+        Assert.Equal(ExtraType.Short, extras[2].ExtraType);
+        Assert.Equal("Balloons", extras[2].Name);
+    }
+
+    [Fact]
+    public void FindExtras_SeparateMovieFolderWithMixedExtras_FindsCorrectExtras()
+    {
+        var owner = new Movie { Name = "Up", Path = "/movies/Up/Up.mkv" };
+        var paths = new List<string>
+        {
+            "/movies/Up/Up.mkv",
+            "/movies/Up/Up - trailer.mkv",
+            "/movies/Up/trailers",
+            "/movies/Up/theme-music",
+            "/movies/Up/theme.mp3",
+            "/movies/Up/not a theme.mp3",
+            "/movies/Up/behind the scenes",
+            "/movies/Up/behind the scenes.mkv",
+            "/movies/Up/Up - sample.mkv",
+            "/movies/Up/Up something else.mkv",
+            "/movies/Up/extras"
+        };
+
+        _fileSystemMock.Setup(f => f.GetFiles(
+                "/movies/Up/trailers",
+                It.IsAny<string[]>(),
+                false,
+                false))
+            .Returns(new List<FileSystemMetadata>
+            {
+                new()
+                {
+                    FullName = "/movies/Up/trailers/some trailer.mkv",
+                    Name = "some trailer.mkv",
+                    IsDirectory = false
+                }
+            }).Verifiable();
+
+        _fileSystemMock.Setup(f => f.GetFiles(
+                "/movies/Up/behind the scenes",
+                It.IsAny<string[]>(),
+                false,
+                false))
+            .Returns(new List<FileSystemMetadata>
+            {
+                new()
+                {
+                    FullName = "/movies/Up/behind the scenes/the making of Up.mkv",
+                    Name = "the making of Up.mkv",
+                    IsDirectory = false
+                }
+            }).Verifiable();
+
+        _fileSystemMock.Setup(f => f.GetFiles(
+                "/movies/Up/theme-music",
+                It.IsAny<string[]>(),
+                false,
+                false))
+            .Returns(new List<FileSystemMetadata>
+            {
+                new()
+                {
+                    FullName = "/movies/Up/theme-music/theme2.mp3",
+                    Name = "theme2.mp3",
+                    IsDirectory = false
+                }
+            }).Verifiable();
+
+        _fileSystemMock.Setup(f => f.GetFiles(
+                "/movies/Up/extras",
+                It.IsAny<string[]>(),
+                false,
+                false))
+            .Returns(new List<FileSystemMetadata>
+            {
+                new()
+                {
+                    FullName = "/movies/Up/extras/Honest Trailer.mkv",
+                    Name = "Honest Trailer.mkv",
+                    IsDirectory = false
+                }
+            }).Verifiable();
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            Name = Path.GetFileName(p),
+            IsDirectory = !Path.HasExtension(p)
+        }).ToList();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        _fileSystemMock.Verify();
+        Assert.Equal(7, extras.Count);
+        Assert.Equal(ExtraType.Unknown, extras[0].ExtraType);
+        Assert.Equal(typeof(Video), extras[0].GetType());
+        Assert.Equal(ExtraType.Trailer, extras[1].ExtraType);
+        Assert.Equal(typeof(Trailer), extras[1].GetType());
+        Assert.Equal(ExtraType.Trailer, extras[2].ExtraType);
+        Assert.Equal(typeof(Trailer), extras[2].GetType());
+        Assert.Equal(ExtraType.BehindTheScenes, extras[3].ExtraType);
+        Assert.Equal(ExtraType.Sample, extras[4].ExtraType);
+        Assert.Equal(ExtraType.ThemeSong, extras[5].ExtraType);
+        Assert.Equal(typeof(Audio), extras[5].GetType());
+        Assert.Equal(ExtraType.ThemeSong, extras[6].ExtraType);
+        Assert.Equal(typeof(Audio), extras[6].GetType());
+    }
+
+    [Fact]
+    public void FindExtras_SeparateMovieFolderWithMixedExtras_FindsOnlyExtrasInMovieFolder()
+    {
+        var owner = new Movie { Name = "Up", Path = "/movies/Up/Up.mkv" };
+        var paths = new List<string>
+        {
+            "/movies/Up/Up.mkv",
+            "/movies/Up/trailer.mkv",
+            "/movies/Another Movie/trailer.mkv"
+        };
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            IsDirectory = false
+        }).ToList();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        Assert.Single(extras);
+        Assert.Equal(ExtraType.Trailer, extras[0].ExtraType);
+        Assert.Equal(typeof(Trailer), extras[0].GetType());
+        Assert.Equal("trailer", extras[0].FileNameWithoutExtension);
+        Assert.Equal("/movies/Up/trailer.mkv", extras[0].Path);
+    }
+
+    [Fact]
+    public void FindExtras_SeparateMovieFolderWithParts_FindsCorrectExtras()
+    {
+        var owner = new Movie { Name = "Up", Path = "/movies/Up/Up - part1.mkv" };
+        var paths = new List<string>
+        {
+            "/movies/Up/Up - part1.mkv",
+            "/movies/Up/Up - part2.mkv",
+            "/movies/Up/trailer.mkv",
+            "/movies/Another Movie/trailer.mkv"
+        };
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            IsDirectory = false
+        }).ToList();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        Assert.Single(extras);
+        Assert.Equal(ExtraType.Trailer, extras[0].ExtraType);
+        Assert.Equal(typeof(Trailer), extras[0].GetType());
+        Assert.Equal("trailer", extras[0].FileNameWithoutExtension);
+        Assert.Equal("/movies/Up/trailer.mkv", extras[0].Path);
+    }
+
+    [Fact]
+    public void FindExtras_WrongExtensions_FindsNoExtras()
+    {
+        var owner = new Movie { Name = "Up", Path = "/movies/Up/Up.mkv" };
+        var paths = new List<string>
+        {
+            "/movies/Up/Up.mkv",
+            "/movies/Up/trailer.noext",
+            "/movies/Up/theme.png",
+            "/movies/Up/trailers"
+        };
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            Name = Path.GetFileName(p),
+            IsDirectory = !Path.HasExtension(p)
+        }).ToList();
+
+        _fileSystemMock.Setup(f => f.GetFiles(
+                "/movies/Up/trailers",
+                It.IsAny<string[]>(),
+                false,
+                false))
+            .Returns(new List<FileSystemMetadata>
+            {
+                new()
+                {
+                    FullName = "/movies/Up/trailers/trailer.jpg",
+                    Name = "trailer.jpg",
+                    IsDirectory = false
+                }
+            }).Verifiable();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        _fileSystemMock.Verify();
+        Assert.Empty(extras);
+    }
+
+    [Fact]
+    public void FindExtras_SeriesWithTrailers_FindsCorrectExtras()
+    {
+        var owner = new Series { Name = "Dexter", Path = "/series/Dexter" };
+        var paths = new List<string>
+        {
+            "/series/Dexter/Season 1/S01E01.mkv",
+            "/series/Dexter/trailer.mkv",
+            "/series/Dexter/trailers/trailer2.mkv",
+        };
+
+        var files = paths.Select(p => new FileSystemMetadata
+        {
+            FullName = p,
+            IsDirectory = string.IsNullOrEmpty(Path.GetExtension(p))
+        }).ToList();
+
+        var extras = _libraryManager.FindExtras(owner, files, new DirectoryService(_fileSystemMock.Object)).OrderBy(e => e.ExtraType).ToList();
+
+        Assert.Equal(2, extras.Count);
+        Assert.Equal(ExtraType.Trailer, extras[0].ExtraType);
+        Assert.Equal(typeof(Trailer), extras[0].GetType());
+        Assert.Equal("trailer", extras[0].FileNameWithoutExtension);
+        Assert.Equal("/series/Dexter/trailer.mkv", extras[0].Path);
+        Assert.Equal("/series/Dexter/trailers/trailer2.mkv", extras[1].Path);
+    }
+}
