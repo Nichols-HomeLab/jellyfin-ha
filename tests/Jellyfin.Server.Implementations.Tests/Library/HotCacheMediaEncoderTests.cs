@@ -9,6 +9,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;

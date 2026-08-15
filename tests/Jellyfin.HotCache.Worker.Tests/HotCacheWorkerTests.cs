@@ -190,9 +190,12 @@ public sealed class HotCacheWorkerTests : IDisposable
         Directory.Delete(HotRoot);
         Directory.CreateSymbolicLink(HotRoot, outside);
 
-        await CreateWorker(new TestStore(null), new TestFiles()).ExecuteOnceAsync("one", default);
+        var store = new TestStore(CreatePromotion("episode.mkv", "canonical"));
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
 
         Assert.True(File.Exists(partial));
+        Assert.False(File.Exists(Path.Combine(outside, "episode.mkv")));
+        Assert.Equal(1, store.Failures);
     }
 
     [Fact]

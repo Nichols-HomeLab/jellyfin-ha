@@ -4,6 +4,7 @@ using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.MediaInfo;
 using Xunit;
 
 namespace Jellyfin.Server.Implementations.Tests.Library;
