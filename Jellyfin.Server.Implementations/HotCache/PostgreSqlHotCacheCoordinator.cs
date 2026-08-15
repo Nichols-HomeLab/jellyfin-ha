@@ -25,6 +25,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private readonly ILibraryManager _libraryManager;
     private readonly IUserDataManager _userDataManager;
     private readonly HashSet<Guid>? _includedUsers;
+    private readonly Guid? _canarySeriesId;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -43,6 +44,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         _libraryManager = libraryManager;
         _userDataManager = userDataManager;
         _includedUsers = ParseIncludedUsers(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_INCLUDED_USER_IDS"));
+        _canarySeriesId = Guid.TryParse(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_CANARY_SERIES_ID"), out var canarySeriesId) ? canarySeriesId : null;
         _logger = logger;
     }
 
@@ -227,7 +229,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 
     private async Task RecordCandidateAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, Guid userId, string reason, int priority, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(item.Path))
+        if (string.IsNullOrWhiteSpace(item.Path) || !IsCanaryItem(item))
         {
             return;
         }
@@ -243,6 +245,10 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     }
 
     private bool IsIncluded(Jellyfin.Database.Implementations.Entities.User user) => _includedUsers is null || _includedUsers.Contains(user.Id);
+
+    private bool IsCanaryItem(BaseItem item) => _canarySeriesId is null
+        || item.Id.Equals(_canarySeriesId.Value)
+        || (item is MediaBrowser.Controller.Entities.TV.Episode episode && episode.SeriesId.Equals(_canarySeriesId.Value));
 
     private static HashSet<Guid>? ParseIncludedUsers(string? raw)
     {

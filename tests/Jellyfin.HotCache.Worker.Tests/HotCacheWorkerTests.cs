@@ -14,6 +14,13 @@ public sealed class HotCacheWorkerTests : IDisposable
         Directory.CreateDirectory(HotRoot);
     }
 
+    [Fact]
+    public void NestedMountSelectionUsesLongestContainingRoot()
+    {
+        var root = PhysicalFileOperations.SelectMountRoot("/mnt/ceph/hot-cache/file.mkv", ["/", "/mnt", "/mnt/ceph"]);
+        Assert.Equal("/mnt/ceph", root);
+    }
+
     private string ColdRoot => Path.Combine(_root, "cold");
 
     private string HotRoot => Path.Combine(_root, "hot");

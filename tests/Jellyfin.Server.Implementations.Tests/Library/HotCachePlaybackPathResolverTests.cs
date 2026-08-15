@@ -69,6 +69,22 @@ public sealed class HotCachePlaybackPathResolverTests : IDisposable
         Assert.Equal("hot-mtime-mismatch", result.Reason);
     }
 
+    [Fact]
+    public void DirectPlay_NestedHotSymlinkFallsBackToCanonicalPath()
+    {
+        var canonical = Create("media/nested/episode.mkv", "bytes");
+        var outside = Create("outside/episode.mkv", "bytes");
+        var hotRoot = Path.Combine(_root, "hot");
+        Directory.CreateDirectory(hotRoot);
+        Directory.CreateSymbolicLink(Path.Combine(hotRoot, "nested"), Path.GetDirectoryName(outside)!);
+        var resolver = new HotCachePlaybackPathResolver(Path.Combine(_root, "media"), hotRoot, new NullHotCacheCoordinator());
+
+        var result = resolver.Resolve(new PlaybackPathRequest(canonical, new FileInfo(canonical).Length, PlaybackPathPurpose.MainMedia));
+
+        Assert.False(result.IsHot);
+        Assert.Equal(canonical, result.Path);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))

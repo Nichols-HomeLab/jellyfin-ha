@@ -77,8 +77,17 @@ public interface IFileOperations
 
 public sealed class PhysicalFileOperations : IFileOperations
 {
-    public long GetAvailableSpace(string path) => new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).AvailableFreeSpace;
-    public long GetTotalSpace(string path) => new DriveInfo(Path.GetPathRoot(Path.GetFullPath(path))!).TotalSize;
+    public long GetAvailableSpace(string path) => new DriveInfo(SelectMountRoot(path, DriveInfo.GetDrives().Select(drive => drive.Name))).AvailableFreeSpace;
+    public long GetTotalSpace(string path) => new DriveInfo(SelectMountRoot(path, DriveInfo.GetDrives().Select(drive => drive.Name))).TotalSize;
+
+    /// <summary>Selects the longest mounted root containing a path.</summary>
+    public static string SelectMountRoot(string path, IEnumerable<string> roots)
+    {
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        return roots.Select(Path.GetFullPath).OrderByDescending(root => root.Length).FirstOrDefault(root => fullPath.StartsWith(root.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+            ?? Path.GetPathRoot(fullPath)!
+            ;
+    }
     public bool FileExists(string path) => File.Exists(path);
     public FileInfo GetFileInfo(string path) => new(path);
     public IEnumerable<string> EnumerateFiles(string root, string pattern) => Directory.Exists(root) ? Directory.EnumerateFiles(root, pattern, SearchOption.AllDirectories) : [];
@@ -268,8 +277,9 @@ public sealed class HotCacheWorker
     private double UsedRatio() => 1d - ((double)_files.GetAvailableSpace(_options.HotRoot) / _files.GetTotalSpace(_options.HotRoot));
     private bool TargetMatchesSource(string target, FileInfo source) { var targetInfo = _files.GetFileInfo(target); return targetInfo.Length == source.Length && targetInfo.LastWriteTimeUtc == source.LastWriteTimeUtc; }
     private void CleanupPartials() { foreach (var path in _files.EnumerateFiles(_options.HotRoot, "*.partial")) if (DateTime.UtcNow - _files.GetFileInfo(path).LastWriteTimeUtc > _options.PartialFileMaxAge) _files.Delete(path); }
-    private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative)) throw new IOException("Path escapes configured root."); return fullPath; }
-    private static string ItemId(HotCacheJob job) => $"job={job.Id:N};item={job.ItemId?.ToString("N") ?? "none"}";
+    private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative) || HasLinkComponent(fullRoot, fullPath)) throw new IOException("Path escapes configured root."); return fullPath; }
+    private static bool HasLinkComponent(string root, string path) { var current = root; foreach (var part in Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) { if (string.IsNullOrEmpty(part) || part == ".") continue; current = Path.Combine(current, part); if (File.Exists(current) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return true; } return false; }
+    private static string ItemId(HotCacheJob job) => job.ItemId?.ToString("N") ?? "none";
     private static string Bound(string value) => value.Length <= 512 ? value : value[..512];
 }
 

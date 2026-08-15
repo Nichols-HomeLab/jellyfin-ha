@@ -34,14 +34,14 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
         try
         {
             var canonical = Path.GetFullPath(request.CanonicalPath);
-            if (!IsContained(_canonicalRoot, canonical))
+            if (!IsContained(_canonicalRoot, canonical) || HasLinkComponent(_canonicalRoot, canonical))
             {
                 return Observe(request, Cold(request.CanonicalPath, "outside-canonical-root"));
             }
 
             var relative = Path.GetRelativePath(_canonicalRoot, canonical);
             var candidate = Path.GetFullPath(Path.Combine(_hotRoot, relative));
-            if (!IsContained(_hotRoot, candidate) || !File.Exists(candidate))
+            if (!IsContained(_hotRoot, candidate) || HasLinkComponent(_hotRoot, candidate) || !File.Exists(candidate))
             {
                 return Observe(request, Cold(request.CanonicalPath, "hot-miss"));
             }
@@ -103,5 +103,26 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
         return relative != ".."
             && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
             && !Path.IsPathRooted(relative);
+    }
+
+    private static bool HasLinkComponent(string root, string path)
+    {
+        var relative = Path.GetRelativePath(root, path);
+        var current = root;
+        foreach (var part in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
+        {
+            if (string.IsNullOrEmpty(part) || part == ".")
+            {
+                continue;
+            }
+
+            current = Path.Combine(current, part);
+            if (File.Exists(current) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -13,6 +13,7 @@ public static class HotCacheSchema
         ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS backend varchar(32);
         CREATE UNIQUE INDEX IF NOT EXISTS hot_cache_jobs_item_unique_idx ON hot_cache_jobs(item_id) WHERE item_id IS NOT NULL;
         CREATE INDEX IF NOT EXISTS hot_cache_jobs_claim_idx ON hot_cache_jobs (state, priority DESC, created_at, id) WHERE state IN ('pending', 'running');
+        CREATE INDEX IF NOT EXISTS hot_cache_jobs_claim_v2_idx ON hot_cache_jobs (state, priority DESC, created_at, id) WHERE state IN ('pending', 'running');
         CREATE INDEX IF NOT EXISTS hot_cache_jobs_eviction_idx ON hot_cache_jobs (last_access_utc, id) WHERE state='completed' AND hot_path IS NOT NULL;
         CREATE TABLE IF NOT EXISTS hot_cache_events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, job_id uuid NOT NULL REFERENCES hot_cache_jobs(id), kind text NOT NULL, detail varchar(512) NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
         CREATE INDEX IF NOT EXISTS hot_cache_events_created_at_idx ON hot_cache_events(created_at);
