@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.MediaEncoding;
 using MediaBrowser.Controller.Library;
@@ -15,6 +16,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 {
     private const string ChannelName = "jellyfin:catalog-cache:v1";
     private const string SequenceKey = "jellyfin:catalog-cache:v1:sequence";
+    private static readonly TimeSpan SubscriptionRetryDelay = TimeSpan.FromSeconds(5);
     private const string PublishScript = """
         local sequence = redis.call('INCR', KEYS[1])
         local message = ARGV[2] .. '|' .. sequence .. '|' .. ARGV[3] .. '|' .. ARGV[4] .. '|' .. ARGV[5]
@@ -24,10 +26,16 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 
     private readonly RedisConnectionManager _redis;
     private readonly ILogger<RedisCatalogChangeNotifier> _logger;
+    private readonly Func<CancellationToken, Task> _subscriptionRetryDelay;
+    private readonly CancellationTokenSource _subscriptionCancellationTokenSource = new();
     private readonly string _source = Guid.NewGuid().ToString("N");
     private readonly object _receiveLock = new();
     private ChannelMessageQueue? _subscription;
     private long _lastSequence;
+    private int _subscriptionWorkerRunning;
+    private int _subscriptionFailureLogged;
+    private int _subscriptionRequested;
+    private int _fullResyncRequested;
     private bool _disposed;
 
     /// <summary>
@@ -38,15 +46,25 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     public RedisCatalogChangeNotifier(
         RedisConnectionManager redis,
         ILogger<RedisCatalogChangeNotifier> logger)
+        : this(
+            redis,
+            logger,
+            cancellationToken => Task.Delay(SubscriptionRetryDelay, cancellationToken))
     {
+    }
+
+    internal RedisCatalogChangeNotifier(
+        RedisConnectionManager redis,
+        ILogger<RedisCatalogChangeNotifier> logger,
+        Func<CancellationToken, Task> subscriptionRetryDelay)
+    {
+        ArgumentNullException.ThrowIfNull(subscriptionRetryDelay);
         _redis = redis;
         _logger = logger;
+        _subscriptionRetryDelay = subscriptionRetryDelay;
         _redis.ConnectionReplaced += OnConnectionReplaced;
         _redis.ConnectionRestored += OnConnectionRestored;
-        // Construction must not return before the subscription is acknowledged; otherwise the
-        // first committed catalog change can be missed before this singleton is ready.
-        _redis.ExecuteAsync(connection => SynchronizeAsync(connection, true, false)).GetAwaiter().GetResult();
-        CatalogPropagationMetrics.SetSubscriberConnected(true);
+        ScheduleSynchronization(subscribe: true, forceFullResync: false);
     }
 
     /// <inheritdoc />
@@ -89,6 +107,8 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         _disposed = true;
         _redis.ConnectionReplaced -= OnConnectionReplaced;
         _redis.ConnectionRestored -= OnConnectionRestored;
+        _subscriptionCancellationTokenSource.Cancel();
+        _subscriptionCancellationTokenSource.Dispose();
         try
         {
             _subscription?.Unsubscribe();
@@ -144,30 +164,100 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     private void OnConnectionReplaced(IConnectionMultiplexer connection)
     {
         CatalogPropagationMetrics.SetSubscriberConnected(false);
-        Recover(connection, true, "restore the catalog invalidation subscription after replacing Redis");
+        ScheduleSynchronization(subscribe: true, forceFullResync: true);
     }
 
     private void OnConnectionRestored(IConnectionMultiplexer connection)
     {
         CatalogPropagationMetrics.SetSubscriberConnected(false);
-        Recover(connection, false, "synchronize catalog invalidations after Redis restored its connection");
+        ScheduleSynchronization(subscribe: false, forceFullResync: true);
     }
 
-    private void Recover(IConnectionMultiplexer connection, bool subscribe, string operation)
+    private void ScheduleSynchronization(bool subscribe, bool forceFullResync)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (subscribe)
+        {
+            Interlocked.Exchange(ref _subscriptionRequested, 1);
+        }
+
+        if (forceFullResync)
+        {
+            Interlocked.Exchange(ref _fullResyncRequested, 1);
+        }
+
+        if (Interlocked.Exchange(ref _subscriptionWorkerRunning, 1) == 0)
+        {
+            _ = SynchronizeWithRetryAsync();
+        }
+    }
+
+    private async Task SynchronizeWithRetryAsync()
+    {
+        var cancellationToken = _subscriptionCancellationTokenSource.Token;
         try
         {
-            // StackExchange.Redis restores subscriptions on the same multiplexer. Compare the
-            // durable generation immediately so missed pub/sub messages cannot leave stale caches.
-            // Recovery callbacks are synchronous by contract; completing synchronization here
-            // fences later notifications behind the full-resync signal.
-            SynchronizeAsync(connection, subscribe, true).GetAwaiter().GetResult();
-            CatalogPropagationMetrics.SetSubscriberConnected(true);
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var subscribe = Interlocked.Exchange(ref _subscriptionRequested, 0) != 0;
+                var forceFullResync = Interlocked.Exchange(ref _fullResyncRequested, 0) != 0;
+                try
+                {
+                    // StackExchange.Redis restores subscriptions on the same multiplexer. Compare the
+                    // durable generation after reconnect so missed pub/sub messages cannot leave stale caches.
+                    await _redis.ExecuteAsync(
+                        connection => SynchronizeAsync(connection, subscribe, forceFullResync),
+                        cancellationToken).ConfigureAwait(false);
+                    Interlocked.Exchange(ref _subscriptionFailureLogged, 0);
+                    CatalogPropagationMetrics.SetSubscriberConnected(true);
+
+                    if (Volatile.Read(ref _subscriptionRequested) == 0 && Volatile.Read(ref _fullResyncRequested) == 0)
+                    {
+                        return;
+                    }
+
+                    continue;
+                }
+                catch (RedisException ex)
+                {
+                    CatalogPropagationMetrics.RecordReconnectFailure();
+                    if (Interlocked.Exchange(ref _subscriptionFailureLogged, 1) == 0)
+                    {
+                        _logger.LogWarning(ex, "Failed to synchronize Redis catalog invalidations; retrying asynchronously.");
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+
+                if (subscribe)
+                {
+                    Interlocked.Exchange(ref _subscriptionRequested, 1);
+                }
+
+                if (forceFullResync)
+                {
+                    Interlocked.Exchange(ref _fullResyncRequested, 1);
+                }
+
+                try
+                {
+                    await _subscriptionRetryDelay(cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+            }
         }
-        catch (RedisException ex)
+        finally
         {
-            CatalogPropagationMetrics.RecordReconnectFailure();
-            _logger.LogWarning(ex, "Failed to {CatalogRecoveryOperation}.", operation);
+            Volatile.Write(ref _subscriptionWorkerRunning, 0);
         }
     }
 

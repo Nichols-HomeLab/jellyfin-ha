@@ -32,6 +32,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Npgsql;
 using Serilog;
 using Serilog.Extensions.Logging;
 using static MediaBrowser.Controller.Extensions.ConfigurationExtensions;
@@ -60,6 +61,9 @@ namespace Jellyfin.Server
         private static IHost? _jellyfinHost = null;
         private static long _startTimestamp;
         private static ILogger _logger = NullLogger.Instance;
+        private const int StartupMigrationMaxAttempts = 5;
+        private static readonly TimeSpan StartupMigrationAttemptTimeout = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan StartupMigrationRetryBudget = TimeSpan.FromMinutes(2);
         private static bool _restartOnShutdown;
         private static IStartupLogger<JellyfinMigrationService>? _migrationLogger;
         private static string? _restoreFromBackup;
@@ -277,6 +281,70 @@ namespace Jellyfin.Server
         /// <param name="startupConfig">Startup Config.</param>
         /// <returns>A task.</returns>
         public static async Task ApplyStartupMigrationAsync(ServerApplicationPaths appPaths, IConfiguration startupConfig)
+        {
+            using var retryCancellationTokenSource = new CancellationTokenSource(StartupMigrationRetryBudget);
+            await RetryStartupMigrationAsync(
+                token => ApplyStartupMigrationAttemptAsync(appPaths, startupConfig, token),
+                cancellationToken: retryCancellationTokenSource.Token).ConfigureAwait(false);
+        }
+
+        internal static async Task RetryStartupMigrationAsync(
+            Func<CancellationToken, Task> migration,
+            Func<TimeSpan, CancellationToken, Task>? delay = null,
+            CancellationToken cancellationToken = default,
+            TimeSpan? attemptTimeout = null)
+        {
+            ArgumentNullException.ThrowIfNull(migration);
+            delay ??= static (retryDelay, token) => Task.Delay(retryDelay, token);
+            var effectiveAttemptTimeout = attemptTimeout ?? StartupMigrationAttemptTimeout;
+
+            for (var attempt = 1; attempt <= StartupMigrationMaxAttempts; attempt++)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                using var attemptCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                attemptCancellationTokenSource.CancelAfter(effectiveAttemptTimeout);
+                try
+                {
+                    await migration(attemptCancellationTokenSource.Token).ConfigureAwait(false);
+                    return;
+                }
+                catch (Exception ex) when (IsTransientPostgresStartupFailure(ex) && attempt < StartupMigrationMaxAttempts)
+                {
+                    var retryDelay = TimeSpan.FromSeconds(1 << attempt);
+                    _logger.LogWarning(
+                        ex,
+                        "PostgreSQL startup migration attempt {Attempt} of {MaxAttempts} failed transiently; retrying in {RetryDelay}.",
+                        attempt,
+                        StartupMigrationMaxAttempts,
+                        retryDelay);
+                    await delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && attempt < StartupMigrationMaxAttempts)
+                {
+                    var retryDelay = TimeSpan.FromSeconds(1 << attempt);
+                    _logger.LogWarning(
+                        "PostgreSQL startup migration attempt {Attempt} of {MaxAttempts} exceeded its time limit; retrying in {RetryDelay}.",
+                        attempt,
+                        StartupMigrationMaxAttempts,
+                        retryDelay);
+                    await delay(retryDelay, cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private static bool IsTransientPostgresStartupFailure(Exception exception)
+        {
+            return exception is NpgsqlException { IsTransient: true }
+                || exception is TimeoutException
+                || (exception.InnerException is not null && IsTransientPostgresStartupFailure(exception.InnerException));
+        }
+
+        private static Task ApplyStartupMigrationAttemptAsync(ServerApplicationPaths appPaths, IConfiguration startupConfig, CancellationToken cancellationToken)
+        {
+            return ApplyStartupMigrationAttemptCoreAsync(appPaths, startupConfig).WaitAsync(cancellationToken);
+        }
+
+        private static async Task ApplyStartupMigrationAttemptCoreAsync(ServerApplicationPaths appPaths, IConfiguration startupConfig)
         {
             _migrationLogger = StartupLogger.Logger.BeginGroup<JellyfinMigrationService>($"Migration Service");
             var startupConfigurationManager = new ServerConfigurationManager(appPaths, _loggerFactory, new MyXmlSerializer());
