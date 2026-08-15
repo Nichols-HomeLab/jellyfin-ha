@@ -7,7 +7,7 @@ namespace Jellyfin.HotCache.Worker;
 public enum HotCacheJobKind { Promotion, Eviction }
 
 public sealed record HotCacheJob(Guid Id, HotCacheJobKind Kind, string CanonicalPath, string? HotPath, long SourceLength, DateTime SourceModifiedUtc, int Priority, bool IsActive, bool IsPinned, bool IsCopying, DateTime LastAccessUtc, int Attempts);
-public sealed record HotCacheQueueSnapshot(long Depth, TimeSpan OldestAge, TimeSpan OldestLeaseAge);
+public sealed record HotCacheQueueSnapshot(long Depth, TimeSpan OldestAge, TimeSpan OldestLeaseAge, long DatabaseBytes, long EventRows, long NormalFallbacks, long UnhealthyFallbacks);
 
 public sealed class HotCacheOptions
 {
@@ -17,6 +17,7 @@ public sealed class HotCacheOptions
     public double LowWatermark { get; init; } = .75;
     public TimeSpan LeaseDuration { get; init; } = TimeSpan.FromMinutes(2);
     public TimeSpan PartialFileMaxAge { get; init; } = TimeSpan.FromHours(1);
+    public string Backend { get; init; } = "unraid-temp";
 
     public void Validate()
     {
@@ -46,6 +47,7 @@ public interface IHotCacheJobStore
     Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
     Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken);
+    Task ObserveBackendAsync(string backend, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken);
     Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken);
 }
 
@@ -99,10 +101,16 @@ public sealed class HotCacheWorker
     public async Task ExecuteOnceAsync(string workerId, CancellationToken ct)
     {
         CleanupPartials();
+        var totalBytes = _files.GetTotalSpace(_options.HotRoot);
+        var availableBytes = _files.GetAvailableSpace(_options.HotRoot);
+        HotCacheMetrics.Storage(true, totalBytes, availableBytes);
+        await _store.ObserveBackendAsync(_options.Backend, true, totalBytes, availableBytes, ct).ConfigureAwait(false);
         var job = await _store.ClaimAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false);
         if (job is not null) await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false);
         await EnforceCapacityAsync(workerId, ct).ConfigureAwait(false);
-        HotCacheMetrics.Queue(await _store.SnapshotAsync(ct).ConfigureAwait(false));
+        var snapshot = await _store.SnapshotAsync(ct).ConfigureAwait(false);
+        HotCacheMetrics.Queue(snapshot);
+        HotCacheMetrics.Database(snapshot.DatabaseBytes, snapshot.EventRows, snapshot.NormalFallbacks, snapshot.UnhealthyFallbacks);
         HotCacheMetrics.Backend(true);
     }
     private async Task ExecuteJobAsync(HotCacheJob job, string workerId, CancellationToken ct)
@@ -198,7 +206,7 @@ public sealed class HotCacheWorker
         }
     }
     private async Task EvictAsync(HotCacheJob job, string workerId, CancellationToken ct)
-    { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); HotCacheMetrics.Evicted("capacity"); await _store.EventAsync(job.Id, "evicted", path, ct).ConfigureAwait(false); }
+    { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); HotCacheMetrics.Evicted("capacity"); await _store.EventAsync(job.Id, "evicted", ItemId(job), ct).ConfigureAwait(false); }
     private async Task EnforceCapacityAsync(string workerId, CancellationToken ct)
     { if (UsedRatio() < _options.HighWatermark) return; while (UsedRatio() > _options.LowWatermark) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
     private double UsedRatio() => 1d - ((double)_files.GetAvailableSpace(_options.HotRoot) / _files.GetTotalSpace(_options.HotRoot));
@@ -210,5 +218,5 @@ public sealed class HotCacheWorker
 
 public sealed class HotCacheHostedService(HotCacheWorker worker, ILogger<HotCacheHostedService> logger) : BackgroundService
 {
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken) { var id = Environment.MachineName + ":" + Environment.ProcessId.ToString(CultureInfo.InvariantCulture); while (!stoppingToken.IsCancellationRequested) { try { await worker.ExecuteOnceAsync(id, stoppingToken).ConfigureAwait(false); } catch (Exception ex) { HotCacheMetrics.Backend(false); logger.LogError(ex, "Hot-cache backend unavailable; serving remains cold."); } await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken).ConfigureAwait(false); } }
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken) { var id = Environment.MachineName + ":" + Environment.ProcessId.ToString(CultureInfo.InvariantCulture); while (!stoppingToken.IsCancellationRequested) { try { await worker.ExecuteOnceAsync(id, stoppingToken).ConfigureAwait(false); } catch (Exception ex) { HotCacheMetrics.Backend(false); HotCacheMetrics.Storage(false); logger.LogError(ex, "Hot-cache worker cycle failed; serving remains cold. {ErrorType}", ex.GetType().Name); } await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken).ConfigureAwait(false); } }
 }

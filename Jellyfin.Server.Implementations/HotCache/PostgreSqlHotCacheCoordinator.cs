@@ -116,6 +116,11 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <inheritdoc />
     public void ObserveResolution(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
     {
+        if (!resolution.IsHot && resolution.Reason != "hot-miss")
+        {
+            _logger.LogWarning("Hot-cache playback degraded to canonical media. {Reason} {Purpose}", resolution.Reason, request.Purpose);
+        }
+
         _observations.Writer.TryWrite(new ResolutionObservation(request.CanonicalPath, resolution.Reason, resolution.IsHot));
     }
 

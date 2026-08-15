@@ -204,7 +204,9 @@ public sealed class HotCacheWorkerTests : IDisposable
         public Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken)
-            => Task.FromResult(new HotCacheQueueSnapshot(_next is null ? 0 : 1, TimeSpan.Zero, TimeSpan.Zero));
+            => Task.FromResult(new HotCacheQueueSnapshot(_next is null ? 0 : 1, TimeSpan.Zero, TimeSpan.Zero, 0, 0, 0, 0));
+
+        public Task ObserveBackendAsync(string backend, bool healthy, long totalBytes, long availableBytes, CancellationToken cancellationToken) => Task.CompletedTask;
 
         public Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken) => Task.CompletedTask;
     }

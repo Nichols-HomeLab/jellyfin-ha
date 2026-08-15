@@ -13,14 +13,17 @@ names, and Jellyfin item identifiers are deliberately excluded from metrics.
 | HotCacheWorkerHeartbeatStale | `time() - jellyfin_hot_cache_worker_heartbeat_unixtime > 120` for 5m | Check worker process/pod and restart it after collecting logs. |
 | HotCacheSustainedFailures | `increase(jellyfin_hot_cache_failures_total[15m]) > 5` for 10m | Inspect structured `JobId` logs, source mount, capacity, and lease expiry. |
 | HotCacheJobsStuck | `jellyfin_hot_cache_queue_oldest_age_seconds > 900` for 10m | Identify leased job, allow the lease to expire, then investigate the owning worker. |
-| HotCacheUnexpectedColdFallback | `sum(rate(jellyfin_hot_cache_jobs_total{outcome="failed"}[15m])) > 0.1` for 10m | Compare source availability and cache capacity; cold playback is safe while repaired. |
+| HotCacheStorageUnavailable | `jellyfin_hot_cache_storage_up == 0` for 5m | Check the hot-cache mount; canonical playback remains safe. |
+| HotCacheStorageNearCapacity | `jellyfin_hot_cache_storage_bytes{state="used"} / jellyfin_hot_cache_storage_bytes{state="total"} > .95` for 10m | Confirm eviction progresses and free capacity before changing watermarks. |
+| HotCacheDatabaseGrowth | `jellyfin_hot_cache_database_bytes > 1073741824` for 30m | Inspect retained event volume and PostgreSQL storage; the worker removes events older than 30 days automatically. |
+| HotCacheUnexpectedColdFallback | `jellyfin_hot_cache_fallbacks_recent{class="unhealthy"} > 5` for 10m | Inspect the safe `Reason`/`Purpose` logs, source mount, and cache validation failures. Normal `hot-miss` fallbacks are reported separately and do not alert. |
 
 Queue depth, oldest queue age, oldest lease age, copied bytes, job duration,
-evictions, and failures provide capacity and database-growth visibility. Retain
-`hot_cache_events` for 30 days: `DELETE FROM hot_cache_events WHERE created_at <
-now() - interval '30 days'; VACUUM (ANALYZE) hot_cache_events;` Schedule that
-maintenance during a low-traffic window and monitor table size with
-`pg_total_relation_size('hot_cache_events')`.
+evictions, failures, storage bytes, database bytes, and normal versus unhealthy
+cold fallbacks provide capacity and database-growth visibility. The worker
+automatically retains `hot_cache_events` for 30 days; schedule `VACUUM (ANALYZE)
+hot_cache_events` during a low-traffic window if PostgreSQL reports reclaimable
+space.
 
 ## Failure injection
 

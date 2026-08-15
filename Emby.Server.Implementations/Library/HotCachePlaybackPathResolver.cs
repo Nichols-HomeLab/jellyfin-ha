@@ -9,7 +9,7 @@ namespace Emby.Server.Implementations.Library;
 /// <summary>Validates an atomically published hot file and otherwise fails open to canonical storage.</summary>
 public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
 {
-    private static readonly Counter Resolutions = Metrics.CreateCounter("jellyfin_hot_cache_playback_resolutions_total", "Playback path resolutions by cache result.", new CounterConfiguration { LabelNames = ["result", "reason"] });
+    private static readonly Counter Resolutions = Metrics.CreateCounter("jellyfin_hot_cache_playback_resolutions_total", "Playback path resolutions by cache result and fallback health.", new CounterConfiguration { LabelNames = ["result", "fallback", "reason"] });
     private readonly string _canonicalRoot;
     private readonly string _hotRoot;
     private readonly IHotCacheCoordinator _coordinator;
@@ -75,7 +75,7 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
 
     private PlaybackPathResolution Observe(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
     {
-        Resolutions.WithLabels(resolution.IsHot ? "hot" : "cold", resolution.Reason).Inc();
+        Resolutions.WithLabels(resolution.IsHot ? "hot" : "cold", FallbackClass(resolution), resolution.Reason).Inc();
         // A resolver may be called per segment. Coalesce only the observation, never its correctness check.
         if (_reported.TryAdd(request.CanonicalPath + '\u001f' + resolution.Reason, 0))
         {
@@ -86,6 +86,10 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     }
 
     private static PlaybackPathResolution Cold(string path, string reason) => new(path, false, reason);
+
+    // A missing disposable copy is normal. Validation, mount, or containment failures are actionable.
+    private static string FallbackClass(in PlaybackPathResolution resolution)
+        => resolution.IsHot ? "none" : resolution.Reason == "hot-miss" ? "normal" : "unhealthy";
 
     private static bool IsContained(string root, string path)
     {
