@@ -21,9 +21,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static readonly TimeSpan PlaybackLeaseLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan PlaybackInterestLifetime = TimeSpan.FromDays(14);
     private readonly NpgsqlDataSource _dataSource;
-    private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
-    private readonly IUserDataManager _userDataManager;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -31,16 +29,12 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// Initializes a new instance of the <see cref="PostgreSqlHotCacheCoordinator"/> class.
     /// </summary>
     /// <param name="dataSource">The shared PostgreSQL data source.</param>
-    /// <param name="userManager">The Jellyfin user source.</param>
     /// <param name="libraryManager">The Jellyfin library query source.</param>
-    /// <param name="userDataManager">The per-user playback state source.</param>
     /// <param name="logger">The cold-degradation diagnostic logger.</param>
-    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IUserDataManager userDataManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
+    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, ILibraryManager libraryManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
     {
         _dataSource = dataSource;
-        _userManager = userManager;
         _libraryManager = libraryManager;
-        _userDataManager = userDataManager;
         _logger = logger;
     }
 
@@ -108,11 +102,6 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         if (!(bool)(await lockCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) ?? false))
         {
             return;
-        }
-
-        foreach (var user in _userManager.GetUsers())
-        {
-            await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
 
         await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running','completed');", cancellationToken).ConfigureAwait(false);
@@ -200,52 +189,6 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         }
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task ReconcileUserAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Jellyfin.Database.Implementations.Entities.User user, CancellationToken cancellationToken)
-    {
-        var effectiveLookahead = await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
-        var resume = _libraryManager.GetItemList(new InternalItemsQuery(user)
-        {
-            IncludeItemTypes = [BaseItemKind.Episode],
-            IsResumable = true,
-            Limit = 50,
-            OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
-        });
-        var recent = _libraryManager.GetItemList(new InternalItemsQuery(user)
-        {
-            IncludeItemTypes = [BaseItemKind.Episode],
-            IsPlayed = true,
-            Limit = 50,
-            OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
-        });
-
-        await LogReconcileAsync(connection, transaction, $"scan user={BoundDisplay(user.Username)}; resume={resume.Count}; recent={recent.Count}; lookahead={effectiveLookahead}", cancellationToken).ConfigureAwait(false);
-        foreach (var item in resume)
-        {
-            await RecordCandidateAsync(connection, transaction, item, user.Id, "continue-watching", 90, cancellationToken).ConfigureAwait(false);
-            await LogReconcileAsync(connection, transaction, $"queue continue-watching: {Describe(item)}", cancellationToken).ConfigureAwait(false);
-        }
-
-        var reconciledSeries = new HashSet<Guid>();
-        foreach (var item in recent)
-        {
-            var userData = _userDataManager.GetUserData(user, item);
-            if (userData?.LastPlayedDate is not DateTime lastPlayed || lastPlayed < DateTime.UtcNow.Subtract(PlaybackInterestLifetime))
-            {
-                continue;
-            }
-
-            if (item is MediaBrowser.Controller.Entities.TV.Episode episode)
-            {
-                if (!reconciledSeries.Add(episode.SeriesId))
-                {
-                    continue;
-                }
-
-                await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, effectiveLookahead, cancellationToken).ConfigureAwait(false);
-            }
-        }
     }
 
     // The configured maximum is six by default. Capacity independently limits
