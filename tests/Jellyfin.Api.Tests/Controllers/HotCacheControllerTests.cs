@@ -1,1 +1,166 @@
-dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uQ29sbGVjdGlvbnMuR2VuZXJpYzsKdXNpbmcgU3lzdGVtLlRleHQuSnNvbjsKdXNpbmcgU3lzdGVtLlRocmVhZGluZzsKdXNpbmcgU3lzdGVtLlRocmVhZGluZy5UYXNrczsKdXNpbmcgSmVsbHlmaW4uQXBpLkNvbnRyb2xsZXJzOwp1c2luZyBKZWxseWZpbi5FeHRlbnNpb25zLkpzb247CnVzaW5nIE1lZGlhQnJvd3Nlci5Db250cm9sbGVyLkxpYnJhcnk7CnVzaW5nIE1pY3Jvc29mdC5Bc3BOZXRDb3JlLk12YzsKdXNpbmcgWHVuaXQ7CgpuYW1lc3BhY2UgSmVsbHlmaW4uQXBpLlRlc3RzLkNvbnRyb2xsZXJzOwoKcHVibGljIHNlYWxlZCBjbGFzcyBIb3RDYWNoZUNvbnRyb2xsZXJUZXN0cwp7CiAgICBbRmFjdF0KICAgIHB1YmxpYyBhc3luYyBUYXNrIEdldF9XaXRob3V0SGlzdG9yeUZpbHRlcl9Gb3J3YXJkc051bGxGaWx0ZXIoKQogICAgewogICAgICAgIHZhciBzdG9yZSA9IG5ldyBTdG9yZSgpOwoKICAgICAgICB2YXIgcmVzdWx0ID0gYXdhaXQgbmV3IEhvdENhY2hlQ29udHJvbGxlcihzdG9yZSkuR2V0KG51bGwsIENhbmNlbGxhdGlvblRva2VuLk5vbmUpOwoKICAgICAgICBBc3NlcnQuTm90TnVsbChyZXN1bHQuUmVzdWx0KTsKICAgICAgICBBc3NlcnQuTnVsbChzdG9yZS5IaXN0b3J5S2luZCk7CiAgICB9CgogICAgW0ZhY3RdCiAgICBwdWJsaWMgYXN5bmMgVGFzayBVcGRhdGVTZXR0aW5nc19JbnZhbGlkV2F0ZXJtYXJrc19SZXR1cm5zQmFkUmVxdWVzdCgpCiAgICB7CiAgICAgICAgdmFyIGNvbnRyb2xsZXIgPSBuZXcgSG90Q2FjaGVDb250cm9sbGVyKG5ldyBTdG9yZSB7IFJlamVjdFNldHRpbmdzID0gdHJ1ZSB9KTsKICAgICAgICB2YXIgcmVzdWx0ID0gYXdhaXQgY29udHJvbGxlci5VcGRhdGVTZXR0aW5ncyhuZXcgSG90Q2FjaGVTZXR0aW5ncygidW5yYWlkLXRlbXAiLCBmYWxzZSwgLjUsIC43KSwgQ2FuY2VsbGF0aW9uVG9rZW4uTm9uZSk7CiAgICAgICAgQXNzZXJ0LklzVHlwZTxCYWRSZXF1ZXN0T2JqZWN0UmVzdWx0PihyZXN1bHQpOwogICAgfQoKICAgIFtGYWN0XQogICAgcHVibGljIGFzeW5jIFRhc2sgQWN0aW9uX0J1bGtFdmljdGlvbldpdGhvdXRDb25maXJtYXRpb25fUmV0dXJuc0JhZFJlcXVlc3QoKQogICAgewogICAgICAgIHZhciBjb250cm9sbGVyID0gbmV3IEhvdENhY2hlQ29udHJvbGxlcihuZXcgU3RvcmUgeyBSZWplY3RBY3Rpb24gPSB0cnVlIH0pOwogICAgICAgIHZhciByZXN1bHQgPSBhd2FpdCBjb250cm9sbGVyLkFjdGlvbihuZXcgSG90Q2FjaGVBY3Rpb24oImV2aWN0IiwgbnVsbCwgZmFsc2UpLCBDYW5jZWxsYXRpb25Ub2tlbi5Ob25lKTsKICAgICAgICBBc3NlcnQuSXNUeXBlPEJhZFJlcXVlc3RPYmplY3RSZXN1bHQ+KHJlc3VsdCk7CiAgICB9CgogICAgW0ZhY3RdCiAgICBwdWJsaWMgYXN5bmMgVGFzayBBY3Rpb25fQ29uZmlybWVkQnVsa0V2aWN0aW9uX0lzQWNjZXB0ZWQoKQogICAgewogICAgICAgIHZhciBzdG9yZSA9IG5ldyBTdG9yZSgpOwogICAgICAgIHZhciBjb250cm9sbGVyID0gbmV3IEhvdENhY2hlQ29udHJvbGxlcihzdG9yZSk7CgogICAgICAgIHZhciByZXN1bHQgPSBhd2FpdCBjb250cm9sbGVyLkFjdGlvbihuZXcgSG90Q2FjaGVBY3Rpb24oImV2aWN0IiwgbnVsbCwgdHJ1ZSksIENhbmNlbGxhdGlvblRva2VuLk5vbmUpOwoKICAgICAgICBBc3NlcnQuSXNUeXBlPE5vQ29udGVudFJlc3VsdD4ocmVzdWx0KTsKICAgICAgICBBc3NlcnQuRXF1YWwobmV3IEhvdENhY2hlQWN0aW9uKCJldmljdCIsIG51bGwsIHRydWUpLCBzdG9yZS5BY3Rpb24pOwogICAgfQoKICAgIFtGYWN0XQogICAgcHVibGljIGFzeW5jIFRhc2sgQWN0aW9uX1VzZXNJbnZlbnRvcnlJZFJhdGhlclRoYW5QYXRoKCkKICAgIHsKICAgICAgICB2YXIgc3RvcmUgPSBuZXcgU3RvcmUoKTsKICAgICAgICB2YXIgY29udHJvbGxlciA9IG5ldyBIb3RDYWNoZUNvbnRyb2xsZXIoc3RvcmUpOwogICAgICAgIHZhciBpZCA9IEd1aWQuTmV3R3VpZCgpOwogICAgICAgIHZhciByZXN1bHQgPSBhd2FpdCBjb250cm9sbGVyLkFjdGlvbihuZXcgSG90Q2FjaGVBY3Rpb24oInByb21vdGUiLCBpZCwgZmFsc2UpLCBDYW5jZWxsYXRpb25Ub2tlbi5Ob25lKTsKICAgICAgICBBc3NlcnQuSXNUeXBlPE5vQ29udGVudFJlc3VsdD4ocmVzdWx0KTsKICAgICAgICBBc3NlcnQuRXF1YWwoaWQsIHN0b3JlLkFjdGlvbiEuSXRlbUlkKTsKICAgIH0KCiAgICBbRmFjdF0KICAgIHB1YmxpYyBhc3luYyBUYXNrIENhY2hlX1VzZXNMaWJyYXJ5SXRlbUlkQW5kU2Vhc29uU2NvcGUoKQogICAgewogICAgICAgIHZhciBzdG9yZSA9IG5ldyBTdG9yZSB7IENhY2hlZCA9IDEgfTsKICAgICAgICB2YXIgcmVxdWVzdCA9IG5ldyBIb3RDYWNoZU1hbnVhbENhY2hlUmVxdWVzdChHdWlkLk5ld0d1aWQoKSwgdHJ1ZSk7CgogICAgICAgIHZhciByZXN1bHQgPSBhd2FpdCBuZXcgSG90Q2FjaGVDb250cm9sbGVyKHN0b3JlKS5DYWNoZShyZXF1ZXN0LCBDYW5jZWxsYXRpb25Ub2tlbi5Ob25lKTsKCiAgICAgICAgQXNzZXJ0LklzVHlwZTxOb0NvbnRlbnRSZXN1bHQ+KHJlc3VsdCk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKHJlcXVlc3QsIHN0b3JlLkNhY2hlUmVxdWVzdCk7CiAgICB9CgogICAgW0ZhY3RdCiAgICBwdWJsaWMgdm9pZCBQYWdlX0lzQW5BZG1pbmlzdHJhdG9yRGFzaGJvYXJkVmlldygpCiAgICB7CiAgICAgICAgdmFyIHBhZ2UgPSBuZXcgSG90Q2FjaGVDb250cm9sbGVyKG5ldyBTdG9yZSgpKS5QYWdlKCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCI8aDE+SG90IENhY2hlPC9oMT4iLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJTdG9yYWdlIGNvbnRyb2wgcGxhbmUiLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJkYXRhLXJvbGU9XCJwYWdlXCIiLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJwbHVnaW5Db25maWd1cmF0aW9uUGFnZSIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoImRhdGEtcm9sZT1cImNvbnRlbnRcIiIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoImNvbnRlbnQtcHJpbWFyeSIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoIlVucmFpZCAvdGVtcCIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoIkNlcGhGUyAzMDAgR2lCIiwgcGFnZS5Db250ZW50LCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpOwogICAgICAgIEFzc2VydC5Db250YWlucygiSW52ZW50b3J5IGJ5IHNlcmllcyIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoImhvdENhY2hlSGlzdG9yeUtpbmQiLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJjb25maXJtQnVsa0V2aWN0aW9uIiwgcGFnZS5Db250ZW50LCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpOwogICAgICAgIEFzc2VydC5Db250YWlucygiaGMtbWV0ZXIiLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJob3RDYWNoZUxvb2thaGVhZCIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoImhvdENhY2hlUmVzZXJ2ZSIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoIm1heExvb2thaGVhZCIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoInJlc2VydmVGcmVlQnl0ZXMiLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJoYy1zdW1tYXJ5LWdyaWQiLCBwYWdlLkNvbnRlbnQsIFN0cmluZ0NvbXBhcmlzb24uT3JkaW5hbCk7CiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJObyBjYWNoZSBjYW5kaWRhdGVzIHlldCIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoIlVuYWJsZSB0byBsb2FkIGhvdC1jYWNoZSBzdGF0ZSIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoInRvTG9jYWxlU3RyaW5nIiwgcGFnZS5Db250ZW50LCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpOwogICAgICAgIEFzc2VydC5Db250YWlucygiaG90Q2FjaGVNYW51YWxJdGVtIiwgcGFnZS5Db250ZW50LCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpOwogICAgICAgIEFzc2VydC5Db250YWlucygiaG90Q2FjaGVTcGlubmVyIiwgcGFnZS5Db250ZW50LCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpOwogICAgICAgIEFzc2VydC5Db250YWlucygic2V0SW50ZXJ2YWwobG9hZCwyMDAwKSIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuRG9lc05vdENvbnRhaW4oImlubmVySFRNTCIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgIH0KCiAgICBbRmFjdF0KICAgIHB1YmxpYyB2b2lkIFBhZ2VfU2VsZWN0c0NhbWVsQ2FzZUpzb25Qcm9maWxlRm9yUG9wdWxhdGVkRGFzaGJvYXJkRGF0YSgpCiAgICB7CiAgICAgICAgdmFyIHNuYXBzaG90ID0gbmV3IEhvdENhY2hlQWRtaW5pc3RyYXRpb25TbmFwc2hvdCgKICAgICAgICAgICAgbmV3IEhvdENhY2hlU2V0dGluZ3MoInVucmFpZC10ZW1wIiwgZmFsc2UsIC45LCAuNzUpLAogICAgICAgICAgICBbbmV3IEhvdENhY2hlQmFja2VuZFN0YXR1cygidW5yYWlkLXRlbXAiLCB0cnVlLCB0cnVlLCBmYWxzZSwgMTAwMCwgMjUwLCA3NTAsIERhdGVUaW1lLlV0Y05vdyldLAogICAgICAgICAgICBbbmV3IEhvdENhY2hlUXVldWVTdW1tYXJ5KCJjb3BpZWQiLCAxLCAyNTApXSwKICAgICAgICAgICAgW25ldyBIb3RDYWNoZUludmVudG9yeUl0ZW0oR3VpZC5OZXdHdWlkKCksICJSZWFjaGVyIiwgIkVwaXNvZGUgMSIsICJwbGF5YmFjayIsIDEsIDEwMCwgMjUwLCAidW5yYWlkLXRlbXAiLCBEYXRlVGltZS5VdGNOb3csIERhdGVUaW1lLlV0Y05vdywgImNvcGllZCIpXSwKICAgICAgICAgICAgW25ldyBIb3RDYWNoZUhpc3RvcnlFbnRyeSgxLCAiY29waWVkIiwgIlJlYWNoZXI6IEVwaXNvZGUgMSIsIERhdGVUaW1lLlV0Y05vdyldKTsKICAgICAgICB2YXIgY2FtZWxDYXNlSnNvbiA9IEpzb25TZXJpYWxpemVyLlNlcmlhbGl6ZShzbmFwc2hvdCwgSnNvbkRlZmF1bHRzLkNhbWVsQ2FzZU9wdGlvbnMpOwogICAgICAgIHZhciBwYXNjYWxDYXNlSnNvbiA9IEpzb25TZXJpYWxpemVyLlNlcmlhbGl6ZShzbmFwc2hvdCwgSnNvbkRlZmF1bHRzLlBhc2NhbENhc2VPcHRpb25zKTsKICAgICAgICB2YXIgcGFnZSA9IG5ldyBIb3RDYWNoZUNvbnRyb2xsZXIobmV3IFN0b3JlKCkpLlBhZ2UoKTsKCiAgICAgICAgQXNzZXJ0LkNvbnRhaW5zKCJcImludmVudG9yeVwiIiwgY2FtZWxDYXNlSnNvbiwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoIlwiSW52ZW50b3J5XCIiLCBwYXNjYWxDYXNlSnNvbiwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgICAgICBBc3NlcnQuQ29udGFpbnMoIlJlYWNoZXIiLCBjYW1lbENhc2VKc29uLCBTdHJpbmdDb21wYXJpc29uLk9yZGluYWwpOwogICAgICAgIEFzc2VydC5Db250YWlucygiaGVhZGVyczp7QWNjZXB0OidhcHBsaWNhdGlvbi9qc29uOyBwcm9maWxlPVwiQ2FtZWxDYXNlXCInfSIsIHBhZ2UuQ29udGVudCwgU3RyaW5nQ29tcGFyaXNvbi5PcmRpbmFsKTsKICAgIH0KCiAgICBwcml2YXRlIHNlYWxlZCBjbGFzcyBTdG9yZSA6IElIb3RDYWNoZUFkbWluaXN0cmF0aW9uCiAgICB7CiAgICAgICAgcHVibGljIGJvb2wgUmVqZWN0QWN0aW9uIHsgZ2V0OyBpbml0OyB9CgogICAgICAgIHB1YmxpYyBib29sIFJlamVjdFNldHRpbmdzIHsgZ2V0OyBpbml0OyB9CgogICAgICAgIHB1YmxpYyBIb3RDYWNoZUFjdGlvbj8gQWN0aW9uIHsgZ2V0OyBwcml2YXRlIHNldDsgfQoKICAgICAgICBwdWJsaWMgc3RyaW5nPyBIaXN0b3J5S2luZCB7IGdldDsgcHJpdmF0ZSBzZXQ7IH0KCiAgICAgICAgcHVibGljIGludCBDYWNoZWQgeyBnZXQ7IGluaXQ7IH0KCiAgICAgICAgcHVibGljIEhvdENhY2hlTWFudWFsQ2FjaGVSZXF1ZXN0PyBDYWNoZVJlcXVlc3QgeyBnZXQ7IHByaXZhdGUgc2V0OyB9CgogICAgICAgIHB1YmxpYyBUYXNrPEhvdENhY2hlQWRtaW5pc3RyYXRpb25TbmFwc2hvdD4gR2V0U25hcHNob3RBc3luYyhzdHJpbmc/IGhpc3RvcnlLaW5kLCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbikKICAgICAgICB7CiAgICAgICAgICAgIEhpc3RvcnlLaW5kID0gaGlzdG9yeUtpbmQ7CiAgICAgICAgICAgIHJldHVybiBUYXNrLkZyb21SZXN1bHQobmV3IEhvdENhY2hlQWRtaW5pc3RyYXRpb25TbmFwc2hvdChuZXcgSG90Q2FjaGVTZXR0aW5ncygidW5yYWlkLXRlbXAiLCBmYWxzZSwgLjksIC43NSksIFtdLCBbXSwgW10sIFtdKSk7CiAgICAgICAgfQoKICAgICAgICBwdWJsaWMgVGFzayBVcGRhdGVTZXR0aW5nc0FzeW5jKEhvdENhY2hlU2V0dGluZ3Mgc2V0dGluZ3MsIENhbmNlbGxhdGlvblRva2VuIGNhbmNlbGxhdGlvblRva2VuKSA9PiBSZWplY3RTZXR0aW5ncyA/IHRocm93IG5ldyBBcmd1bWVudEV4Y2VwdGlvbigpIDogVGFzay5Db21wbGV0ZWRUYXNrOwoKICAgICAgICBwdWJsaWMgVGFzayBRdWV1ZUFjdGlvbkFzeW5jKEhvdENhY2hlQWN0aW9uIGFjdGlvbiwgQ2FuY2VsbGF0aW9uVG9rZW4gY2FuY2VsbGF0aW9uVG9rZW4pCiAgICAgICAgewogICAgICAgICAgICBpZiAoUmVqZWN0QWN0aW9uKQogICAgICAgICAgICB7CiAgICAgICAgICAgICAgICB0aHJvdyBuZXcgQXJndW1lbnRFeGNlcHRpb24oKTsKICAgICAgICAgICAgfQoKICAgICAgICAgICAgQWN0aW9uID0gYWN0aW9uOwogICAgICAgICAgICByZXR1cm4gVGFzay5Db21wbGV0ZWRUYXNrOwogICAgICAgIH0KCiAgICAgICAgcHVibGljIFRhc2s8aW50PiBDYWNoZUxpYnJhcnlJdGVtQXN5bmMoSG90Q2FjaGVNYW51YWxDYWNoZVJlcXVlc3QgcmVxdWVzdCwgQ2FuY2VsbGF0aW9uVG9rZW4gY2FuY2VsbGF0aW9uVG9rZW4pCiAgICAgICAgewogICAgICAgICAgICBDYWNoZVJlcXVlc3QgPSByZXF1ZXN0OwogICAgICAgICAgICByZXR1cm4gVGFzay5Gcm9tUmVzdWx0KENhY2hlZCk7CiAgICAgICAgfQogICAgfQp9Cg==
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using Jellyfin.Api.Controllers;
+using Jellyfin.Extensions.Json;
+using MediaBrowser.Controller.Library;
+using Microsoft.AspNetCore.Mvc;
+using Xunit;
+
+namespace Jellyfin.Api.Tests.Controllers;
+
+public sealed class HotCacheControllerTests
+{
+    [Fact]
+    public async Task Get_WithoutHistoryFilter_ForwardsNullFilter()
+    {
+        var store = new Store();
+
+        var result = await new HotCacheController(store).Get(null, CancellationToken.None);
+
+        Assert.NotNull(result.Result);
+        Assert.Null(store.HistoryKind);
+    }
+
+    [Fact]
+    public async Task UpdateSettings_InvalidWatermarks_ReturnsBadRequest()
+    {
+        var controller = new HotCacheController(new Store { RejectSettings = true });
+        var result = await controller.UpdateSettings(new HotCacheSettings("unraid-temp", false, .5, .7), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Action_BulkEvictionWithoutConfirmation_ReturnsBadRequest()
+    {
+        var controller = new HotCacheController(new Store { RejectAction = true });
+        var result = await controller.Action(new HotCacheAction("evict", null, false), CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task Action_ConfirmedBulkEviction_IsAccepted()
+    {
+        var store = new Store();
+        var controller = new HotCacheController(store);
+
+        var result = await controller.Action(new HotCacheAction("evict", null, true), CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(new HotCacheAction("evict", null, true), store.Action);
+    }
+
+    [Fact]
+    public async Task Action_UsesInventoryIdRatherThanPath()
+    {
+        var store = new Store();
+        var controller = new HotCacheController(store);
+        var id = Guid.NewGuid();
+        var result = await controller.Action(new HotCacheAction("promote", id, false), CancellationToken.None);
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(id, store.Action!.ItemId);
+    }
+
+    [Fact]
+    public async Task Cache_UsesLibraryItemIdAndSeasonScope()
+    {
+        var store = new Store { Cached = 1 };
+        var request = new HotCacheManualCacheRequest(Guid.NewGuid(), true);
+
+        var result = await new HotCacheController(store).Cache(request, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(request, store.CacheRequest);
+    }
+
+    [Fact]
+    public void Page_IsAnAdministratorDashboardView()
+    {
+        var page = new HotCacheController(new Store()).Page();
+        Assert.Contains("<h1>Hot Cache</h1>", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Storage control plane", page.Content, StringComparison.Ordinal);
+        Assert.Contains("data-role=\"page\"", page.Content, StringComparison.Ordinal);
+        Assert.Contains("pluginConfigurationPage", page.Content, StringComparison.Ordinal);
+        Assert.Contains("data-role=\"content\"", page.Content, StringComparison.Ordinal);
+        Assert.Contains("content-primary", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Unraid /temp", page.Content, StringComparison.Ordinal);
+        Assert.Contains("CephFS 300 GiB", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Inventory by series", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheHistoryKind", page.Content, StringComparison.Ordinal);
+        Assert.Contains("confirmBulkEviction", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hc-meter", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheLookahead", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheReserve", page.Content, StringComparison.Ordinal);
+        Assert.Contains("maxLookahead", page.Content, StringComparison.Ordinal);
+        Assert.Contains("reserveFreeBytes", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hc-summary-grid", page.Content, StringComparison.Ordinal);
+        Assert.Contains("No cache candidates yet", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Unable to load hot-cache state", page.Content, StringComparison.Ordinal);
+        Assert.Contains("toLocaleString", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheManualItem", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheSpinner", page.Content, StringComparison.Ordinal);
+        Assert.Contains("setInterval(load,2000)", page.Content, StringComparison.Ordinal);
+        Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Page_SelectsCamelCaseJsonProfileForPopulatedDashboardData()
+    {
+        var snapshot = new HotCacheAdministrationSnapshot(
+            new HotCacheSettings("unraid-temp", false, .9, .75),
+            [new HotCacheBackendStatus("unraid-temp", true, true, false, 1000, 250, 750, DateTime.UtcNow)],
+            [new HotCacheQueueSummary("copied", 1, 250)],
+            [new HotCacheInventoryItem(Guid.NewGuid(), "Reacher", "Episode 1", "playback", 1, 100, 250, "unraid-temp", DateTime.UtcNow, DateTime.UtcNow, "copied")],
+            [new HotCacheHistoryEntry(1, "copied", "Reacher: Episode 1", DateTime.UtcNow)]);
+        var camelCaseJson = JsonSerializer.Serialize(snapshot, JsonDefaults.CamelCaseOptions);
+        var pascalCaseJson = JsonSerializer.Serialize(snapshot, JsonDefaults.PascalCaseOptions);
+        var page = new HotCacheController(new Store()).Page();
+
+        Assert.Contains("\"inventory\"", camelCaseJson, StringComparison.Ordinal);
+        Assert.Contains("\"Inventory\"", pascalCaseJson, StringComparison.Ordinal);
+        Assert.Contains("Reacher", camelCaseJson, StringComparison.Ordinal);
+        Assert.Contains("headers:{Accept:'application/json; profile=\"CamelCase\"'}", page.Content, StringComparison.Ordinal);
+    }
+
+    private sealed class Store : IHotCacheAdministration
+    {
+        public bool RejectAction { get; init; }
+
+        public bool RejectSettings { get; init; }
+
+        public HotCacheAction? Action { get; private set; }
+
+        public string? HistoryKind { get; private set; }
+
+        public int Cached { get; init; }
+
+        public HotCacheManualCacheRequest? CacheRequest { get; private set; }
+
+        public Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken)
+        {
+            HistoryKind = historyKind;
+            return Task.FromResult(new HotCacheAdministrationSnapshot(new HotCacheSettings("unraid-temp", false, .9, .75), [], [], [], []));
+        }
+
+        public Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken) => RejectSettings ? throw new ArgumentException() : Task.CompletedTask;
+
+        public Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken)
+        {
+            if (RejectAction)
+            {
+                throw new ArgumentException();
+            }
+
+            Action = action;
+            return Task.CompletedTask;
+        }
+
+        public Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken)
+        {
+            CacheRequest = request;
+            return Task.FromResult(Cached);
+        }
+    }
+}
