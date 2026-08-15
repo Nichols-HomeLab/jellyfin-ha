@@ -9,11 +9,14 @@ namespace Emby.Server.Implementations.Library;
 /// <summary>Validates an atomically published hot file and otherwise fails open to canonical storage.</summary>
 public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
 {
+    private const int MaximumReportedPaths = 4096;
+    private static readonly TimeSpan ObservationThrottleWindow = TimeSpan.FromMinutes(1);
     private static readonly Counter Resolutions = Metrics.CreateCounter("jellyfin_hot_cache_playback_resolutions_total", "Playback path resolutions by cache result and fallback health.", new CounterConfiguration { LabelNames = ["result", "fallback", "reason"] });
     private readonly string _canonicalRoot;
     private readonly string _hotRoot;
     private readonly IHotCacheCoordinator _coordinator;
-    private readonly ConcurrentDictionary<string, byte> _reported = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _reported = new(StringComparer.Ordinal);
+    private readonly TimeProvider _timeProvider;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="HotCachePlaybackPathResolver"/> class.
@@ -21,11 +24,12 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     /// <param name="canonicalRoot">The canonical media root.</param>
     /// <param name="hotRoot">The disposable hot-cache root.</param>
     /// <param name="coordinator">The hot-cache coordinator.</param>
-    public HotCachePlaybackPathResolver(string canonicalRoot, string hotRoot, IHotCacheCoordinator coordinator)
+    public HotCachePlaybackPathResolver(string canonicalRoot, string hotRoot, IHotCacheCoordinator coordinator, TimeProvider? timeProvider = null)
     {
         _canonicalRoot = Path.GetFullPath(canonicalRoot);
         _hotRoot = Path.GetFullPath(hotRoot);
         _coordinator = coordinator;
+        _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -83,8 +87,16 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     {
         Resolutions.WithLabels(resolution.IsHot ? "hot" : "cold", FallbackClass(resolution), resolution.Reason).Inc();
         // A resolver may be called per segment. Coalesce only the observation, never its correctness check.
-        if (_reported.TryAdd(request.CanonicalPath + '\u001f' + resolution.Reason, 0))
+        var key = request.CanonicalPath + '\u001f' + resolution.Reason;
+        var now = _timeProvider.GetUtcNow();
+        if (_reported.Count >= MaximumReportedPaths)
         {
+            _reported.Clear();
+        }
+
+        if (!_reported.TryGetValue(key, out var previous) || now - previous >= ObservationThrottleWindow)
+        {
+            _reported[key] = now;
             _coordinator.ObserveResolution(request, resolution);
         }
 
@@ -109,6 +121,11 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     {
         var relative = Path.GetRelativePath(root, path);
         var current = root;
+        if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+        {
+            return true;
+        }
+
         foreach (var part in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
         {
             if (string.IsNullOrEmpty(part) || part == ".")

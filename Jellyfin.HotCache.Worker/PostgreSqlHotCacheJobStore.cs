@@ -16,13 +16,42 @@ public sealed class PostgreSqlHotCacheJobStore(NpgsqlDataSource dataSource) : IH
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false); return await reader.ReadAsync(ct).ConfigureAwait(false) ? Read(reader) : null;
     }
     public Task<bool> RenewAsync(Guid id, string owner, TimeSpan lease, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET lease_expires_at=now()+@lease,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("lease", lease));
-    public Task ProgressAsync(Guid id, string owner, long bytes, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET bytes_copied=@bytes,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("bytes", bytes));
-    public Task CompleteAsync(Guid id, string owner, string? hotPath, string backend, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET state='completed',is_copying=false,hot_path=CASE WHEN kind='eviction' THEN NULL ELSE COALESCE(@hotPath,hot_path) END,backend=CASE WHEN kind='eviction' THEN NULL ELSE @backend END,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("hotPath", (object?)hotPath ?? DBNull.Value), ("backend", backend));
-    public Task FailAsync(Guid id, string owner, string error, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET state=CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,is_copying=false,last_error=@error,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner", id, owner, ct, ("error", error));
+    public Task<bool> ProgressAsync(Guid id, string owner, long bytes, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET bytes_copied=@bytes,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("bytes", bytes));
+    public Task<bool> CompleteAsync(Guid id, string owner, string? hotPath, string backend, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET state='completed',is_copying=false,hot_path=CASE WHEN kind='eviction' THEN NULL ELSE COALESCE(@hotPath,hot_path) END,backend=CASE WHEN kind='eviction' THEN NULL ELSE @backend END,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("hotPath", (object?)hotPath ?? DBNull.Value), ("backend", backend));
+    public Task<bool> FailAsync(Guid id, string owner, string error, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET state=CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,is_copying=false,last_error=@error,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("error", error));
     public async Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken ct)
     { const string sql = "WITH next AS (SELECT id FROM hot_cache_jobs j WHERE state='completed' AND hot_path IS NOT NULL AND NOT is_active AND NOT is_pinned AND NOT is_copying AND priority <= 0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now()) ORDER BY last_access_utc,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE hot_cache_jobs j SET kind='eviction',state='running',is_copying=true,lease_owner=@owner,lease_expires_at=now()+@lease,attempts=j.attempts+1,updated_at=now() FROM next WHERE j.id=next.id RETURNING j.id,j.kind,j.canonical_path,j.hot_path,j.source_length,j.source_modified_utc,j.priority,j.is_active,j.is_pinned,j.is_copying,j.last_access_utc,j.attempts,j.item_id;"; await using var cmd=dataSource.CreateCommand(sql); cmd.Parameters.AddWithValue("owner",workerId);cmd.Parameters.AddWithValue("lease",leaseDuration);await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);return await r.ReadAsync(ct).ConfigureAwait(false)?Read(r):null; }
-    public Task<bool> CanEvictAsync(Guid id, string owner, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs j SET updated_at=now() WHERE id=@id AND state='running' AND lease_owner=@owner AND lease_expires_at>now() AND NOT is_active AND NOT is_pinned AND priority<=0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now())", id, owner, ct);
-    public Task DeferEvictionAsync(Guid id, string owner, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET kind='promotion',state='completed',is_copying=false,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND kind='eviction' AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct);
+    public async Task<bool> TryEvictAsync(Guid id, string owner, Func<CancellationToken, Task> delete, CancellationToken ct)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(ct).ConfigureAwait(false);
+        const string lockSql = "SELECT 1 FROM hot_cache_jobs j WHERE id=@id AND kind='eviction' AND state='running' AND lease_owner=@owner AND lease_expires_at>now() AND NOT is_active AND NOT is_pinned AND priority<=0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now()) FOR UPDATE";
+        await using var lockCommand = new NpgsqlCommand(lockSql, connection, transaction);
+        lockCommand.Parameters.AddWithValue("id", id);
+        lockCommand.Parameters.AddWithValue("owner", owner);
+        if (await lockCommand.ExecuteScalarAsync(ct).ConfigureAwait(false) is null)
+        {
+            await transaction.RollbackAsync(ct).ConfigureAwait(false);
+            return false;
+        }
+
+        await delete(ct).ConfigureAwait(false);
+        await using var complete = new NpgsqlCommand("UPDATE hot_cache_jobs SET state='completed',kind='promotion',is_copying=false,hot_path=NULL,backend=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner", connection, transaction);
+        complete.Parameters.AddWithValue("id", id);
+        complete.Parameters.AddWithValue("owner", owner);
+        var updated = await complete.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1;
+        if (updated)
+        {
+            await transaction.CommitAsync(ct).ConfigureAwait(false);
+        }
+        else
+        {
+            await transaction.RollbackAsync(ct).ConfigureAwait(false);
+        }
+
+        return updated;
+    }
+    public Task<bool> DeferEvictionAsync(Guid id, string owner, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET kind='promotion',state='completed',is_copying=false,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND kind='eviction' AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct);
     public async Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken ct)
     { const string sql="WITH retained_events AS (DELETE FROM hot_cache_events WHERE created_at < now() - interval '30 days' RETURNING id), retained_history AS (DELETE FROM hot_cache_admin_history WHERE created_at < now() - interval '30 days' RETURNING id) SELECT count(*) FILTER (WHERE state IN ('pending','running')), COALESCE(EXTRACT(EPOCH FROM now()-min(created_at) FILTER (WHERE state IN ('pending','running'))),0), COALESCE(EXTRACT(EPOCH FROM now()-min(updated_at) FILTER (WHERE state='running' AND lease_expires_at>now())),0), pg_total_relation_size('hot_cache_events') + pg_total_relation_size('hot_cache_jobs') + pg_total_relation_size('hot_cache_admin_history') + pg_total_relation_size('hot_cache_interests') + pg_total_relation_size('hot_cache_playback_leases') + pg_total_relation_size('hot_cache_backend_observations'), (SELECT count(*) FROM hot_cache_events), (SELECT count(*) FROM hot_cache_events WHERE kind='validate-or-repair' AND detail='hot-miss' AND created_at > now() - interval '15 minutes'), (SELECT count(*) FROM hot_cache_events WHERE kind='validate-or-repair' AND detail <> 'hot-miss' AND created_at > now() - interval '15 minutes') FROM hot_cache_jobs"; await using var cmd=dataSource.CreateCommand(sql); await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false); await r.ReadAsync(ct).ConfigureAwait(false); return new(r.GetInt64(0), TimeSpan.FromSeconds(r.GetDouble(1)), TimeSpan.FromSeconds(r.GetDouble(2)), r.GetInt64(3), r.GetInt64(4), r.GetInt64(5), r.GetInt64(6)); }
     public async Task EventAsync(Guid id, string kind, string detail, CancellationToken ct) { await using var cmd = dataSource.CreateCommand("INSERT INTO hot_cache_events(job_id,kind,detail) VALUES(@id,@kind,@detail)"); cmd.Parameters.AddWithValue("id", id); cmd.Parameters.AddWithValue("kind", kind); cmd.Parameters.AddWithValue("detail", detail); await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false); }

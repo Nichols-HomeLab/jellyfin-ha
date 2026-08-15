@@ -302,20 +302,20 @@ public sealed class HotCacheWorkerTests : IDisposable
             return Task.FromResult(true);
         }
 
-        public Task ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<bool> ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken) => Task.FromResult(true);
 
-        public Task CompleteAsync(Guid jobId, string workerId, string? hotPath, string backend, CancellationToken cancellationToken)
+        public Task<bool> CompleteAsync(Guid jobId, string workerId, string? hotPath, string backend, CancellationToken cancellationToken)
         {
             CompletedHotPath = hotPath;
             _next = null;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
-        public Task FailAsync(Guid jobId, string workerId, string error, CancellationToken cancellationToken)
+        public Task<bool> FailAsync(Guid jobId, string workerId, string error, CancellationToken cancellationToken)
         {
             Failures++;
             _next = null;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
@@ -329,12 +329,26 @@ public sealed class HotCacheWorkerTests : IDisposable
             return Task.FromResult(candidate);
         }
 
-        public Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken) => Task.FromResult(CanEvict);
+        public Task<bool> TryEvictAsync(Guid jobId, string workerId, Func<CancellationToken, Task> delete, CancellationToken cancellationToken)
+        {
+            if (!CanEvict)
+            {
+                return Task.FromResult(false);
+            }
 
-        public Task DeferEvictionAsync(Guid jobId, string workerId, CancellationToken cancellationToken)
+            return DeleteAsync(delete, cancellationToken);
+        }
+
+        private static async Task<bool> DeleteAsync(Func<CancellationToken, Task> delete, CancellationToken cancellationToken)
+        {
+            await delete(cancellationToken);
+            return true;
+        }
+
+        public Task<bool> DeferEvictionAsync(Guid jobId, string workerId, CancellationToken cancellationToken)
         {
             DeferredEvictions++;
-            return Task.CompletedTask;
+            return Task.FromResult(true);
         }
 
         public Task<HotCacheQueueSnapshot> SnapshotAsync(CancellationToken cancellationToken)

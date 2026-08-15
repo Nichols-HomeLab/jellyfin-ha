@@ -54,7 +54,12 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <inheritdoc />
     public async Task RecordPlaybackAsync(PlaybackProgressEventArgs playback, HotCachePlaybackEvent lifecycle, CancellationToken cancellationToken)
     {
-        if (playback.Item is null || playback.Users is null || playback.Users.Count == 0 || !IsCanaryItem(playback.Item))
+        if (playback.Item is not MediaBrowser.Controller.Entities.TV.Episode episode
+            || string.IsNullOrWhiteSpace(episode.Path)
+            || !Path.IsPathFullyQualified(episode.Path)
+            || playback.Users is null
+            || playback.Users.Count == 0
+            || !IsCanaryItem(episode))
         {
             return;
         }
@@ -78,6 +83,8 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             }
             else
             {
+                // Serializes playback activation with the worker's short unlink transaction.
+                await ExecuteAsync(connection, transaction, "SELECT 1 FROM hot_cache_jobs WHERE item_id=@item FOR UPDATE", cancellationToken, ("item", playback.Item.Id)).ConfigureAwait(false);
                 if (!string.IsNullOrWhiteSpace(playback.PlaySessionId))
                 {
                     await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_playback_leases(play_session_id,item_id,expires_at_utc) VALUES(@session,@item,now()+@lease) ON CONFLICT(play_session_id) DO UPDATE SET item_id=excluded.item_id,expires_at_utc=excluded.expires_at_utc,updated_at_utc=now()", cancellationToken, ("session", playback.PlaySessionId), ("item", playback.Item.Id), ("lease", PlaybackLeaseLifetime)).ConfigureAwait(false);
@@ -136,8 +143,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <returns>A task that completes when the schema is available.</returns>
     public async Task EnsureMigratedAsync(CancellationToken cancellationToken)
     {
-        await using var command = _dataSource.CreateCommand(HotCacheSchema.Sql);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await PostgreSqlHotCacheSchemaMigrator.ApplyAsync(_dataSource, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Persists bounded resolver observations without adding a database round trip to playback.</summary>
@@ -242,7 +248,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 
     private async Task RecordCandidateAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, Guid userId, string reason, int priority, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(item.Path) || !IsCanaryItem(item))
+        if (item is not MediaBrowser.Controller.Entities.TV.Episode || string.IsNullOrWhiteSpace(item.Path) || !Path.IsPathFullyQualified(item.Path) || !IsCanaryItem(item))
         {
             return;
         }

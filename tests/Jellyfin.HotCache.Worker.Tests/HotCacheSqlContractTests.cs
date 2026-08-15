@@ -30,23 +30,26 @@ public sealed class HotCacheSqlContractTests
 
         Contains("NOT is_active AND NOT is_pinned AND NOT is_copying AND priority <= 0", store);
         Contains("l.expires_at_utc>now()", store);
-        Contains("CanEvictAsync", store);
+        Contains("TryEvictAsync", store);
+        Contains("FOR UPDATE", store);
         Contains("state='running' AND lease_owner=@owner AND lease_expires_at>now()", store);
         Contains("DeferEvictionAsync", store);
     }
 
     [Fact]
-    public void RetentionAndSchemaMigrationAreIdempotentAndBounded()
+    public void RetentionAndSchemaMigrationsAreOrderedAndLedgerGuarded()
     {
         var store = Read("Jellyfin.HotCache.Worker/PostgreSqlHotCacheJobStore.cs");
-        var schema = HotCacheSchema.Sql;
+        var migrator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheSchemaMigrator.cs");
 
         Contains("DELETE FROM hot_cache_events WHERE created_at < now() - interval '30 days'", store);
         Contains("DELETE FROM hot_cache_admin_history WHERE created_at < now() - interval '30 days'", store);
-        Contains("CREATE TABLE IF NOT EXISTS hot_cache_schema_migrations", schema);
-        Contains("ADD COLUMN IF NOT EXISTS", schema);
-        Contains("CREATE UNIQUE INDEX IF NOT EXISTS hot_cache_jobs_item_unique_idx", schema);
-        Contains("INSERT INTO hot_cache_schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING", schema);
+        Contains("CREATE TABLE IF NOT EXISTS hot_cache_schema_migrations", HotCacheSchema.CreateLedgerSql);
+        Assert.Equal([1, 2, 3, 4, 5], HotCacheSchema.Migrations.Select(migration => migration.Version));
+        Assert.Contains("DROP INDEX IF EXISTS hot_cache_jobs_claim_v2_idx", HotCacheSchema.Migrations.Single(migration => migration.Version == 5).Sql, StringComparison.Ordinal);
+        Contains("SELECT 1 FROM hot_cache_schema_migrations WHERE version=@version", migrator);
+        Contains("INSERT INTO hot_cache_schema_migrations(version) VALUES (@version)", migrator);
+        Contains("pg_advisory_xact_lock", migrator);
     }
 
     private static string Read(string relativePath)

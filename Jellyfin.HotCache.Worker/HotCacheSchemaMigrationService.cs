@@ -13,8 +13,7 @@ public sealed class HotCacheSchemaMigrationService(NpgsqlDataSource dataSource) 
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        await using var command = dataSource.CreateCommand(HotCacheSchema.Sql);
-        await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        await PostgreSqlHotCacheSchemaMigrator.ApplyAsync(dataSource, cancellationToken).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

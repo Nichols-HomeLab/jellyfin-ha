@@ -369,6 +369,7 @@ namespace Emby.Server.Implementations.Library
 
                     var canonicalPath = source.Path;
                     var resolution = _playbackPathResolver.Resolve(new PlaybackPathRequest(canonicalPath, source.Size, PlaybackPathPurpose.MainMedia));
+                    source.CanonicalPath = canonicalPath;
                     source.Path = resolution.Path;
                 }
             }

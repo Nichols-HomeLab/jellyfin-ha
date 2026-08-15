@@ -420,7 +420,7 @@ namespace MediaBrowser.MediaEncoding.Encoder
         {
             var extractChapters = request.MediaType == DlnaProfileType.Video && request.ExtractChapters;
             var extraArgs = GetExtraArguments(request);
-            var canonicalPath = request.MediaSource.Path;
+            var canonicalPath = request.MediaSource.CanonicalPath ?? request.MediaSource.Path;
             // This probe selects the bytes that FFmpeg will later consume. Keep it on the
             // transcode seam so a missing or invalid hot copy falls back before FFmpeg starts.
             var resolvedPath = _playbackPathResolver?.Resolve(new PlaybackPathRequest(canonicalPath, request.MediaSource.Size, PlaybackPathPurpose.TranscodeInput)).Path ?? canonicalPath;
@@ -1277,7 +1277,11 @@ namespace MediaBrowser.MediaEncoding.Encoder
 
         /// <inheritdoc />
         public string GetInputPathArgument(EncodingJobInfo state)
-            => GetInputPathArgument(state.MediaPath, state.MediaSource);
+        {
+            var canonicalPath = state.MediaSource.CanonicalPath ?? state.MediaPath;
+            var inputPath = _playbackPathResolver?.Resolve(new PlaybackPathRequest(canonicalPath, state.MediaSource.Size, PlaybackPathPurpose.TranscodeInput)).Path ?? canonicalPath;
+            return GetInputPathArgument(inputPath, state.MediaSource);
+        }
 
         /// <inheritdoc />
         public string GetInputPathArgument(string path, MediaSourceInfo mediaSource)

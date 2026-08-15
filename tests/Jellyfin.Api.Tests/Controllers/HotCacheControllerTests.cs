@@ -61,6 +61,10 @@ public sealed class HotCacheControllerTests
         Assert.Contains("hotCacheHistoryKind", page.Content, StringComparison.Ordinal);
         Assert.Contains("confirmBulkEviction", page.Content, StringComparison.Ordinal);
         Assert.Contains("Used %", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheLookahead", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheReserve", page.Content, StringComparison.Ordinal);
+        Assert.Contains("maxLookahead", page.Content, StringComparison.Ordinal);
+        Assert.Contains("reserveFreeBytes", page.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
     }
 
