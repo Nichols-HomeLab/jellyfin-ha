@@ -89,7 +89,9 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     public ContentResult Page() => Content(PageHtml, "text/html");
 
     private static string GetPageHtml() => """
-        <div id="hotCachePage" class="page type-interior">
+        <div id="hotCachePage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-button,emby-checkbox,emby-input,emby-select">
+          <div data-role="content">
+            <div class="content-primary">
           <h1>Jellyfin Hot Cache</h1><p id="hotCacheStatus">Loading shared coordinator state…</p>
           <label>Backend <select id="hotCacheBackend"><option value="unraid-temp">Unraid /temp</option><option value="cephfs">CephFS 300 GiB</option></select></label>
           <label><input id="hotCachePaused" type="checkbox"> Pause</label>
@@ -112,6 +114,8 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
           byId('hotCacheSave').onclick=async()=>{const settings={backend:byId('hotCacheBackend').value,paused:byId('hotCachePaused').checked,highWatermark:Number(byId('hotCacheHigh').value),lowWatermark:Number(byId('hotCacheLow').value),maxLookahead:Number(byId('hotCacheLookahead').value),reserveFreeBytes:Number(byId('hotCacheReserve').value)};await api.ajax({url:root+'/Settings',type:'PUT',contentType:'application/json',data:JSON.stringify(settings)});load();};
           document.querySelectorAll('[data-hot-cache-action]').forEach(button=>button.onclick=async()=>{const kind=button.dataset.hotCacheAction,id=byId('hotCacheItem').value||null,confirmBulkEviction=kind==='evict'&&!id&&window.confirm('Evict every eligible item?');if(kind==='evict'&&!id&&!confirmBulkEviction)return;await api.ajax({url:root+'/Actions',type:'POST',contentType:'application/json',data:JSON.stringify({kind,itemId:id,confirmBulkEviction})});load();});byId('hotCacheHistoryKind').onchange=load;load();})();
           </script>
+            </div>
+          </div>
         </div>
         """;
 }
