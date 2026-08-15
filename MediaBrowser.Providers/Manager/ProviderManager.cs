@@ -127,6 +127,19 @@ namespace MediaBrowser.Providers.Manager
         /// <summary>
         /// Initializes a new instance of the <see cref="ProviderManager"/> class.
         /// </summary>
+        /// <param name="httpClientFactory">The HTTP client factory.</param>
+        /// <param name="subtitleManager">The subtitle manager.</param>
+        /// <param name="configurationManager">The server configuration manager.</param>
+        /// <param name="libraryMonitor">The library monitor.</param>
+        /// <param name="logger">The logger.</param>
+        /// <param name="fileSystem">The filesystem.</param>
+        /// <param name="appPaths">The server application paths.</param>
+        /// <param name="libraryManager">The library manager.</param>
+        /// <param name="baseItemManager">The base item manager.</param>
+        /// <param name="lyricManager">The lyric manager.</param>
+        /// <param name="memoryCache">The memory cache.</param>
+        /// <param name="mediaSegmentManager">The media segment manager.</param>
+        /// <param name="catalogOwnership">The catalog ownership coordinator.</param>
         public ProviderManager(
             IHttpClientFactory httpClientFactory,
             ISubtitleManager subtitleManager,

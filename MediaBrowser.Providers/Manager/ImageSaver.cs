@@ -61,6 +61,11 @@ namespace MediaBrowser.Providers.Manager
         /// <summary>
         /// Initializes a new instance of the <see cref="ImageSaver"/> class.
         /// </summary>
+        /// <param name="config">The server configuration manager.</param>
+        /// <param name="libraryMonitor">The library monitor.</param>
+        /// <param name="fileSystem">The filesystem.</param>
+        /// <param name="logger">The logger.</param>
+        /// <param name="catalogOwnership">The catalog ownership coordinator.</param>
         public ImageSaver(
             IServerConfigurationManager config,
             ILibraryMonitor libraryMonitor,
