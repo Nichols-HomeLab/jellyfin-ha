@@ -22,8 +22,14 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<HotCacheAdministrationSnapshot>> Get([FromQuery] string? historyKind, CancellationToken cancellationToken)
     {
-        try { return Ok(await administration.GetSnapshotAsync(historyKind, cancellationToken).ConfigureAwait(false)); }
-        catch (ArgumentException) { return BadRequest("Unknown history filter."); }
+        try
+        {
+            return Ok(await administration.GetSnapshotAsync(historyKind, cancellationToken).ConfigureAwait(false));
+        }
+        catch (ArgumentException)
+        {
+            return BadRequest("Unknown history filter.");
+        }
     }
 
     /// <summary>Updates the selected backend, pause state and validated watermarks.</summary>
@@ -32,8 +38,15 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult> UpdateSettings([FromBody] HotCacheSettings settings, CancellationToken cancellationToken)
     {
-        try { await administration.UpdateSettingsAsync(settings, cancellationToken).ConfigureAwait(false); return NoContent(); }
-        catch (ArgumentException exception) { return BadRequest(exception.Message); }
+        try
+        {
+            await administration.UpdateSettingsAsync(settings, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(exception.Message);
+        }
     }
 
     /// <summary>Queues an administrator command for existing inventory only.</summary>
@@ -43,9 +56,19 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult> Action([FromBody] HotCacheAction action, CancellationToken cancellationToken)
     {
-        try { await administration.QueueActionAsync(action, cancellationToken).ConfigureAwait(false); return NoContent(); }
-        catch (KeyNotFoundException) { return NotFound(); }
-        catch (ArgumentException exception) { return BadRequest(exception.Message); }
+        try
+        {
+            await administration.QueueActionAsync(action, cancellationToken).ConfigureAwait(false);
+            return NoContent();
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(exception.Message);
+        }
     }
 
     /// <summary>Returns the dashboard view, which is intentionally served only to Jellyfin administrators.</summary>

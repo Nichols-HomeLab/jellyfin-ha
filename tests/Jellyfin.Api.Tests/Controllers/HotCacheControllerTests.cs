@@ -9,7 +9,7 @@ using Xunit;
 
 namespace Jellyfin.Api.Tests.Controllers;
 
-public class HotCacheControllerTests
+public sealed class HotCacheControllerTests
 {
     [Fact]
     public async Task UpdateSettings_InvalidWatermarks_ReturnsBadRequest()
@@ -50,10 +50,24 @@ public class HotCacheControllerTests
     private sealed class Store : IHotCacheAdministration
     {
         public bool RejectAction { get; init; }
+
         public bool RejectSettings { get; init; }
+
         public HotCacheAction? Action { get; private set; }
+
         public Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken) => Task.FromResult(new HotCacheAdministrationSnapshot(new HotCacheSettings("unraid-temp", false, .9, .75), [], [], [], []));
+
         public Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken) => RejectSettings ? throw new ArgumentException() : Task.CompletedTask;
-        public Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken) { if (RejectAction) throw new ArgumentException(); Action = action; return Task.CompletedTask; }
+
+        public Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken)
+        {
+            if (RejectAction)
+            {
+                throw new ArgumentException();
+            }
+
+            Action = action;
+            return Task.CompletedTask;
+        }
     }
 }
