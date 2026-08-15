@@ -360,18 +360,7 @@ namespace Emby.Server.Implementations.Library
             // library metadata remain canonical, so a hot-tier failure is always cold-safe.
             if (!enablePathSubstitution)
             {
-                foreach (var source in sources)
-                {
-                    if (source.Protocol != MediaProtocol.File || string.IsNullOrEmpty(source.Path))
-                    {
-                        continue;
-                    }
-
-                    var canonicalPath = source.Path;
-                    var resolution = _playbackPathResolver.Resolve(new PlaybackPathRequest(canonicalPath, source.Size, PlaybackPathPurpose.MainMedia));
-                    source.CanonicalPath = canonicalPath;
-                    source.Path = resolution.Path;
-                }
+                ApplyPlaybackPathResolution(sources, _playbackPathResolver);
             }
 
             if (user is not null)
@@ -393,6 +382,21 @@ namespace Emby.Server.Implementations.Library
             }
 
             return sources;
+        }
+
+        /// <summary>Applies a transient validated playback path without mutating canonical metadata.</summary>
+        /// <param name="sources">The transient media sources.</param>
+        /// <param name="playbackPathResolver">The hot-cache path resolver.</param>
+        internal static void ApplyPlaybackPathResolution(IEnumerable<MediaSourceInfo> sources, IPlaybackPathResolver playbackPathResolver)
+        {
+            foreach (var source in sources)
+            {
+                if (source.Protocol != MediaProtocol.File || string.IsNullOrEmpty(source.Path)) continue;
+                var canonicalPath = source.CanonicalPath ?? source.Path;
+                var resolution = playbackPathResolver.Resolve(new PlaybackPathRequest(canonicalPath, source.Size, PlaybackPathPurpose.MainMedia));
+                source.CanonicalPath = canonicalPath;
+                source.Path = resolution.Path;
+            }
         }
 
         private IReadOnlyList<string> NormalizeLanguage(string language)
