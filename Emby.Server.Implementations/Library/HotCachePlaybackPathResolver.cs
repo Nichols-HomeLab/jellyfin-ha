@@ -24,6 +24,7 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     /// <param name="canonicalRoot">The canonical media root.</param>
     /// <param name="hotRoot">The disposable hot-cache root.</param>
     /// <param name="coordinator">The hot-cache coordinator.</param>
+    /// <param name="timeProvider">The optional time provider used for observation throttling.</param>
     public HotCachePlaybackPathResolver(string canonicalRoot, string hotRoot, IHotCacheCoordinator coordinator, TimeProvider? timeProvider = null)
         : this(canonicalRoot, hotRoot, new Lazy<IHotCacheCoordinator>(() => coordinator), timeProvider)
     {
