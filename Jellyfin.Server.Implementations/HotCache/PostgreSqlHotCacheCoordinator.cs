@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -21,6 +22,8 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private readonly NpgsqlDataSource _dataSource;
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
+    private readonly IUserDataManager _userDataManager;
+    private readonly HashSet<Guid>? _includedUsers;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
     /// <summary>
@@ -29,11 +32,14 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <param name="dataSource">The shared PostgreSQL data source.</param>
     /// <param name="userManager">The Jellyfin user source.</param>
     /// <param name="libraryManager">The Jellyfin library query source.</param>
-    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager)
+    /// <param name="userDataManager">The per-user playback state source.</param>
+    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IUserDataManager userDataManager)
     {
         _dataSource = dataSource;
         _userManager = userManager;
         _libraryManager = libraryManager;
+        _userDataManager = userDataManager;
+        _includedUsers = ParseIncludedUsers(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_INCLUDED_USER_IDS"));
     }
 
     /// <inheritdoc />
@@ -74,7 +80,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             return;
         }
 
-        foreach (var user in _userManager.GetUsers())
+        foreach (var user in _userManager.GetUsers().Where(IsIncluded))
         {
             await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
@@ -101,8 +107,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             CREATE TABLE IF NOT EXISTS hot_cache_playback_leases (play_session_id text PRIMARY KEY, item_id uuid NOT NULL, expires_at_utc timestamptz NOT NULL, updated_at_utc timestamptz NOT NULL DEFAULT now());
             CREATE INDEX IF NOT EXISTS hot_cache_playback_leases_item_expiry_idx ON hot_cache_playback_leases(item_id,expires_at_utc);
             ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS item_id uuid;
-            ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS source_mtime_utc timestamptz;
-            CREATE INDEX IF NOT EXISTS hot_cache_jobs_item_idx ON hot_cache_jobs(item_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS hot_cache_jobs_item_unique_idx ON hot_cache_jobs(item_id) WHERE item_id IS NOT NULL;
             """;
         await using var command = _dataSource.CreateCommand(sql);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
@@ -115,10 +120,15 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     {
         while (_observations.Reader.TryRead(out var observation))
         {
-            await using var command = _dataSource.CreateCommand("INSERT INTO hot_cache_events(job_id,kind,detail) SELECT id,@kind,@detail FROM hot_cache_jobs WHERE canonical_path=@path ORDER BY updated_at DESC LIMIT 1");
+            await using var command = _dataSource.CreateCommand("""
+                WITH target AS (SELECT id FROM hot_cache_jobs WHERE canonical_path=@path ORDER BY updated_at DESC LIMIT 1),
+                repair AS (UPDATE hot_cache_jobs SET kind='promotion',state='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=(SELECT id FROM target) AND @repair AND state <> 'running' RETURNING id)
+                INSERT INTO hot_cache_events(job_id,kind,detail) SELECT id,@kind,@detail FROM target;
+                """);
             command.Parameters.AddWithValue("kind", observation.IsHot ? "playback-hit" : "validate-or-repair");
             command.Parameters.AddWithValue("detail", observation.Reason);
             command.Parameters.AddWithValue("path", observation.CanonicalPath);
+            command.Parameters.AddWithValue("repair", !observation.IsHot);
             await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
@@ -156,11 +166,23 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             await RecordCandidateAsync(connection, transaction, item, user.Id, "continue-watching", 90, cancellationToken).ConfigureAwait(false);
         }
 
+        var reconciledSeries = new HashSet<Guid>();
         foreach (var item in recent)
         {
-            await RecordCandidateAsync(connection, transaction, item, user.Id, "recent-series", 10, cancellationToken).ConfigureAwait(false);
+            var userData = _userDataManager.GetUserData(user, item);
+            if (userData?.LastPlayedDate is not DateTime lastPlayed || lastPlayed < DateTime.UtcNow.Subtract(PlaybackInterestLifetime))
+            {
+                continue;
+            }
+
             if (item is MediaBrowser.Controller.Entities.TV.Episode episode)
             {
+                if (!reconciledSeries.Add(episode.SeriesId))
+                {
+                    continue;
+                }
+
+                await RecordCandidateAsync(connection, transaction, item, user.Id, "recent-series", 10, cancellationToken).ConfigureAwait(false);
                 var following = _libraryManager.GetItemList(new InternalItemsQuery(user)
                 {
                     IncludeItemTypes = [BaseItemKind.Episode],
@@ -193,7 +215,22 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static Task UpsertJobAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, int priority, CancellationToken cancellationToken)
     {
         var source = new FileInfo(item.Path);
-        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority) ON CONFLICT(item_id) DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority));
+        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority));
+    }
+
+    private bool IsIncluded(Jellyfin.Database.Implementations.Entities.User user) => _includedUsers is null || _includedUsers.Contains(user.Id);
+
+    private static HashSet<Guid>? ParseIncludedUsers(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        var users = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(Guid.Parse)
+            .ToHashSet();
+        return users;
     }
 
     private readonly record struct ResolutionObservation(string CanonicalPath, string Reason, bool IsHot);
