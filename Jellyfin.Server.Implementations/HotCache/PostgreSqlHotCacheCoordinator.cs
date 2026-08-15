@@ -156,7 +156,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             await using var command = _dataSource.CreateCommand("""
                 WITH target AS (SELECT id FROM hot_cache_jobs WHERE canonical_path=@path ORDER BY updated_at DESC LIMIT 1),
                 touch AS (UPDATE hot_cache_jobs SET last_access_utc=now(),updated_at=now() WHERE id=(SELECT id FROM target) AND @hot RETURNING id),
-                repair AS (UPDATE hot_cache_jobs SET kind='promotion',state='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=(SELECT id FROM target) AND @repair AND state <> 'running' RETURNING id)
+                repair AS (UPDATE hot_cache_jobs SET kind='promotion',state='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=(SELECT id FROM target) AND @repair AND state <> 'running' AND EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=hot_cache_jobs.item_id AND interest.expires_at_utc>now()) RETURNING id)
                 INSERT INTO hot_cache_events(job_id,kind,detail) SELECT id,@kind,@detail FROM target;
                 """);
             command.Parameters.AddWithValue("kind", observation.IsHot ? "playback-hit" : "validate-or-repair");
@@ -241,7 +241,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     // lookahead from the currently selected backend, leaving the reserve intact.
     private static async Task<int> GetEffectiveLookaheadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
-        const string sql = "SELECT LEAST(s.max_lookahead, GREATEST(0, FLOOR(GREATEST(0, COALESCE((SELECT available_bytes FROM hot_cache_backend_observations WHERE backend=s.backend AND healthy ORDER BY observed_at DESC LIMIT 1), 0) - s.reserve_free_bytes) / GREATEST(COALESCE((SELECT AVG(source_length) FROM hot_cache_jobs WHERE source_length > 0), 1), 1)))::integer FROM hot_cache_settings s WHERE s.id=true";
+        const string sql = "SELECT LEAST(s.max_lookahead::numeric, GREATEST(0::numeric, FLOOR(GREATEST(0, COALESCE((SELECT available_bytes FROM hot_cache_backend_observations WHERE backend=s.backend AND healthy ORDER BY observed_at DESC LIMIT 1), 0) - s.reserve_free_bytes) / GREATEST(COALESCE((SELECT AVG(source_length) FROM hot_cache_jobs WHERE source_length > 0), 1), 1))))::integer FROM hot_cache_settings s WHERE s.id=true";
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         return (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as int?) ?? 0;
     }

@@ -1,5 +1,7 @@
 using System;
 using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 using Emby.Server.Implementations.Library;
 using Emby.Server.Implementations.MediaEncoding;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,6 +13,58 @@ namespace Jellyfin.Server.Implementations.Tests.Library;
 
 public sealed class RedisCatalogChangeNotifierTests
 {
+    [Fact]
+    public async Task SubscriptionFailure_DoesNotBlockStartupAndRecoversAsynchronously()
+    {
+        var connection = new Mock<IConnectionMultiplexer>();
+        var subscriber = new Mock<ISubscriber>();
+        var database = new Mock<IDatabase>();
+        var retryRequested = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var allowRetry = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var synchronized = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var subscriptionAttempts = 0;
+        connection.Setup(value => value.GetSubscriber(It.IsAny<object>())).Returns(subscriber.Object);
+        connection.Setup(value => value.GetDatabase(It.IsAny<int>(), It.IsAny<object>())).Returns(database.Object);
+        database.Setup(value => value.StringGetAsync(It.IsAny<RedisKey>(), CommandFlags.None)).ReturnsAsync(RedisValue.Null);
+        subscriber
+            .Setup(value => value.SubscribeAsync(It.IsAny<RedisChannel>(), CommandFlags.None))
+            .Returns((RedisChannel _, CommandFlags _) =>
+            {
+                subscriptionAttempts++;
+                if (subscriptionAttempts == 1)
+                {
+                    throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "test subscription failure");
+                }
+
+                synchronized.TrySetResult();
+                return Task.FromResult(new Mock<ChannelMessageQueue>().Object);
+            });
+
+        using var redis = new RedisConnectionManager(
+            () => connection.Object,
+            NullLogger<RedisConnectionManager>.Instance);
+
+        RedisCatalogChangeNotifier? notifier = null;
+        var exception = Record.Exception(
+            () => notifier = new RedisCatalogChangeNotifier(
+                redis,
+                NullLogger<RedisCatalogChangeNotifier>.Instance,
+                cancellationToken =>
+                {
+                    retryRequested.TrySetResult();
+                    return allowRetry.Task.WaitAsync(cancellationToken);
+                }));
+
+        Assert.Null(exception);
+        using (notifier!)
+        {
+            await retryRequested.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            allowRetry.TrySetResult();
+            await synchronized.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(2, subscriptionAttempts);
+        }
+    }
+
     [Fact]
     public void PropagationMetrics_UseTheGitOpsMonitorContract()
     {

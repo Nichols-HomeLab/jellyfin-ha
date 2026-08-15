@@ -85,7 +85,9 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
             }
         }
 
-        const string sql = "UPDATE hot_cache_jobs j SET kind=CASE WHEN @action='promote' THEN 'promotion' WHEN @action='evict' THEN 'eviction' ELSE j.kind END,state='pending',attempts=0,last_error=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE (@id IS NULL OR j.id=@id) AND (@action <> 'promote' OR j.state <> 'running') AND (@action <> 'retry' OR j.state='failed') AND (@action <> 'evict' OR (j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_active AND NOT j.is_pinned AND j.priority <= 0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now())))";
+        const string explicitEviction = "WITH eligible AS (SELECT j.id,j.item_id FROM hot_cache_jobs j WHERE j.id=@id AND j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_active AND NOT j.is_pinned AND NOT j.is_copying AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now()) FOR UPDATE), cleared AS (DELETE FROM hot_cache_interests i USING eligible e WHERE i.item_id=e.item_id) UPDATE hot_cache_jobs j SET kind='eviction',state='pending',priority=0,attempts=0,last_error=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() FROM eligible e WHERE j.id=e.id";
+        const string general = "UPDATE hot_cache_jobs j SET kind=CASE WHEN @action='promote' THEN 'promotion' WHEN @action='evict' THEN 'eviction' ELSE j.kind END,state='pending',attempts=0,last_error=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE (@id IS NULL OR j.id=@id) AND (@action <> 'promote' OR j.state <> 'running') AND (@action <> 'retry' OR j.state='failed') AND (@action <> 'evict' OR (j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_active AND NOT j.is_pinned AND j.priority <= 0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now())))";
+        var sql = action.Kind == "evict" && action.ItemId is not null ? explicitEviction : general;
         await using var command = dataSource.CreateCommand(sql);
         command.Parameters.AddWithValue("id", (object?)action.ItemId ?? DBNull.Value);
         command.Parameters.AddWithValue("action", action.Kind);
@@ -153,7 +155,9 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         const string sql = "WITH history AS (SELECT id,kind,detail,created_at FROM hot_cache_admin_history UNION ALL SELECT -id,CASE WHEN kind IN ('published','already-published') THEN 'copied' WHEN kind='evicted' THEN 'evicted' WHEN kind='failed' THEN 'failed' ELSE kind END,detail,created_at FROM hot_cache_events WHERE kind IN ('published','already-published','evicted','failed')) SELECT id,kind,detail,created_at FROM history WHERE (@kind IS NULL OR kind=@kind) ORDER BY created_at DESC,id DESC LIMIT 500";
         var results = new List<HotCacheHistoryEntry>();
         await using var command = dataSource.CreateCommand(sql);
-        command.Parameters.AddWithValue("kind", (object?)kind ?? DBNull.Value);
+        // PostgreSQL cannot infer a type for a NULL-only predicate parameter.
+        // The unfiltered administrator view deliberately passes null here.
+        command.Parameters.Add("kind", NpgsqlTypes.NpgsqlDbType.Text).Value = (object?)kind ?? DBNull.Value;
         await using var reader = await command.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await reader.ReadAsync(ct).ConfigureAwait(false))
         {

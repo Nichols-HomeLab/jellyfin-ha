@@ -37,7 +37,7 @@ jobs:
       JELLYFIN_CATALOG_TEST_POSTGRES: Host=postgres;Port=5432;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test
       JELLYFIN_TEST_REDIS: redis:6379
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install .NET SDK
         run: |
@@ -66,7 +66,7 @@ jobs:
   run-tests:
     runs-on: [self-hosted, k3s, linux, amd64]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Install .NET — use GITHUB_ENV (not GITHUB_PATH) to set PATH because
       # ARC self-hosted runner pods don't pick up GITHUB_PATH between steps.
@@ -105,7 +105,7 @@ jobs:
   run-phase5-tests:
     runs-on: [self-hosted, k3s, linux, amd64]
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install .NET SDK
         run: |

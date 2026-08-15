@@ -561,7 +561,10 @@ namespace Emby.Server.Implementations
                 var enabled = bool.TryParse(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_ENABLED"), out var hotCacheEnabled) && hotCacheEnabled;
                 return !enabled || string.IsNullOrWhiteSpace(canonicalRoot) || string.IsNullOrWhiteSpace(hotRoot)
                     ? new CanonicalPlaybackPathResolver()
-                    : new HotCachePlaybackPathResolver(canonicalRoot, hotRoot, sp.GetRequiredService<IHotCacheCoordinator>());
+                    : new HotCachePlaybackPathResolver(
+                        canonicalRoot,
+                        hotRoot,
+                        new Lazy<IHotCacheCoordinator>(() => sp.GetRequiredService<IHotCacheCoordinator>()));
             });
 
             serviceCollection.AddSingleton<IMediaSourceManager, MediaSourceManager>();

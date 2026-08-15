@@ -12,6 +12,17 @@ namespace Jellyfin.Api.Tests.Controllers;
 public sealed class HotCacheControllerTests
 {
     [Fact]
+    public async Task Get_WithoutHistoryFilter_ForwardsNullFilter()
+    {
+        var store = new Store();
+
+        var result = await new HotCacheController(store).Get(null, CancellationToken.None);
+
+        Assert.NotNull(result.Result);
+        Assert.Null(store.HistoryKind);
+    }
+
+    [Fact]
     public async Task UpdateSettings_InvalidWatermarks_ReturnsBadRequest()
     {
         var controller = new HotCacheController(new Store { RejectSettings = true });
@@ -55,6 +66,10 @@ public sealed class HotCacheControllerTests
     {
         var page = new HotCacheController(new Store()).Page();
         Assert.Contains("Jellyfin Hot Cache", page.Content, StringComparison.Ordinal);
+        Assert.Contains("data-role=\"page\"", page.Content, StringComparison.Ordinal);
+        Assert.Contains("pluginConfigurationPage", page.Content, StringComparison.Ordinal);
+        Assert.Contains("data-role=\"content\"", page.Content, StringComparison.Ordinal);
+        Assert.Contains("content-primary", page.Content, StringComparison.Ordinal);
         Assert.Contains("Unraid /temp", page.Content, StringComparison.Ordinal);
         Assert.Contains("CephFS 300 GiB", page.Content, StringComparison.Ordinal);
         Assert.Contains("Inventory by series", page.Content, StringComparison.Ordinal);
@@ -76,7 +91,13 @@ public sealed class HotCacheControllerTests
 
         public HotCacheAction? Action { get; private set; }
 
-        public Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken) => Task.FromResult(new HotCacheAdministrationSnapshot(new HotCacheSettings("unraid-temp", false, .9, .75), [], [], [], []));
+        public string? HistoryKind { get; private set; }
+
+        public Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken)
+        {
+            HistoryKind = historyKind;
+            return Task.FromResult(new HotCacheAdministrationSnapshot(new HotCacheSettings("unraid-temp", false, .9, .75), [], [], [], []));
+        }
 
         public Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken) => RejectSettings ? throw new ArgumentException() : Task.CompletedTask;
 
