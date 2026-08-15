@@ -2,6 +2,26 @@
 set -eu
 
 render_device="${JELLYFIN_QSV_RENDER_DEVICE:-/dev/dri/renderD128}"
+hardware_profile="${JELLYFIN_QSV_HARDWARE_PROFILE:-common}"
+
+# The HA fleet includes a Skylake fallback node. HEVC Main10 is not a
+# common-denominator QSV decode capability across that fleet, while HEVC Main
+# (8-bit) decode and H.264 encode are. Keep Main10 available as an explicit
+# capability-tier check for nodes where it is required.
+case "$hardware_profile" in
+    common)
+        source_name=main
+        source_pix_fmt=yuv420p
+        ;;
+    main10)
+        source_name=main10
+        source_pix_fmt=yuv420p10le
+        ;;
+    *)
+        echo "Unsupported JELLYFIN_QSV_HARDWARE_PROFILE: $hardware_profile (expected common or main10)" >&2
+        exit 1
+        ;;
+esac
 
 ffmpeg_bin=/usr/lib/jellyfin-ffmpeg/ffmpeg
 ffprobe_bin=/usr/lib/jellyfin-ffmpeg/ffprobe
@@ -58,19 +78,22 @@ fi
 work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT HUP INT TERM
 
-# Produce a deterministic, tiny HEVC Main10 source in software, then exercise
-# the same decode/encode path Jellyfin uses for 2160p HEVC-to-H.264 playback.
+# Produce a deterministic, tiny HEVC source in software, then exercise the
+# common QSV decode/encode path Jellyfin uses for HEVC-to-H.264 playback. The
+# default deliberately uses Main (8-bit), which is supported by the Skylake
+# fallback node; set JELLYFIN_QSV_HARDWARE_PROFILE=main10 to validate that
+# higher capability tier on nodes that require it.
 "$ffmpeg_bin" -nostdin -hide_banner -loglevel error \
     -f lavfi -i 'testsrc2=size=128x72:rate=24:duration=1' \
-    -pix_fmt yuv420p10le -c:v libx265 -preset ultrafast \
+    -pix_fmt "$source_pix_fmt" -c:v libx265 -preset ultrafast \
     -x265-params 'log-level=error:pools=1:frame-threads=1' \
-    -an -y "$work_dir/main10.mkv"
+    -an -y "$work_dir/$source_name.mkv"
 
 LIBVA_DRIVER_NAME=iHD "$ffmpeg_bin" -nostdin -hide_banner -loglevel error \
     -init_hw_device "vaapi=va:${render_device},driver=iHD" \
     -init_hw_device qsv=qs@va -filter_hw_device qs \
     -hwaccel qsv -hwaccel_output_format qsv -c:v hevc_qsv \
-    -i "$work_dir/main10.mkv" -map 0:v:0 -frames:v 12 \
+    -i "$work_dir/$source_name.mkv" -map 0:v:0 -frames:v 12 \
     -vf 'scale_qsv=format=nv12' -c:v h264_qsv -f null -
 
-printf 'QSV hardware transcode passed: driver=%s device=%s\n' "$driver_path" "$render_device"
+printf 'QSV hardware transcode passed: profile=%s driver=%s device=%s\n' "$hardware_profile" "$driver_path" "$render_device"
