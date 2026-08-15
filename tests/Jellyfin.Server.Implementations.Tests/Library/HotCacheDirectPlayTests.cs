@@ -1,1 +1,46 @@
-dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uSU87CnVzaW5nIEVtYnkuU2VydmVyLkltcGxlbWVudGF0aW9ucy5MaWJyYXJ5Owp1c2luZyBNZWRpYUJyb3dzZXIuQ29udHJvbGxlci5MaWJyYXJ5Owp1c2luZyBNZWRpYUJyb3dzZXIuTW9kZWwuRHRvOwp1c2luZyBNZWRpYUJyb3dzZXIuTW9kZWwuRW50aXRpZXM7CnVzaW5nIE1lZGlhQnJvd3Nlci5Nb2RlbC5NZWRpYUluZm87CnVzaW5nIFh1bml0OwoKbmFtZXNwYWNlIEplbGx5ZmluLlNlcnZlci5JbXBsZW1lbnRhdGlvbnMuVGVzdHMuTGlicmFyeTsKCnB1YmxpYyBzZWFsZWQgY2xhc3MgSG90Q2FjaGVEaXJlY3RQbGF5VGVzdHMgOiBJRGlzcG9zYWJsZQp7CiAgICBwcml2YXRlIHJlYWRvbmx5IHN0cmluZyBfcm9vdCA9IFBhdGguQ29tYmluZShQYXRoLkdldFRlbXBQYXRoKCksICJob3QtZGlyZWN0LSIgKyBHdWlkLk5ld0d1aWQoKS5Ub1N0cmluZygiTiIpKTsKCiAgICBbRmFjdF0KICAgIHB1YmxpYyB2b2lkIFRyYW5zaWVudERpcmVjdFBsYXlQYXRoUmV0dXJuc0hvdFRoZW5Db2xkV2l0aG91dENoYW5naW5nQ2Fub25pY2FsUGF0aCgpCiAgICB7CiAgICAgICAgdmFyIG1lZGlhID0gUGF0aC5Db21iaW5lKF9yb290LCAibWVkaWEiKTsKICAgICAgICB2YXIgaG90Um9vdCA9IFBhdGguQ29tYmluZShfcm9vdCwgImhvdCIpOwogICAgICAgIERpcmVjdG9yeS5DcmVhdGVEaXJlY3RvcnkobWVkaWEpOwogICAgICAgIERpcmVjdG9yeS5DcmVhdGVEaXJlY3RvcnkoaG90Um9vdCk7CiAgICAgICAgdmFyIGNhbm9uaWNhbCA9IFBhdGguQ29tYmluZShtZWRpYSwgImVwaXNvZGUubWt2Iik7CiAgICAgICAgdmFyIGhvdCA9IFBhdGguQ29tYmluZShob3RSb290LCAiZXBpc29kZS5ta3YiKTsKICAgICAgICBGaWxlLldyaXRlQWxsVGV4dChjYW5vbmljYWwsICJieXRlcyIpOwogICAgICAgIEZpbGUuQ29weShjYW5vbmljYWwsIGhvdCk7CiAgICAgICAgRmlsZS5TZXRMYXN0V3JpdGVUaW1lVXRjKGhvdCwgRmlsZS5HZXRMYXN0V3JpdGVUaW1lVXRjKGNhbm9uaWNhbCkpOwogICAgICAgIHZhciBzb3VyY2UgPSBuZXcgTWVkaWFTb3VyY2VJbmZvIHsgUGF0aCA9IGNhbm9uaWNhbCwgU2l6ZSA9IG5ldyBGaWxlSW5mbyhjYW5vbmljYWwpLkxlbmd0aCwgUHJvdG9jb2wgPSBNZWRpYVByb3RvY29sLkZpbGUgfTsKICAgICAgICB2YXIgcmVzb2x2ZXIgPSBuZXcgSG90Q2FjaGVQbGF5YmFja1BhdGhSZXNvbHZlcihtZWRpYSwgaG90Um9vdCwgbmV3IE51bGxIb3RDYWNoZUNvb3JkaW5hdG9yKCkpOwogICAgICAgIE1lZGlhU291cmNlTWFuYWdlci5BcHBseVBsYXliYWNrUGF0aFJlc29sdXRpb24oW3NvdXJjZV0sIHJlc29sdmVyKTsKICAgICAgICBBc3NlcnQuRXF1YWwoaG90LCBzb3VyY2UuUGF0aCk7CiAgICAgICAgQXNzZXJ0LkVxdWFsKGNhbm9uaWNhbCwgc291cmNlLkNhbm9uaWNhbFBhdGgpOwogICAgICAgIEZpbGUuRGVsZXRlKGhvdCk7CiAgICAgICAgTWVkaWFTb3VyY2VNYW5hZ2VyLkFwcGx5UGxheWJhY2tQYXRoUmVzb2x1dGlvbihbc291cmNlXSwgcmVzb2x2ZXIpOwogICAgICAgIEFzc2VydC5FcXVhbChjYW5vbmljYWwsIHNvdXJjZS5QYXRoKTsKICAgICAgICBBc3NlcnQuRXF1YWwoY2Fub25pY2FsLCBzb3VyY2UuQ2Fub25pY2FsUGF0aCk7CiAgICB9CgogICAgcHVibGljIHZvaWQgRGlzcG9zZSgpCiAgICB7CiAgICAgICAgaWYgKERpcmVjdG9yeS5FeGlzdHMoX3Jvb3QpKQogICAgICAgIHsKICAgICAgICAgICAgRGlyZWN0b3J5LkRlbGV0ZShfcm9vdCwgdHJ1ZSk7CiAgICAgICAgfQogICAgfQp9Cg==
+using System;
+using System.IO;
+using Emby.Server.Implementations.Library;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Model.Dto;
+using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.MediaInfo;
+using Xunit;
+
+namespace Jellyfin.Server.Implementations.Tests.Library;
+
+public sealed class HotCacheDirectPlayTests : IDisposable
+{
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "hot-direct-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void TransientDirectPlayPathReturnsHotThenColdWithoutChangingCanonicalPath()
+    {
+        var media = Path.Combine(_root, "media");
+        var hotRoot = Path.Combine(_root, "hot");
+        Directory.CreateDirectory(media);
+        Directory.CreateDirectory(hotRoot);
+        var canonical = Path.Combine(media, "episode.mkv");
+        var hot = Path.Combine(hotRoot, "episode.mkv");
+        File.WriteAllText(canonical, "bytes");
+        File.Copy(canonical, hot);
+        File.SetLastWriteTimeUtc(hot, File.GetLastWriteTimeUtc(canonical));
+        var source = new MediaSourceInfo { Path = canonical, Size = new FileInfo(canonical).Length, Protocol = MediaProtocol.File };
+        var resolver = new HotCachePlaybackPathResolver(media, hotRoot, new NullHotCacheCoordinator());
+        MediaSourceManager.ApplyPlaybackPathResolution([source], resolver);
+        Assert.Equal(hot, source.Path);
+        Assert.Equal(canonical, source.CanonicalPath);
+        File.Delete(hot);
+        MediaSourceManager.ApplyPlaybackPathResolution([source], resolver);
+        Assert.Equal(canonical, source.Path);
+        Assert.Equal(canonical, source.CanonicalPath);
+    }
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, true);
+        }
+    }
+}
