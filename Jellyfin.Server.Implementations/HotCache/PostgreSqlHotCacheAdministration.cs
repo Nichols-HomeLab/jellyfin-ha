@@ -85,7 +85,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
             }
         }
 
-        const string sql = "UPDATE hot_cache_jobs j SET kind=CASE WHEN @action='promote' THEN 'promotion' WHEN @action='evict' THEN 'eviction' ELSE j.kind END,state='pending',attempts=0,last_error=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE (@id IS NULL OR j.id=@id) AND (@action <> 'promote' OR j.state <> 'running') AND (@action <> 'retry' OR j.state='failed') AND (@action <> 'evict' OR (j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_active AND NOT j.is_pinned AND j.priority <= 0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now())))";
+        const string sql = "UPDATE hot_cache_jobs j SET kind=CASE WHEN @action='promote' THEN 'promotion' WHEN @action='evict' THEN 'eviction' ELSE j.kind END,state='pending',attempts=0,last_error=NULL,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE (@id IS NULL OR j.id=@id) AND (@action <> 'promote' OR j.state <> 'running') AND (@action <> 'retry' OR j.state='failed') AND (@action <> 'evict' OR (j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_active AND NOT j.is_pinned AND (@id IS NOT NULL OR j.priority <= 0) AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now())))";
         await using var command = dataSource.CreateCommand(sql);
         command.Parameters.AddWithValue("id", (object?)action.ItemId ?? DBNull.Value);
         command.Parameters.AddWithValue("action", action.Kind);
