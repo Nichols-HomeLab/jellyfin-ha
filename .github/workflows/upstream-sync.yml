@@ -1,0 +1,100 @@
+name: Sync Jellyfin upstream
+
+on:
+  schedule:
+    # Check after Jellyfin's normal development day, with enough spacing to
+    # avoid generating several PR updates for a burst of upstream commits.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: jellyfin-upstream-sync
+  cancel-in-progress: false
+
+env:
+  SYNC_BRANCH: automation/upstream-jellyfin
+  UPSTREAM_URL: https://github.com/jellyfin/jellyfin.git
+  # The HA fork is built on Jellyfin 10.11 / .NET 9. Track the matching
+  # upstream maintenance line; major-version ports remain deliberate work.
+  UPSTREAM_BRANCH: release-10.11.z
+
+jobs:
+  sync:
+    runs-on: [self-hosted, k3s, linux, amd64]
+
+    steps:
+      - name: Check out downstream main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITEA_TOKEN }}
+
+      - name: Merge the latest Jellyfin commits
+        id: sync
+        run: |
+          set -eu
+
+          git config user.name "jellyfin-upstream-sync"
+          git config user.email "jellyfin-upstream-sync@users.noreply.git.nicholstech.org"
+          git remote add upstream "${UPSTREAM_URL}"
+          git fetch --no-tags upstream "${UPSTREAM_BRANCH}"
+
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_BRANCH}" HEAD; then
+            echo "updated=false" >> "${GITHUB_OUTPUT}"
+            echo "Downstream already contains the latest upstream commit."
+            exit 0
+          fi
+
+          # Refresh one stable automation branch. An existing PR follows the
+          # force-with-lease update; otherwise the next step creates it.
+          git fetch origin "+refs/heads/${SYNC_BRANCH}:refs/remotes/origin/${SYNC_BRANCH}" || true
+          git checkout -B "${SYNC_BRANCH}"
+
+          if ! git merge --no-ff --no-edit "upstream/${UPSTREAM_BRANCH}"; then
+            echo "Upstream merge conflicts require maintainer resolution:"
+            git diff --name-only --diff-filter=U
+            exit 1
+          fi
+
+          git push --force-with-lease origin "HEAD:refs/heads/${SYNC_BRANCH}"
+          echo "updated=true" >> "${GITHUB_OUTPUT}"
+          echo "upstream_sha=$(git rev-parse upstream/${UPSTREAM_BRANCH})" >> "${GITHUB_OUTPUT}"
+
+      - name: Open the upstream sync pull request
+        if: steps.sync.outputs.updated == 'true'
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+          UPSTREAM_SHA: ${{ steps.sync.outputs.upstream_sha }}
+        run: |
+          set -eu
+
+          payload=$(printf '%s' \
+            "{\"base\":\"main\",\"head\":\"${SYNC_BRANCH}\",\"title\":\"chore: sync Jellyfin 10.11 upstream\",\"body\":\"Automated merge of jellyfin/jellyfin release-10.11.z at ${UPSTREAM_SHA} into the HA fork. Review the upstream changes and required checks before merging.\"}")
+
+          status=$(curl --silent --show-error \
+            --output pr-response.json \
+            --write-out '%{http_code}' \
+            --request POST \
+            --header "Authorization: token ${GITEA_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "${payload}" \
+            "${GITHUB_SERVER_URL}/api/v1/repos/${GITHUB_REPOSITORY}/pulls")
+
+          case "${status}" in
+            201)
+              echo "Created upstream sync pull request."
+              ;;
+            409)
+              echo "An upstream sync pull request is already open; its branch was refreshed."
+              ;;
+            *)
+              echo "Gitea returned HTTP ${status} while creating the pull request."
+              sed -n '1,120p' pr-response.json
+              exit 1
+              ;;
+          esac
