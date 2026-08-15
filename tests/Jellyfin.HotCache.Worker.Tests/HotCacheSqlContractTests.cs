@@ -65,6 +65,31 @@ public sealed class HotCacheSqlContractTests
         Assert.DoesNotContain("Jellyfin__HotCache__CanonicalRoot", program, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ReconciliationNeverRepopulatesAnExplicitlyEvictedShowFromWatchHistory()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        // Selection is playback-driven.  A periodic scan of every user's history
+        // would immediately enqueue an episode such as Cops after it is evicted.
+        Assert.DoesNotContain("_userManager.GetUsers()", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("ReconcileUserAsync", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsPlayed = true", coordinator, StringComparison.Ordinal);
+        Assert.DoesNotContain("IsResumable = true", coordinator, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PlaybackLookaheadStaysInTheCurrentSeason()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        // House S1E2 must select S1E3 onward, never an unrelated Cops episode.
+        Contains("ParentId = episode.SeasonId", coordinator);
+        Contains("MinParentAndIndexNumber = (episode.ParentIndexNumber ?? 0, (episode.IndexNumber ?? 0) + 1)", coordinator);
+        Contains("Limit = lookahead", coordinator);
+        Contains("if (lifecycle == HotCachePlaybackEvent.Started)", coordinator);
+    }
+
     private static string Read(string relativePath)
     {
         var directory = AppContext.BaseDirectory;
