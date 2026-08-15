@@ -100,6 +100,21 @@ public sealed class HotCachePlaybackPathResolverTests : IDisposable
         Assert.Equal(canonical, result.Path);
     }
 
+    [Fact]
+    public void DirectPlay_ConfiguredCanonicalRootSymlinkFallsBackToCanonicalPath()
+    {
+        var outside = Path.Combine(_root, "outside-media");
+        Directory.CreateDirectory(outside);
+        var canonical = Path.Combine(outside, "episode.mkv");
+        File.WriteAllText(canonical, "bytes");
+        var canonicalRoot = Path.Combine(_root, "media-link");
+        Directory.CreateSymbolicLink(canonicalRoot, outside);
+        var resolver = new HotCachePlaybackPathResolver(canonicalRoot, Path.Combine(_root, "hot"), new NullHotCacheCoordinator());
+        var result = resolver.Resolve(new PlaybackPathRequest(Path.Combine(canonicalRoot, "episode.mkv"), new FileInfo(canonical).Length, PlaybackPathPurpose.MainMedia));
+        Assert.False(result.IsHot);
+        Assert.Equal(Path.Combine(canonicalRoot, "episode.mkv"), result.Path);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_root))
