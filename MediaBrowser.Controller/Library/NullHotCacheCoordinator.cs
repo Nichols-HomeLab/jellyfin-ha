@@ -16,6 +16,9 @@ public sealed class NullHotCacheCoordinator : IHotCacheCoordinator
     public Task ReconcileAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc />
+    public Task<int> CacheLibraryItemAsync(Guid itemId, bool includeSeason, CancellationToken cancellationToken) => Task.FromResult(0);
+
+    /// <inheritdoc />
     public void ObserveResolution(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
     {
     }
@@ -34,4 +37,7 @@ public sealed class NullHotCacheAdministration : IHotCacheAdministration
 
     /// <inheritdoc />
     public Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken) => Task.FromResult(0);
 }

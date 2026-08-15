@@ -391,7 +391,11 @@ namespace Emby.Server.Implementations.Library
         {
             foreach (var source in sources)
             {
-                if (source.Protocol != MediaProtocol.File || string.IsNullOrEmpty(source.Path)) continue;
+                if (source.Protocol != MediaProtocol.File || string.IsNullOrEmpty(source.Path))
+                {
+                    continue;
+                }
+
                 var canonicalPath = source.CanonicalPath ?? source.Path;
                 var resolution = playbackPathResolver.Resolve(new PlaybackPathRequest(canonicalPath, source.Size, PlaybackPathPurpose.MainMedia));
                 source.CanonicalPath = canonicalPath;

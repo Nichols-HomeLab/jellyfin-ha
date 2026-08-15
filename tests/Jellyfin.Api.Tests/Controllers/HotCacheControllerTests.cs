@@ -64,6 +64,18 @@ public sealed class HotCacheControllerTests
     }
 
     [Fact]
+    public async Task Cache_UsesLibraryItemIdAndSeasonScope()
+    {
+        var store = new Store { Cached = 1 };
+        var request = new HotCacheManualCacheRequest(Guid.NewGuid(), true);
+
+        var result = await new HotCacheController(store).Cache(request, CancellationToken.None);
+
+        Assert.IsType<NoContentResult>(result);
+        Assert.Equal(request, store.CacheRequest);
+    }
+
+    [Fact]
     public void Page_IsAnAdministratorDashboardView()
     {
         var page = new HotCacheController(new Store()).Page();
@@ -87,6 +99,9 @@ public sealed class HotCacheControllerTests
         Assert.Contains("No cache candidates yet", page.Content, StringComparison.Ordinal);
         Assert.Contains("Unable to load hot-cache state", page.Content, StringComparison.Ordinal);
         Assert.Contains("toLocaleString", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheManualItem", page.Content, StringComparison.Ordinal);
+        Assert.Contains("hotCacheSpinner", page.Content, StringComparison.Ordinal);
+        Assert.Contains("setInterval(load,2000)", page.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
     }
 
@@ -119,6 +134,10 @@ public sealed class HotCacheControllerTests
 
         public string? HistoryKind { get; private set; }
 
+        public int Cached { get; init; }
+
+        public HotCacheManualCacheRequest? CacheRequest { get; private set; }
+
         public Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken)
         {
             HistoryKind = historyKind;
@@ -136,6 +155,12 @@ public sealed class HotCacheControllerTests
 
             Action = action;
             return Task.CompletedTask;
+        }
+
+        public Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken)
+        {
+            CacheRequest = request;
+            return Task.FromResult(Cached);
         }
     }
 }

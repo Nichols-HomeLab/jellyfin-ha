@@ -82,6 +82,27 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
         }
     }
 
+    /// <summary>Queues an episode or all episodes in a season selected from the Jellyfin library.</summary>
+    /// <param name="request">The Jellyfin library item and whether to expand a season.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A no-content response when items were queued, or an error response otherwise.</returns>
+    [HttpPost("Cache")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> Cache([FromBody] HotCacheManualCacheRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var accepted = await administration.CacheLibraryItemAsync(request, cancellationToken).ConfigureAwait(false);
+            return accepted == 0 ? NotFound() : NoContent();
+        }
+        catch (ArgumentException exception)
+        {
+            return BadRequest(exception.Message);
+        }
+    }
+
     /// <summary>Returns the dashboard view, which is intentionally served only to Jellyfin administrators.</summary>
     /// <returns>The administrator dashboard HTML.</returns>
     [HttpGet("Page")]
@@ -101,6 +122,9 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
             #hotCachePage .hc-live-dot { background: var(--hc-warn); border-radius: 50%; box-shadow: 0 0 0 .25rem rgba(233,162,59,.16); height: .58rem; width: .58rem; }
             #hotCachePage .hc-live-dot.good { background: var(--hc-good); box-shadow: 0 0 0 .25rem rgba(57,184,107,.16); }
             #hotCachePage .hc-live-dot.bad { background: var(--hc-bad); box-shadow: 0 0 0 .25rem rgba(228,92,99,.16); }
+            #hotCachePage .hc-spinner { display: none; font-size: 1.1rem; line-height: 1; }
+            #hotCachePage .hc-spinner.active { animation: hotCacheSpin 1s linear infinite; display: inline-block; }
+            @keyframes hotCacheSpin { to { transform: rotate(360deg); } }
             #hotCachePage #hotCacheStatus { font-size: .9rem; margin: 0; }
             #hotCachePage .hc-refresh { min-width: 7.25rem; }
             #hotCachePage .hc-alert { background: rgba(228,92,99,.14); border: 1px solid rgba(228,92,99,.5); border-radius: .6rem; color: #ffd7d9; margin: 0 0 1.25rem; padding: .85rem 1rem; }
@@ -157,7 +181,7 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
                   <p class="hc-eyebrow">Storage control plane</p>
                   <h1>Hot Cache</h1>
                   <p class="hc-subtitle">Shared playback-aware cache state across every Jellyfin replica.</p>
-                  <div class="hc-live"><span id="hotCacheStatusDot" class="hc-live-dot"></span><p id="hotCacheStatus" aria-live="polite">Loading coordinator state…</p></div>
+                  <div class="hc-live"><span id="hotCacheStatusDot" class="hc-live-dot"></span><span id="hotCacheSpinner" class="hc-spinner" aria-label="Caching">⟳</span><p id="hotCacheStatus" aria-live="polite">Loading coordinator state…</p></div>
                 </div>
                 <button is="emby-button" type="button" class="raised hc-refresh" id="hotCacheRefresh">Refresh</button>
               </header>
@@ -179,7 +203,7 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
                     <label class="hc-field"><span>Active backend</span><select id="hotCacheBackend"><option value="unraid-temp">Unraid /temp</option><option value="cephfs">CephFS 300 GiB</option></select></label>
                     <label class="hc-field"><span>High watermark (%)</span><input id="hotCacheHigh" type="number" min="1" max="99" step="1"></label>
                     <label class="hc-field"><span>Low watermark (%)</span><input id="hotCacheLow" type="number" min="1" max="98" step="1"></label>
-                    <label class="hc-field"><span>Maximum lookahead</span><input id="hotCacheLookahead" type="number" min="0" max="100" step="1"></label>
+                    <label class="hc-field"><span>Maximum lookahead (1–6 episodes)</span><input id="hotCacheLookahead" type="number" min="1" max="6" step="1"></label>
                     <label class="hc-field"><span>Reserve free space (GiB)</span><input id="hotCacheReserve" type="number" min="0" step="1"></label>
                   </div>
                   <label class="hc-check"><input id="hotCachePaused" type="checkbox"> Pause new worker claims</label>
@@ -195,6 +219,10 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
                     <button is="emby-button" type="button" data-hot-cache-action="evict">Evict</button>
                     <button is="emby-button" type="button" data-hot-cache-action="reconcile">Reconcile</button>
                   </div>
+                  <div class="hc-panel-head" style="margin-top:1.25rem"><div><h2>Manual cache</h2><p class="hc-panel-copy">Enter a Jellyfin library episode ID, or expand a season into eligible episodes.</p></div></div>
+                  <label class="hc-field"><span>Episode or season ID</span><input id="hotCacheManualItem" type="text" placeholder="Jellyfin library item ID"></label>
+                  <label class="hc-check"><input id="hotCacheManualSeason" type="checkbox"> Cache the full season</label>
+                  <button is="emby-button" type="button" class="raised" id="hotCacheManualCache">Cache now</button>
                 </section>
               </div>
 
@@ -216,7 +244,7 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
               <section class="hc-panel hc-section">
                 <div class="hc-panel-head">
                   <div><h2>History</h2><p class="hc-panel-copy">Recent worker outcomes and administrator actions.</p></div>
-                  <div class="hc-history-tools"><label class="hc-field"><span>Event type</span><select id="hotCacheHistoryKind"><option value="">All events</option><option>copied</option><option>evicted</option><option>failed</option><option>settings</option><option>backend</option><option>promoted</option><option>retry</option><option>reconcile</option></select></label></div>
+                  <div class="hc-history-tools"><label class="hc-field"><span>Event type</span><select id="hotCacheHistoryKind"><option value="">All events</option><option>copied</option><option>evicted</option><option>failed</option><option>settings</option><option>backend</option><option>promoted</option><option>retry</option><option>reconcile</option><option>manual</option></select></label></div>
                 </div>
                 <div id="hotCacheHistory" aria-live="polite"></div>
               </section>
@@ -249,14 +277,15 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
                 const renderInventory=inventory=>{const target=byId('hotCacheInventory'),picker=byId('hotCacheItem');picker.replaceChildren(new Option('All eligible items',''));inventory.forEach(item=>picker.add(new Option(item.seriesName+' — '+item.episode,item.itemId)));if(!inventory.length){empty(target,'No cache candidates yet. Start or resume an episode, then refresh.');return;}const groups=new Map();inventory.forEach(item=>{if(!groups.has(item.seriesName))groups.set(item.seriesName,[]);groups.get(item.seriesName).push(item);});target.replaceChildren(...Array.from(groups.entries()).sort(([left],[right])=>left.localeCompare(right)).map(([series,items],index)=>{const details=element('details','hc-series');details.open=index===0;const summary=document.createElement('summary'),summaryText=element('strong','',series),total=items.reduce((sum,item)=>sum+item.sizeBytes,0);summary.append(summaryText,element('span','hc-series-count',items.length+' '+(items.length===1?'episode':'episodes')+' · '+formatBytes(total)));const body=document.createElement('div');table(body,['Episode','State','Interest','Users','Priority','Size','Backend','Updated'],items.map(item=>[item.episode,stateBadge(item.state),item.reason||'—',String(item.interestedUsers),String(item.priority),formatBytes(item.sizeBytes),item.backend||'—',formatDate(item.updatedAtUtc)]));details.append(summary,body);return details;}));};
                 const renderHistory=history=>table(byId('hotCacheHistory'),['When','Event','Detail'],history.map(item=>[formatDate(item.createdAtUtc),stateBadge(item.kind),item.detail]));
 
-                const render=snapshot=>{snapshot.backends??=[];snapshot.queue??=[];snapshot.inventory??=[];snapshot.history??=[];const settings=snapshot.settings;byId('hotCacheBackend').value=settings.backend;byId('hotCachePaused').checked=settings.paused;byId('hotCacheHigh').value=Math.round(settings.highWatermark*100);byId('hotCacheLow').value=Math.round(settings.lowWatermark*100);byId('hotCacheLookahead').value=settings.maxLookahead;byId('hotCacheReserve').value=Math.round(settings.reserveFreeBytes/gibibyte);renderSummary(snapshot);renderBackends(snapshot.backends);renderQueue(snapshot.queue);renderInventory(snapshot.inventory);renderHistory(snapshot.history);byId('hotCacheStatus').textContent=settings.paused?'Paused — existing work is held':'Running on '+settings.backend;byId('hotCacheStatusDot').className='hc-live-dot '+(settings.paused?'':'good');};
+                const render=snapshot=>{snapshot.backends??=[];snapshot.queue??=[];snapshot.inventory??=[];snapshot.history??=[];const settings=snapshot.settings;byId('hotCacheBackend').value=settings.backend;byId('hotCachePaused').checked=settings.paused;byId('hotCacheHigh').value=Math.round(settings.highWatermark*100);byId('hotCacheLow').value=Math.round(settings.lowWatermark*100);byId('hotCacheLookahead').value=settings.maxLookahead;byId('hotCacheReserve').value=Math.round(settings.reserveFreeBytes/gibibyte);renderSummary(snapshot);renderBackends(snapshot.backends);renderQueue(snapshot.queue);renderInventory(snapshot.inventory);renderHistory(snapshot.history);const busy=snapshot.queue.some(item=>item.state==='queued'||item.state==='copying');byId('hotCacheSpinner').classList.toggle('active',busy);byId('hotCacheStatus').textContent=settings.paused?'Paused — existing work is held':(busy?'Scanning / caching on ':'Running on ')+settings.backend;byId('hotCacheStatusDot').className='hc-live-dot '+(settings.paused?'':'good');};
                 const load=async()=>{setBusy(true);byId('hotCacheError').hidden=true;try{const kind=byId('hotCacheHistoryKind').value,query=kind?'?historyKind='+encodeURIComponent(kind):'',snapshot=await api.ajax({url:root+query,type:'GET',dataType:'json',headers:{Accept:'application/json; profile="CamelCase"'}});render(snapshot);}catch(error){showError(error);}finally{setBusy(false);}};
                 const mutate=async(button,request)=>{const original=button.textContent;button.disabled=true;button.textContent='Working…';byId('hotCacheError').hidden=true;try{await api.ajax(request);await load();}catch(error){showError(error);}finally{button.disabled=false;button.textContent=original;}};
 
                 byId('hotCacheRefresh').onclick=load;
                 byId('hotCacheSave').onclick=async event=>{const settings={backend:byId('hotCacheBackend').value,paused:byId('hotCachePaused').checked,highWatermark:Number(byId('hotCacheHigh').value)/100,lowWatermark:Number(byId('hotCacheLow').value)/100,maxLookahead:Number(byId('hotCacheLookahead').value),reserveFreeBytes:Math.round(Number(byId('hotCacheReserve').value)*gibibyte)};await mutate(event.currentTarget,{url:root+'/Settings',type:'PUT',contentType:'application/json',data:JSON.stringify(settings)});};
+                byId('hotCacheManualCache').onclick=async event=>{const itemId=byId('hotCacheManualItem').value.trim();if(!itemId){showError(new Error('Enter an episode or season ID.'));return;}await mutate(event.currentTarget,{url:root+'/Cache',type:'POST',contentType:'application/json',data:JSON.stringify({itemId,includeSeason:byId('hotCacheManualSeason').checked})});};
                 page.querySelectorAll('[data-hot-cache-action]').forEach(button=>button.onclick=async()=>{const kind=button.dataset.hotCacheAction,id=byId('hotCacheItem').value||null,confirmBulkEviction=kind==='evict'&&!id&&window.confirm('Evict every eligible item? This only affects items that are safe to remove.');if(kind==='evict'&&!id&&!confirmBulkEviction)return;if((kind==='promote'||kind==='retry')&&!id){showError(new Error('Choose an inventory item first.'));return;}await mutate(button,{url:root+'/Actions',type:'POST',contentType:'application/json',data:JSON.stringify({kind,itemId:id,confirmBulkEviction})});});
-                byId('hotCacheHistoryKind').onchange=load;load();
+                byId('hotCacheHistoryKind').onchange=load;setInterval(load,2000);load();
               })();
               </script>
             </div>

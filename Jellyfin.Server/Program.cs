@@ -55,15 +55,16 @@ namespace Jellyfin.Server
         /// </summary>
         public const string LoggingConfigFileSystem = "logging.json";
 
+        private const int StartupMigrationMaxAttempts = 5;
+
         private static readonly SerilogLoggerFactory _loggerFactory = new SerilogLoggerFactory();
+        private static readonly TimeSpan StartupMigrationAttemptTimeout = TimeSpan.FromSeconds(30);
+        private static readonly TimeSpan StartupMigrationRetryBudget = TimeSpan.FromMinutes(2);
         private static SetupServer? _setupServer;
         private static CoreAppHost? _appHost;
         private static IHost? _jellyfinHost = null;
         private static long _startTimestamp;
         private static ILogger _logger = NullLogger.Instance;
-        private const int StartupMigrationMaxAttempts = 5;
-        private static readonly TimeSpan StartupMigrationAttemptTimeout = TimeSpan.FromSeconds(30);
-        private static readonly TimeSpan StartupMigrationRetryBudget = TimeSpan.FromMinutes(2);
         private static bool _restartOnShutdown;
         private static IStartupLogger<JellyfinMigrationService>? _migrationLogger;
         private static string? _restoreFromBackup;

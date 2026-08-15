@@ -43,6 +43,9 @@ public sealed class HotCacheMediaEncoderTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, true);
+        }
     }
 }

@@ -168,6 +168,8 @@ public sealed class HotCachePlaybackPathResolverTests : IDisposable
 
         public Task ReconcileAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
+        public Task<int> CacheLibraryItemAsync(Guid itemId, bool includeSeason, CancellationToken cancellationToken) => Task.FromResult(0);
+
         public void ObserveResolution(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
         {
             Observations++;

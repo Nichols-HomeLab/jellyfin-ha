@@ -40,7 +40,12 @@ public static class HotCacheSchema
             DROP INDEX IF EXISTS hot_cache_jobs_claim_idx;
             CREATE INDEX hot_cache_jobs_claim_idx ON hot_cache_jobs (state, priority DESC, created_at, id) WHERE state IN ('pending', 'running');
             """),
-        new(5, "remove duplicate obsolete claim index", "DROP INDEX IF EXISTS hot_cache_jobs_claim_v2_idx;")
+        new(5, "remove duplicate obsolete claim index", "DROP INDEX IF EXISTS hot_cache_jobs_claim_v2_idx;"),
+        new(6, "manual cache and reconciliation audit history", """
+            UPDATE hot_cache_settings SET max_lookahead=LEAST(6,GREATEST(1,max_lookahead)) WHERE id=true;
+            ALTER TABLE hot_cache_admin_history DROP CONSTRAINT IF EXISTS hot_cache_admin_history_kind_check;
+            ALTER TABLE hot_cache_admin_history ADD CONSTRAINT hot_cache_admin_history_kind_check CHECK (kind IN ('copied','evicted','failed','settings','backend','promoted','retry','reconcile','manual'));
+            """)
     ];
 
     /// <summary>One immutable, ordered schema change.</summary>

@@ -35,6 +35,13 @@ public interface IHotCacheCoordinator
     /// <returns>A task that completes when reconciliation has finished.</returns>
     Task ReconcileAsync(CancellationToken cancellationToken);
 
+    /// <summary>Queues one library episode or every episode in a library season for promotion.</summary>
+    /// <param name="itemId">The Jellyfin library item identifier, never a filesystem path.</param>
+    /// <param name="includeSeason">Whether a season identifier should expand to its episodes.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of episodes accepted for caching.</returns>
+    Task<int> CacheLibraryItemAsync(Guid itemId, bool includeSeason, CancellationToken cancellationToken);
+
     /// <summary>Queues a non-blocking resolver observation.</summary>
     /// <param name="request">The canonical read request.</param>
     /// <param name="resolution">The selected result.</param>
@@ -61,12 +68,20 @@ public interface IHotCacheAdministration
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A task that completes after queuing.</returns>
     Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken);
+
+    /// <summary>Queues an administrator-selected library episode or season for caching.</summary>
+    /// <param name="request">The library item and expansion scope.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The number of accepted episodes.</returns>
+    Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken);
 }
 
 /// <summary>Durable administrator settings.</summary>
 public sealed record HotCacheSettings(string Backend, bool Paused, double HighWatermark, double LowWatermark, int MaxLookahead = 6, long ReserveFreeBytes = 161061273600);
 /// <summary>Administrator command whose item identifier is never interpreted as a path.</summary>
 public sealed record HotCacheAction(string Kind, Guid? ItemId, bool ConfirmBulkEviction);
+/// <summary>Manual cache request targeting a Jellyfin library item.</summary>
+public sealed record HotCacheManualCacheRequest(Guid ItemId, bool IncludeSeason);
 /// <summary>Shared administrator view.</summary>
 public sealed record HotCacheAdministrationSnapshot(HotCacheSettings Settings, IReadOnlyList<HotCacheBackendStatus> Backends, IReadOnlyList<HotCacheQueueSummary> Queue, IReadOnlyList<HotCacheInventoryItem> Inventory, IReadOnlyList<HotCacheHistoryEntry> History);
 /// <summary>Observed backend capacity and health.</summary>

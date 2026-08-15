@@ -10,7 +10,7 @@ namespace Jellyfin.Server.Implementations.HotCache;
 /// <summary>PostgreSQL implementation of the administrator hot-cache view and commands.</summary>
 public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource, IHotCacheCoordinator coordinator) : IHotCacheAdministration
 {
-    private static readonly string[] ValidHistoryKinds = ["copied", "evicted", "failed", "settings", "backend", "promoted", "retry", "reconcile"];
+    private static readonly string[] ValidHistoryKinds = ["copied", "evicted", "failed", "settings", "backend", "promoted", "retry", "reconcile", "manual"];
 
     /// <summary>Gets the current shared settings, backend observations, queue, inventory, and history.</summary>
     /// <param name="historyKind">Optional history category filter.</param>
@@ -100,6 +100,18 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         await HistoryAsync(action.Kind == "promote" ? "promoted" : action.Kind == "evict" ? "evicted" : action.Kind, action.ItemId?.ToString() ?? "bulk", cancellationToken).ConfigureAwait(false);
     }
 
+    /// <inheritdoc />
+    public async Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken)
+    {
+        var accepted = await coordinator.CacheLibraryItemAsync(request.ItemId, request.IncludeSeason, cancellationToken).ConfigureAwait(false);
+        if (accepted > 0)
+        {
+            await HistoryAsync("manual", $"item={request.ItemId}; scope={(request.IncludeSeason ? "season" : "episode")}; queued={accepted}", cancellationToken).ConfigureAwait(false);
+        }
+
+        return accepted;
+    }
+
     private async Task<HotCacheSettings> ReadSettingsAsync(CancellationToken ct)
     {
         await using var command = dataSource.CreateCommand("SELECT backend,paused,high_watermark,low_watermark,max_lookahead,reserve_free_bytes FROM hot_cache_settings WHERE id=true");
@@ -182,7 +194,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
             throw new ArgumentException("Unknown backend.");
         }
 
-        if (settings.LowWatermark <= 0 || settings.HighWatermark >= 1 || settings.LowWatermark >= settings.HighWatermark || settings.MaxLookahead < 0 || settings.ReserveFreeBytes < 0)
+        if (settings.LowWatermark <= 0 || settings.HighWatermark >= 1 || settings.LowWatermark >= settings.HighWatermark || settings.MaxLookahead is < 1 or > 6 || settings.ReserveFreeBytes < 0)
         {
             throw new ArgumentException("Watermarks must be between zero and one, with low below high.");
         }

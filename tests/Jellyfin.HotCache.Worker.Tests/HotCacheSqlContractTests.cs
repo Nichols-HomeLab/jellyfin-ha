@@ -45,8 +45,9 @@ public sealed class HotCacheSqlContractTests
         Contains("DELETE FROM hot_cache_events WHERE created_at < now() - interval '30 days'", store);
         Contains("DELETE FROM hot_cache_admin_history WHERE created_at < now() - interval '30 days'", store);
         Contains("CREATE TABLE IF NOT EXISTS hot_cache_schema_migrations", HotCacheSchema.CreateLedgerSql);
-        Assert.Equal([1, 2, 3, 4, 5], HotCacheSchema.Migrations.Select(migration => migration.Version));
+        Assert.Equal([1, 2, 3, 4, 5, 6], HotCacheSchema.Migrations.Select(migration => migration.Version));
         Assert.Contains("DROP INDEX IF EXISTS hot_cache_jobs_claim_v2_idx", HotCacheSchema.Migrations.Single(migration => migration.Version == 5).Sql, StringComparison.Ordinal);
+        Contains("manual cache and reconciliation audit history", HotCacheSchema.Migrations.Single(migration => migration.Version == 6).Name);
         Contains("SELECT 1 FROM hot_cache_schema_migrations WHERE version=@version", migrator);
         Contains("INSERT INTO hot_cache_schema_migrations(version) VALUES (@version)", migrator);
         Contains("pg_advisory_xact_lock", migrator);

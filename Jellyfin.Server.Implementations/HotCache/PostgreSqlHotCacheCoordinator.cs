@@ -24,9 +24,6 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
     private readonly IUserDataManager _userDataManager;
-    private readonly HashSet<Guid>? _includedUsers;
-    private readonly Guid? _canarySeriesId;
-    private readonly bool _canaryConfigured;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -44,10 +41,6 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         _userManager = userManager;
         _libraryManager = libraryManager;
         _userDataManager = userDataManager;
-        _includedUsers = ParseIncludedUsers(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_INCLUDED_USER_IDS"));
-        var canaryRaw = Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_CANARY_SERIES_ID");
-        _canaryConfigured = canaryRaw is not null;
-        _canarySeriesId = Guid.TryParse(canaryRaw, out var canarySeriesId) ? canarySeriesId : null;
         _logger = logger;
     }
 
@@ -58,17 +51,12 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             || string.IsNullOrWhiteSpace(episode.Path)
             || !Path.IsPathFullyQualified(episode.Path)
             || playback.Users is null
-            || playback.Users.Count == 0
-            || !IsCanaryItem(episode))
+            || playback.Users.Count == 0)
         {
             return;
         }
 
-        var users = playback.Users.Where(IsIncluded).ToArray();
-        if (users.Length == 0)
-        {
-            return;
-        }
+        var users = playback.Users.ToArray();
 
         try
         {
@@ -94,6 +82,10 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                 {
                     await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackInterestLifetime)).ConfigureAwait(false);
                     await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
+                    if (lifecycle == HotCachePlaybackEvent.Started)
+                    {
+                        await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+                    }
                 }
 
                 await ExecuteAsync(connection, transaction, "UPDATE hot_cache_jobs SET is_active=true,last_access_utc=now(),updated_at=now() WHERE item_id=@item", cancellationToken, ("item", playback.Item.Id)).ConfigureAwait(false);
@@ -118,13 +110,44 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             return;
         }
 
-        foreach (var user in _userManager.GetUsers().Where(IsIncluded))
+        foreach (var user in _userManager.GetUsers())
         {
             await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
 
         await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running','completed');", cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<int> CacheLibraryItemAsync(Guid itemId, bool includeSeason, CancellationToken cancellationToken)
+    {
+        var item = _libraryManager.GetItemById(itemId);
+        if (item is null)
+        {
+            return 0;
+        }
+
+        var episodes = includeSeason
+            ? _libraryManager.GetItemList(new InternalItemsQuery { IncludeItemTypes = [BaseItemKind.Episode], ParentId = itemId, OrderBy = [(ItemSortBy.ParentIndexNumber, SortOrder.Ascending), (ItemSortBy.IndexNumber, SortOrder.Ascending)] })
+            : [item];
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        var accepted = 0;
+        foreach (var episode in episodes)
+        {
+            if (episode is not MediaBrowser.Controller.Entities.TV.Episode || string.IsNullOrWhiteSpace(episode.Path) || !Path.IsPathFullyQualified(episode.Path))
+            {
+                continue;
+            }
+
+            await RecordCandidateAsync(connection, transaction, episode, Guid.Empty, "manual", 100, cancellationToken).ConfigureAwait(false);
+            await LogReconcileAsync(connection, transaction, $"manual queue: {Describe(episode)}", cancellationToken).ConfigureAwait(false);
+            accepted++;
+        }
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return accepted;
     }
 
     /// <inheritdoc />
@@ -197,9 +220,11 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
         });
 
+        await LogReconcileAsync(connection, transaction, $"scan user={BoundDisplay(user.Username)}; resume={resume.Count}; recent={recent.Count}; lookahead={effectiveLookahead}", cancellationToken).ConfigureAwait(false);
         foreach (var item in resume)
         {
             await RecordCandidateAsync(connection, transaction, item, user.Id, "continue-watching", 90, cancellationToken).ConfigureAwait(false);
+            await LogReconcileAsync(connection, transaction, $"queue continue-watching: {Describe(item)}", cancellationToken).ConfigureAwait(false);
         }
 
         var reconciledSeries = new HashSet<Guid>();
@@ -218,21 +243,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                     continue;
                 }
 
-                await RecordCandidateAsync(connection, transaction, item, user.Id, "recent-series", 10, cancellationToken).ConfigureAwait(false);
-                var following = _libraryManager.GetItemList(new InternalItemsQuery(user)
-                {
-                    IncludeItemTypes = [BaseItemKind.Episode],
-                    ParentId = episode.SeasonId,
-                    MinParentAndIndexNumber = (episode.ParentIndexNumber ?? 0, (episode.IndexNumber ?? 0) + 1),
-                    Limit = effectiveLookahead,
-                    OrderBy = [(ItemSortBy.SortName, SortOrder.Ascending)]
-                });
-                var priority = 80;
-                foreach (var next in following)
-                {
-                    await RecordCandidateAsync(connection, transaction, next, user.Id, priority == 80 ? "next-up" : "next-episode", priority, cancellationToken).ConfigureAwait(false);
-                    priority -= 10;
-                }
+                await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, effectiveLookahead, cancellationToken).ConfigureAwait(false);
             }
         }
     }
@@ -241,14 +252,14 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     // lookahead from the currently selected backend, leaving the reserve intact.
     private static async Task<int> GetEffectiveLookaheadAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
     {
-        const string sql = "SELECT LEAST(s.max_lookahead::numeric, GREATEST(0::numeric, FLOOR(GREATEST(0, COALESCE((SELECT available_bytes FROM hot_cache_backend_observations WHERE backend=s.backend AND healthy ORDER BY observed_at DESC LIMIT 1), 0) - s.reserve_free_bytes) / GREATEST(COALESCE((SELECT AVG(source_length) FROM hot_cache_jobs WHERE source_length > 0), 1), 1))))::integer FROM hot_cache_settings s WHERE s.id=true";
+        const string sql = "SELECT GREATEST(1, LEAST(6, s.max_lookahead, GREATEST(1, FLOOR(GREATEST(0, COALESCE((SELECT available_bytes FROM hot_cache_backend_observations WHERE backend=s.backend AND healthy ORDER BY observed_at DESC LIMIT 1), 0) - s.reserve_free_bytes) / GREATEST(COALESCE((SELECT AVG(source_length) FROM hot_cache_jobs WHERE source_length > 0), 1), 1)))))::integer FROM hot_cache_settings s WHERE s.id=true";
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         return (await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) as int?) ?? 0;
     }
 
     private async Task RecordCandidateAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, Guid userId, string reason, int priority, CancellationToken cancellationToken)
     {
-        if (item is not MediaBrowser.Controller.Entities.TV.Episode || string.IsNullOrWhiteSpace(item.Path) || !Path.IsPathFullyQualified(item.Path) || !IsCanaryItem(item))
+        if (item is not MediaBrowser.Controller.Entities.TV.Episode || string.IsNullOrWhiteSpace(item.Path) || !Path.IsPathFullyQualified(item.Path))
         {
             return;
         }
@@ -257,31 +268,43 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         await UpsertJobAsync(connection, transaction, item, priority, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task QueueFollowingEpisodesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, MediaBrowser.Controller.Entities.TV.Episode episode, Guid userId, int lookahead, CancellationToken cancellationToken)
+    {
+        var following = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Episode],
+            ParentId = episode.SeasonId,
+            MinParentAndIndexNumber = (episode.ParentIndexNumber ?? 0, (episode.IndexNumber ?? 0) + 1),
+            Limit = lookahead,
+            OrderBy = [(ItemSortBy.ParentIndexNumber, SortOrder.Ascending), (ItemSortBy.IndexNumber, SortOrder.Ascending)]
+        });
+        if (following.Count == 0)
+        {
+            await LogReconcileAsync(connection, transaction, $"skip {Describe(episode)}: no following episodes in season", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var priority = 80;
+        foreach (var next in following)
+        {
+            await RecordCandidateAsync(connection, transaction, next, userId, priority == 80 ? "next-up" : "next-episode", priority, cancellationToken).ConfigureAwait(false);
+            await LogReconcileAsync(connection, transaction, $"queue {(priority == 80 ? "next-up" : "next-episode")}: {Describe(next)}", cancellationToken).ConfigureAwait(false);
+            priority -= 10;
+        }
+    }
+
+    private static Task LogReconcileAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string detail, CancellationToken cancellationToken)
+        => ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_admin_history(kind,detail) VALUES('reconcile',@detail)", cancellationToken, ("detail", BoundDisplay(detail)));
+
+    private static string Describe(BaseItem item) => BoundDisplay($"{(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)} — {item.Name}");
+
     private static Task UpsertJobAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, int priority, CancellationToken cancellationToken)
     {
         var source = new FileInfo(item.Path);
         return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", BoundDisplay(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)), ("episode", BoundDisplay(item.Name)));
     }
 
-    private bool IsIncluded(Jellyfin.Database.Implementations.Entities.User user) => _includedUsers is null || _includedUsers.Contains(user.Id);
-
-    private bool IsCanaryItem(BaseItem item) => !_canaryConfigured || (_canarySeriesId is Guid seriesId && (item.Id.Equals(seriesId) || (item is MediaBrowser.Controller.Entities.TV.Episode episode && episode.SeriesId.Equals(seriesId))));
-
     private static string BoundDisplay(string value) => value.Length <= 512 ? value : value[..512];
-
-    private static HashSet<Guid>? ParseIncludedUsers(string? raw)
-    {
-        if (raw is null)
-        {
-            return null;
-        }
-
-        var users = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
-            .Select(value => Guid.TryParse(value, out var id) ? id : Guid.Empty)
-            .Where(id => !id.Equals(Guid.Empty))
-            .ToHashSet();
-        return users;
-    }
 
     private readonly record struct ResolutionObservation(string CanonicalPath, string Reason, bool IsHot);
 }

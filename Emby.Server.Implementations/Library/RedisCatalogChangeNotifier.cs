@@ -16,13 +16,14 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
 {
     private const string ChannelName = "jellyfin:catalog-cache:v1";
     private const string SequenceKey = "jellyfin:catalog-cache:v1:sequence";
-    private static readonly TimeSpan SubscriptionRetryDelay = TimeSpan.FromSeconds(5);
     private const string PublishScript = """
         local sequence = redis.call('INCR', KEYS[1])
         local message = ARGV[2] .. '|' .. sequence .. '|' .. ARGV[3] .. '|' .. ARGV[4] .. '|' .. ARGV[5]
         redis.call('PUBLISH', ARGV[1], message)
         return sequence
         """;
+
+    private static readonly TimeSpan SubscriptionRetryDelay = TimeSpan.FromSeconds(5);
 
     private readonly RedisConnectionManager _redis;
     private readonly ILogger<RedisCatalogChangeNotifier> _logger;
