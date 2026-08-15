@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Library;
 using Xunit;
@@ -9,6 +11,33 @@ namespace Jellyfin.Server.Implementations.Tests.Library;
 public sealed class HotCachePlaybackPathResolverTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "jellyfin-hot-cache-test-" + Guid.NewGuid().ToString("N"));
+
+    [Fact]
+    public void DeferredCoordinator_IsNotResolvedDuringResolverConstruction_AndReceivesRuntimeObservation()
+    {
+        var canonical = Create("media/episode.mkv", "bytes");
+        var hot = Create("hot/episode.mkv", "bytes");
+        File.SetLastWriteTimeUtc(hot, new FileInfo(canonical).LastWriteTimeUtc);
+        var coordinator = new RecordingCoordinator();
+        var coordinatorResolutions = 0;
+
+        var resolver = new HotCachePlaybackPathResolver(
+            Path.Combine(_root, "media"),
+            Path.Combine(_root, "hot"),
+            new Lazy<IHotCacheCoordinator>(() =>
+            {
+                coordinatorResolutions++;
+                return coordinator;
+            }));
+
+        Assert.Equal(0, coordinatorResolutions);
+
+        var result = resolver.Resolve(new PlaybackPathRequest(canonical, new FileInfo(canonical).Length, PlaybackPathPurpose.MainMedia));
+
+        Assert.True(result.IsHot);
+        Assert.Equal(1, coordinatorResolutions);
+        Assert.Equal(1, coordinator.Observations);
+    }
 
     [Fact]
     public void DirectPlay_ValidatedCopyUsesHotPathWithoutChangingCanonicalInput()
@@ -129,5 +158,19 @@ public sealed class HotCachePlaybackPathResolverTests : IDisposable
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, content);
         return path;
+    }
+
+    private sealed class RecordingCoordinator : IHotCacheCoordinator
+    {
+        public int Observations { get; private set; }
+
+        public Task RecordPlaybackAsync(PlaybackProgressEventArgs playback, HotCachePlaybackEvent lifecycle, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public Task ReconcileAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public void ObserveResolution(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
+        {
+            Observations++;
+        }
     }
 }

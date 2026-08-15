@@ -14,7 +14,7 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     private static readonly Counter Resolutions = Metrics.CreateCounter("jellyfin_hot_cache_playback_resolutions_total", "Playback path resolutions by cache result and fallback health.", new CounterConfiguration { LabelNames = ["result", "fallback", "reason"] });
     private readonly string _canonicalRoot;
     private readonly string _hotRoot;
-    private readonly IHotCacheCoordinator _coordinator;
+    private readonly Lazy<IHotCacheCoordinator> _coordinator;
     private readonly ConcurrentDictionary<string, DateTimeOffset> _reported = new(StringComparer.Ordinal);
     private readonly TimeProvider _timeProvider;
 
@@ -25,10 +25,22 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
     /// <param name="hotRoot">The disposable hot-cache root.</param>
     /// <param name="coordinator">The hot-cache coordinator.</param>
     public HotCachePlaybackPathResolver(string canonicalRoot, string hotRoot, IHotCacheCoordinator coordinator, TimeProvider? timeProvider = null)
+        : this(canonicalRoot, hotRoot, new Lazy<IHotCacheCoordinator>(() => coordinator), timeProvider)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HotCachePlaybackPathResolver"/> class with deferred coordinator resolution.
+    /// </summary>
+    /// <param name="canonicalRoot">The canonical media root.</param>
+    /// <param name="hotRoot">The disposable hot-cache root.</param>
+    /// <param name="coordinator">The deferred hot-cache coordinator.</param>
+    /// <param name="timeProvider">The optional time provider used for observation throttling.</param>
+    public HotCachePlaybackPathResolver(string canonicalRoot, string hotRoot, Lazy<IHotCacheCoordinator> coordinator, TimeProvider? timeProvider = null)
     {
         _canonicalRoot = Path.GetFullPath(canonicalRoot);
         _hotRoot = Path.GetFullPath(hotRoot);
-        _coordinator = coordinator;
+        _coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
 
@@ -97,7 +109,7 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
         if (!_reported.TryGetValue(key, out var previous) || now - previous >= ObservationThrottleWindow)
         {
             _reported[key] = now;
-            _coordinator.ObserveResolution(request, resolution);
+            _coordinator.Value.ObserveResolution(request, resolution);
         }
 
         return resolution;
