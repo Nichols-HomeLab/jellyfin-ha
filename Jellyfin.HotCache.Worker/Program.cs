@@ -2,6 +2,7 @@ using Jellyfin.HotCache.Worker;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
+using Prometheus;
 
 var builder = Host.CreateApplicationBuilder(args);
 var connectionString = builder.Configuration["ConnectionStrings:HotCache"]
@@ -25,4 +26,7 @@ builder.Services.AddSingleton<IFileOperations, PhysicalFileOperations>();
 builder.Services.AddSingleton<HotCacheWorker>();
 builder.Services.AddHostedService<HotCacheSchemaMigrationService>();
 builder.Services.AddHostedService<HotCacheHostedService>();
+var metricsPort = int.TryParse(builder.Configuration["Jellyfin__HotCache__MetricsPort"], out var configuredMetricsPort) ? configuredMetricsPort : 9109;
+var metricServer = new MetricServer(port: metricsPort);
+metricServer.Start();
 await builder.Build().RunAsync();

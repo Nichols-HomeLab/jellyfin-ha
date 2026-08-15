@@ -31,6 +31,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
     <PackageReference Include="prometheus-net.DotNetRuntime" />
+    <PackageReference Include="prometheus-net" />
     <PackageReference Include="DotNet.Glob" />
   </ItemGroup>
 

@@ -9,6 +9,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="Microsoft.Extensions.Logging" />
     <PackageReference Include="Npgsql" />
+    <PackageReference Include="prometheus-net" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="../MediaBrowser.Controller/Library/HotCacheSchema.cs" Link="HotCacheSchema.cs" />

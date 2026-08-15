@@ -2,12 +2,14 @@ using System;
 using System.Collections.Concurrent;
 using System.IO;
 using MediaBrowser.Controller.Library;
+using Prometheus;
 
 namespace Emby.Server.Implementations.Library;
 
 /// <summary>Validates an atomically published hot file and otherwise fails open to canonical storage.</summary>
 public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
 {
+    private static readonly Counter Resolutions = Metrics.CreateCounter("jellyfin_hot_cache_playback_resolutions_total", "Playback path resolutions by cache result.", new CounterConfiguration { LabelNames = ["result", "reason"] });
     private readonly string _canonicalRoot;
     private readonly string _hotRoot;
     private readonly IHotCacheCoordinator _coordinator;
@@ -73,6 +75,7 @@ public sealed class HotCachePlaybackPathResolver : IPlaybackPathResolver
 
     private PlaybackPathResolution Observe(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
     {
+        Resolutions.WithLabels(resolution.IsHot ? "hot" : "cold", resolution.Reason).Inc();
         // A resolver may be called per segment. Coalesce only the observation, never its correctness check.
         if (_reported.TryAdd(request.CanonicalPath + '\u001f' + resolution.Reason, 0))
         {
