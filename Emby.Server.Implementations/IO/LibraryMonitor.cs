@@ -41,7 +41,7 @@ namespace Emby.Server.Implementations.IO
         private bool _disposed;
 
         /// <summary>
-        /// Initializes a new single-instance <see cref="LibraryMonitor" />.
+        /// Initializes a new instance of the <see cref="LibraryMonitor" /> class for a single-instance deployment.
         /// </summary>
         /// <param name="logger">The logger.</param>
         /// <param name="libraryManager">The library manager.</param>

@@ -21,6 +21,7 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
         redis.call('PUBLISH', ARGV[1], message)
         return sequence
         """;
+
     private readonly RedisConnectionManager _redis;
     private readonly ILogger<RedisCatalogChangeNotifier> _logger;
     private readonly string _source = Guid.NewGuid().ToString("N");

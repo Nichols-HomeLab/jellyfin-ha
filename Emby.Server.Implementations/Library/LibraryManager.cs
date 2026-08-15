@@ -86,7 +86,6 @@ namespace Emby.Server.Implementations.Library
         private readonly ICatalogChangeNotifier _catalogChangeNotifier;
         private readonly FastConcurrentLru<Guid, BaseItem> _cache;
         private readonly Lock _catalogChangeLock = new();
-        private long _lastCatalogChangeSequence;
 
         /// <summary>
         /// The _root folder sync lock.
@@ -95,6 +94,8 @@ namespace Emby.Server.Implementations.Library
         private readonly Lock _userRootFolderSyncLock = new();
 
         private readonly TimeSpan _viewRefreshInterval = TimeSpan.FromHours(24);
+
+        private long _lastCatalogChangeSequence;
 
         /// <summary>
         /// The _root folder.
@@ -168,6 +169,24 @@ namespace Emby.Server.Implementations.Library
         /// <summary>
         /// Initializes a new instance of the <see cref="LibraryManager"/> class.
         /// </summary>
+        /// <param name="appHost">The application host.</param>
+        /// <param name="loggerFactory">The logger factory.</param>
+        /// <param name="taskManager">The task manager.</param>
+        /// <param name="userManager">The user manager.</param>
+        /// <param name="configurationManager">The configuration manager.</param>
+        /// <param name="userDataManager">The user data manager.</param>
+        /// <param name="libraryMonitorFactory">The library monitor.</param>
+        /// <param name="fileSystem">The file system.</param>
+        /// <param name="providerManagerFactory">The provider manager.</param>
+        /// <param name="userViewManagerFactory">The user view manager.</param>
+        /// <param name="mediaEncoder">The media encoder.</param>
+        /// <param name="itemRepository">The item repository.</param>
+        /// <param name="imageProcessor">The image processor.</param>
+        /// <param name="namingOptions">The naming options.</param>
+        /// <param name="directoryService">The directory service.</param>
+        /// <param name="peopleRepository">The people repository.</param>
+        /// <param name="pathManager">The path manager.</param>
+        /// <param name="catalogOwnership">The cluster-wide catalog ownership.</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,
@@ -213,6 +232,25 @@ namespace Emby.Server.Implementations.Library
         /// <summary>
         /// Initializes a new instance of the <see cref="LibraryManager"/> class with distributed catalog propagation.
         /// </summary>
+        /// <param name="appHost">The application host.</param>
+        /// <param name="loggerFactory">The logger factory.</param>
+        /// <param name="taskManager">The task manager.</param>
+        /// <param name="userManager">The user manager.</param>
+        /// <param name="configurationManager">The configuration manager.</param>
+        /// <param name="userDataManager">The user data manager.</param>
+        /// <param name="libraryMonitorFactory">The library monitor.</param>
+        /// <param name="fileSystem">The file system.</param>
+        /// <param name="providerManagerFactory">The provider manager.</param>
+        /// <param name="userViewManagerFactory">The user view manager.</param>
+        /// <param name="mediaEncoder">The media encoder.</param>
+        /// <param name="itemRepository">The item repository.</param>
+        /// <param name="imageProcessor">The image processor.</param>
+        /// <param name="namingOptions">The naming options.</param>
+        /// <param name="directoryService">The directory service.</param>
+        /// <param name="peopleRepository">The people repository.</param>
+        /// <param name="pathManager">The path manager.</param>
+        /// <param name="catalogOwnership">The cluster-wide catalog ownership.</param>
+        /// <param name="catalogChangeNotifier">The distributed catalog change notifier.</param>
         public LibraryManager(
             IServerApplicationHost appHost,
             ILoggerFactory loggerFactory,

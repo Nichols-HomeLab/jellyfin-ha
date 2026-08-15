@@ -28,7 +28,7 @@ public class TaskManager : ITaskManager
     private readonly ILogger<TaskManager> _logger;
 
     /// <summary>
-    /// Initializes a new single-instance <see cref="TaskManager" />.
+    /// Initializes a new instance of the <see cref="TaskManager" /> class for a single-instance deployment.
     /// </summary>
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="logger">The logger.</param>

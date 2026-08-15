@@ -38,7 +38,7 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     private string _id;
 
     /// <summary>
-    /// Initializes a new single-instance <see cref="ScheduledTaskWorker" />.
+    /// Initializes a new instance of the <see cref="ScheduledTaskWorker" /> class for a single-instance deployment.
     /// </summary>
     /// <param name="scheduledTask">The scheduled task.</param>
     /// <param name="applicationPaths">The application paths.</param>
