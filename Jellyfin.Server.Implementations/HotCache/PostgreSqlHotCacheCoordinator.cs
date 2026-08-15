@@ -156,7 +156,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             await using var command = _dataSource.CreateCommand("""
                 WITH target AS (SELECT id FROM hot_cache_jobs WHERE canonical_path=@path ORDER BY updated_at DESC LIMIT 1),
                 touch AS (UPDATE hot_cache_jobs SET last_access_utc=now(),updated_at=now() WHERE id=(SELECT id FROM target) AND @hot RETURNING id),
-                repair AS (UPDATE hot_cache_jobs SET kind='promotion',state='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=(SELECT id FROM target) AND @repair AND state <> 'running' RETURNING id)
+                repair AS (UPDATE hot_cache_jobs SET kind='promotion',state='pending',lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=(SELECT id FROM target) AND @repair AND state <> 'running' AND EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=hot_cache_jobs.item_id AND interest.expires_at_utc>now()) RETURNING id)
                 INSERT INTO hot_cache_events(job_id,kind,detail) SELECT id,@kind,@detail FROM target;
                 """);
             command.Parameters.AddWithValue("kind", observation.IsHot ? "playback-hit" : "validate-or-repair");
