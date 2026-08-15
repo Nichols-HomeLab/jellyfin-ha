@@ -146,6 +146,7 @@ public static class ServiceCollectionExtensions
 
         serviceCollection.AddSingleton<IJellyfinDatabaseProvider>(providerFactory!);
         serviceCollection.AddSingleton<IHotCacheCoordinator, NullHotCacheCoordinator>();
+        serviceCollection.AddSingleton<IHotCacheAdministration, NullHotCacheAdministration>();
 
         if (UsesPostgreSqlCatalogOwnership(efCoreConfiguration))
         {
@@ -203,6 +204,7 @@ public static class ServiceCollectionExtensions
             serviceCollection.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PostgreSqlCatalogOwnership>());
             serviceCollection.AddSingleton<PostgreSqlHotCacheCoordinator>();
             serviceCollection.AddSingleton<IHotCacheCoordinator>(sp => sp.GetRequiredService<PostgreSqlHotCacheCoordinator>());
+            serviceCollection.AddSingleton<IHotCacheAdministration, PostgreSqlHotCacheAdministration>();
             serviceCollection.AddSingleton<IHostedService, HotCacheHostedService>();
         }
 

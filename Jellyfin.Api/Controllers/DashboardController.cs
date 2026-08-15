@@ -53,6 +53,14 @@ public class DashboardController : BaseJellyfinApiController
         [FromQuery] bool? enableInMainMenu)
     {
         var configPages = _pluginManager.Plugins.SelectMany(GetConfigPages).ToList();
+        configPages.Add(new ConfigurationPageInfo
+        {
+            Name = "HotCache",
+            DisplayName = "Jellyfin Hot Cache",
+            EnableInMainMenu = true,
+            MenuSection = "Server",
+            MenuIcon = "storage"
+        });
 
         if (enableInMainMenu.HasValue)
         {
@@ -70,11 +78,17 @@ public class DashboardController : BaseJellyfinApiController
     /// <response code="404">Plugin configuration page not found.</response>
     /// <returns>The configuration page.</returns>
     [HttpGet("web/ConfigurationPage")]
+    [Authorize(Policy = Policies.RequiresElevation)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesFile(MediaTypeNames.Text.Html, "application/x-javascript")]
     public ActionResult GetDashboardConfigurationPage([FromQuery] string? name)
     {
+        if (string.Equals(name, "HotCache", StringComparison.OrdinalIgnoreCase))
+        {
+            return Content(HotCacheController.PageHtml, MediaTypeNames.Text.Html);
+        }
+
         var altPage = GetPluginPages().FirstOrDefault(p => string.Equals(p.Item1.Name, name, StringComparison.OrdinalIgnoreCase));
         if (altPage is null)
         {

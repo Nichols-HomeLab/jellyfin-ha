@@ -14,6 +14,10 @@ public static class HotCacheSchema
         CREATE TABLE IF NOT EXISTS hot_cache_interests (item_id uuid NOT NULL, user_id uuid NOT NULL, reason text NOT NULL, priority integer NOT NULL, first_observed_utc timestamptz NOT NULL DEFAULT now(), last_observed_utc timestamptz NOT NULL DEFAULT now(), expires_at_utc timestamptz NOT NULL, PRIMARY KEY(item_id,user_id,reason));
         CREATE TABLE IF NOT EXISTS hot_cache_playback_leases (play_session_id text PRIMARY KEY, item_id uuid NOT NULL, expires_at_utc timestamptz NOT NULL, updated_at_utc timestamptz NOT NULL DEFAULT now());
         CREATE INDEX IF NOT EXISTS hot_cache_playback_leases_item_expiry_idx ON hot_cache_playback_leases(item_id,expires_at_utc);
+        CREATE TABLE IF NOT EXISTS hot_cache_settings (id boolean PRIMARY KEY DEFAULT true CHECK (id), backend text NOT NULL DEFAULT 'unraid-temp' CHECK (backend IN ('unraid-temp','cephfs')), paused boolean NOT NULL DEFAULT false, high_watermark double precision NOT NULL DEFAULT .90 CHECK (high_watermark > 0 AND high_watermark < 1), low_watermark double precision NOT NULL DEFAULT .75 CHECK (low_watermark > 0 AND low_watermark < high_watermark), updated_at timestamptz NOT NULL DEFAULT now());
+        INSERT INTO hot_cache_settings(id) VALUES(true) ON CONFLICT (id) DO NOTHING;
+        CREATE TABLE IF NOT EXISTS hot_cache_backend_observations (backend text PRIMARY KEY CHECK (backend IN ('unraid-temp','cephfs')), mounted boolean NOT NULL, healthy boolean NOT NULL, total_bytes bigint NOT NULL CHECK (total_bytes >= 0), used_bytes bigint NOT NULL CHECK (used_bytes >= 0), available_bytes bigint NOT NULL CHECK (available_bytes >= 0), observed_at timestamptz NOT NULL DEFAULT now());
+        CREATE TABLE IF NOT EXISTS hot_cache_admin_history (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, kind text NOT NULL CHECK (kind IN ('copied','evicted','failed','settings','backend','promoted','retry','reconcile')), detail varchar(512) NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
         INSERT INTO hot_cache_schema_migrations(version) VALUES (1) ON CONFLICT DO NOTHING;
         """;
 }
