@@ -66,6 +66,10 @@ public sealed class HotCacheControllerTests
     {
         var page = new HotCacheController(new Store()).Page();
         Assert.Contains("Jellyfin Hot Cache", page.Content, StringComparison.Ordinal);
+        Assert.Contains("data-role=\"page\"", page.Content, StringComparison.Ordinal);
+        Assert.Contains("pluginConfigurationPage", page.Content, StringComparison.Ordinal);
+        Assert.Contains("data-role=\"content\"", page.Content, StringComparison.Ordinal);
+        Assert.Contains("content-primary", page.Content, StringComparison.Ordinal);
         Assert.Contains("Unraid /temp", page.Content, StringComparison.Ordinal);
         Assert.Contains("CephFS 300 GiB", page.Content, StringComparison.Ordinal);
         Assert.Contains("Inventory by series", page.Content, StringComparison.Ordinal);
