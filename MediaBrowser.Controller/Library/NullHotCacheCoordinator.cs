@@ -1,1 +1,43 @@
-dXNpbmcgU3lzdGVtOwp1c2luZyBTeXN0ZW0uVGhyZWFkaW5nOwp1c2luZyBTeXN0ZW0uVGhyZWFkaW5nLlRhc2tzOwoKI3ByYWdtYSB3YXJuaW5nIGRpc2FibGUgU0ExNDAyIC8vIE51bGwgaW1wbGVtZW50YXRpb25zIGFyZSBpbnRlbnRpb25hbGx5IGNvLWxvY2F0ZWQuCgpuYW1lc3BhY2UgTWVkaWFCcm93c2VyLkNvbnRyb2xsZXIuTGlicmFyeTsKCi8vLyA8c3VtbWFyeT5Db2xkLW9ubHkgY29vcmRpbmF0b3IgdXNlZCB3aGVuIHRoZSBQb3N0Z3JlU1FMIGhvdC1jYWNoZSBmZWF0dXJlIGlzIHVuYXZhaWxhYmxlLjwvc3VtbWFyeT4KcHVibGljIHNlYWxlZCBjbGFzcyBOdWxsSG90Q2FjaGVDb29yZGluYXRvciA6IElIb3RDYWNoZUNvb3JkaW5hdG9yCnsKICAgIC8vLyA8aW5oZXJpdGRvYyAvPgogICAgcHVibGljIFRhc2sgUmVjb3JkUGxheWJhY2tBc3luYyhQbGF5YmFja1Byb2dyZXNzRXZlbnRBcmdzIHBsYXliYWNrLCBIb3RDYWNoZVBsYXliYWNrRXZlbnQgbGlmZWN5Y2xlLCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbikgPT4gVGFzay5Db21wbGV0ZWRUYXNrOwoKICAgIC8vLyA8aW5oZXJpdGRvYyAvPgogICAgcHVibGljIFRhc2sgUmVjb25jaWxlQXN5bmMoQ2FuY2VsbGF0aW9uVG9rZW4gY2FuY2VsbGF0aW9uVG9rZW4pID0+IFRhc2suQ29tcGxldGVkVGFzazsKCiAgICAvLy8gPGluaGVyaXRkb2MgLz4KICAgIHB1YmxpYyBUYXNrPGludD4gQ2FjaGVMaWJyYXJ5SXRlbUFzeW5jKEd1aWQgaXRlbUlkLCBib29sIGluY2x1ZGVTZWFzb24sIENhbmNlbGxhdGlvblRva2VuIGNhbmNlbGxhdGlvblRva2VuKSA9PiBUYXNrLkZyb21SZXN1bHQoMCk7CgogICAgLy8vIDxpbmhlcml0ZG9jIC8+CiAgICBwdWJsaWMgdm9pZCBPYnNlcnZlUmVzb2x1dGlvbihpbiBQbGF5YmFja1BhdGhSZXF1ZXN0IHJlcXVlc3QsIGluIFBsYXliYWNrUGF0aFJlc29sdXRpb24gcmVzb2x1dGlvbikKICAgIHsKICAgIH0KfQoKLy8vIDxzdW1tYXJ5PkNvbGQtb25seSBhZG1pbmlzdHJhdGl2ZSBpbXBsZW1lbnRhdGlvbiB1c2VkIHdpdGhvdXQgUG9zdGdyZVNRTC48L3N1bW1hcnk+CnB1YmxpYyBzZWFsZWQgY2xhc3MgTnVsbEhvdENhY2hlQWRtaW5pc3RyYXRpb24gOiBJSG90Q2FjaGVBZG1pbmlzdHJhdGlvbgp7CiAgICBwcml2YXRlIHN0YXRpYyByZWFkb25seSBIb3RDYWNoZUFkbWluaXN0cmF0aW9uU25hcHNob3QgRW1wdHkgPSBuZXcobmV3IEhvdENhY2hlU2V0dGluZ3MoInVucmFpZC10ZW1wIiwgZmFsc2UsIC45MCwgLjc1KSwgW10sIFtdLCBbXSwgW10pOwoKICAgIC8vLyA8aW5oZXJpdGRvYyAvPgogICAgcHVibGljIFRhc2s8SG90Q2FjaGVBZG1pbmlzdHJhdGlvblNuYXBzaG90PiBHZXRTbmFwc2hvdEFzeW5jKHN0cmluZz8gaGlzdG9yeUtpbmQsIENhbmNlbGxhdGlvblRva2VuIGNhbmNlbGxhdGlvblRva2VuKSA9PiBUYXNrLkZyb21SZXN1bHQoRW1wdHkpOwoKICAgIC8vLyA8aW5oZXJpdGRvYyAvPgogICAgcHVibGljIFRhc2sgVXBkYXRlU2V0dGluZ3NBc3luYyhIb3RDYWNoZVNldHRpbmdzIHNldHRpbmdzLCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbikgPT4gVGFzay5Db21wbGV0ZWRUYXNrOwoKICAgIC8vLyA8aW5oZXJpdGRvYyAvPgogICAgcHVibGljIFRhc2sgUXVldWVBY3Rpb25Bc3luYyhIb3RDYWNoZUFjdGlvbiBhY3Rpb24sIENhbmNlbGxhdGlvblRva2VuIGNhbmNlbGxhdGlvblRva2VuKSA9PiBUYXNrLkNvbXBsZXRlZFRhc2s7CgogICAgLy8vIDxpbmhlcml0ZG9jIC8+CiAgICBwdWJsaWMgVGFzazxpbnQ+IENhY2hlTGlicmFyeUl0ZW1Bc3luYyhIb3RDYWNoZU1hbnVhbENhY2hlUmVxdWVzdCByZXF1ZXN0LCBDYW5jZWxsYXRpb25Ub2tlbiBjYW5jZWxsYXRpb25Ub2tlbikgPT4gVGFzay5Gcm9tUmVzdWx0KDApOwp9Cg==
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+
+#pragma warning disable SA1402 // Null implementations are intentionally co-located.
+
+namespace MediaBrowser.Controller.Library;
+
+/// <summary>Cold-only coordinator used when the PostgreSQL hot-cache feature is unavailable.</summary>
+public sealed class NullHotCacheCoordinator : IHotCacheCoordinator
+{
+    /// <inheritdoc />
+    public Task RecordPlaybackAsync(PlaybackProgressEventArgs playback, HotCachePlaybackEvent lifecycle, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task ReconcileAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task<int> CacheLibraryItemAsync(Guid itemId, bool includeSeason, CancellationToken cancellationToken) => Task.FromResult(0);
+
+    /// <inheritdoc />
+    public void ObserveResolution(in PlaybackPathRequest request, in PlaybackPathResolution resolution)
+    {
+    }
+}
+
+/// <summary>Cold-only administrative implementation used without PostgreSQL.</summary>
+public sealed class NullHotCacheAdministration : IHotCacheAdministration
+{
+    private static readonly HotCacheAdministrationSnapshot Empty = new(new HotCacheSettings("unraid-temp", false, .90, .75), [], [], [], []);
+
+    /// <inheritdoc />
+    public Task<HotCacheAdministrationSnapshot> GetSnapshotAsync(string? historyKind, CancellationToken cancellationToken) => Task.FromResult(Empty);
+
+    /// <inheritdoc />
+    public Task UpdateSettingsAsync(HotCacheSettings settings, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task QueueActionAsync(HotCacheAction action, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task<int> CacheLibraryItemAsync(HotCacheManualCacheRequest request, CancellationToken cancellationToken) => Task.FromResult(0);
+}
