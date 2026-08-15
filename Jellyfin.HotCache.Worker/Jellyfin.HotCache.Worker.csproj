@@ -11,6 +11,6 @@
     <PackageReference Include="Npgsql" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="sql/001_hot_cache.sql" />
+    <Compile Include="../MediaBrowser.Controller/Library/HotCacheSchema.cs" Link="HotCacheSchema.cs" />
   </ItemGroup>
 </Project>

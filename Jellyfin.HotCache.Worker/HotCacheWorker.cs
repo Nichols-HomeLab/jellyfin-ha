@@ -40,9 +40,10 @@ public interface IHotCacheJobStore
     Task<HotCacheJob?> ClaimAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task<bool> RenewAsync(Guid jobId, string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
     Task ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken);
-    Task CompleteAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
+    Task CompleteAsync(Guid jobId, string workerId, string? hotPath, CancellationToken cancellationToken);
     Task FailAsync(Guid jobId, string workerId, string error, CancellationToken cancellationToken);
-    Task<IReadOnlyList<HotCacheJob>> EvictionCandidatesAsync(CancellationToken cancellationToken);
+    Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken);
+    Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken);
     Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken);
 }
 
@@ -104,16 +105,17 @@ public sealed class HotCacheWorker
     {
         try
         {
+            string? hotPath = null;
             if (job.Kind == HotCacheJobKind.Promotion)
             {
-                await PromoteAsync(job, workerId, ct).ConfigureAwait(false);
+                hotPath = await PromoteAsync(job, workerId, ct).ConfigureAwait(false);
             }
             else
             {
                 await EvictAsync(job, workerId, ct).ConfigureAwait(false);
             }
 
-            await _store.CompleteAsync(job.Id, workerId, ct).ConfigureAwait(false);
+            await _store.CompleteAsync(job.Id, workerId, hotPath, ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException)
         {
@@ -121,7 +123,7 @@ public sealed class HotCacheWorker
             _logger.LogWarning(ex, "Hot-cache job {JobId} for item {ItemId} degraded to cold playback", job.Id, ItemId(job));
         }
     }
-    private async Task PromoteAsync(HotCacheJob job, string workerId, CancellationToken ct)
+    private async Task<string> PromoteAsync(HotCacheJob job, string workerId, CancellationToken ct)
     {
         if (!await _store.RenewAsync(job.Id, workerId, _options.LeaseDuration, ct).ConfigureAwait(false))
         {
@@ -140,7 +142,7 @@ public sealed class HotCacheWorker
         if (_files.FileExists(target))
         {
             await _store.EventAsync(job.Id, "already-published", ItemId(job), ct).ConfigureAwait(false);
-            return;
+            return target;
         }
 
         _files.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -173,6 +175,7 @@ public sealed class HotCacheWorker
 
             _files.MoveNoReplace(partial, target);
             await _store.EventAsync(job.Id, "published", ItemId(job), ct).ConfigureAwait(false);
+            return target;
         }
         catch
         {
@@ -185,9 +188,9 @@ public sealed class HotCacheWorker
         }
     }
     private async Task EvictAsync(HotCacheJob job, string workerId, CancellationToken ct)
-    { if (job.IsActive || job.IsPinned || job.IsCopying || job.Priority > 0) return; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); await _store.EventAsync(job.Id, "evicted", path, ct).ConfigureAwait(false); }
+    { if (job.IsActive || job.IsPinned || job.Priority > 0 || !await _store.CanEvictAsync(job.Id, workerId, ct).ConfigureAwait(false)) return; var path = Contained(_options.HotRoot, job.HotPath!); if (_files.FileExists(path)) _files.Delete(path); await _store.EventAsync(job.Id, "evicted", path, ct).ConfigureAwait(false); }
     private async Task EnforceCapacityAsync(string workerId, CancellationToken ct)
-    { if (UsedRatio() < _options.HighWatermark) return; foreach (var job in (await _store.EvictionCandidatesAsync(ct).ConfigureAwait(false)).OrderBy(x => x.LastAccessUtc)) { await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); if (UsedRatio() <= _options.LowWatermark) break; } }
+    { if (UsedRatio() < _options.HighWatermark) return; while (UsedRatio() > _options.LowWatermark) { var job = await _store.ClaimEvictionAsync(workerId, _options.LeaseDuration, ct).ConfigureAwait(false); if (job is null) break; await ExecuteJobAsync(job, workerId, ct).ConfigureAwait(false); } }
     private double UsedRatio() => 1d - ((double)_files.GetAvailableSpace(_options.HotRoot) / _files.GetTotalSpace(_options.HotRoot));
     private void CleanupPartials() { foreach (var path in _files.EnumerateFiles(_options.HotRoot, "*.partial")) if (DateTime.UtcNow - _files.GetFileInfo(path).LastWriteTimeUtc > _options.PartialFileMaxAge) _files.Delete(path); }
     private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative)) throw new IOException("Path escapes configured root."); return fullPath; }

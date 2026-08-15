@@ -10,6 +10,7 @@ using Jellyfin.Database.Implementations.Enums;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 
 namespace Jellyfin.Server.Implementations.HotCache;
@@ -24,6 +25,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private readonly ILibraryManager _libraryManager;
     private readonly IUserDataManager _userDataManager;
     private readonly HashSet<Guid>? _includedUsers;
+    private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
     /// <summary>
@@ -33,13 +35,15 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <param name="userManager">The Jellyfin user source.</param>
     /// <param name="libraryManager">The Jellyfin library query source.</param>
     /// <param name="userDataManager">The per-user playback state source.</param>
-    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IUserDataManager userDataManager)
+    /// <param name="logger">The cold-degradation diagnostic logger.</param>
+    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IUserDataManager userDataManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
     {
         _dataSource = dataSource;
         _userManager = userManager;
         _libraryManager = libraryManager;
         _userDataManager = userDataManager;
         _includedUsers = ParseIncludedUsers(Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_INCLUDED_USER_IDS"));
+        _logger = logger;
     }
 
     /// <inheritdoc />
@@ -50,23 +54,43 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             return;
         }
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
-        if (lifecycle == HotCachePlaybackEvent.Stopped)
+        var users = playback.Users.Where(IsIncluded).ToArray();
+        if (users.Length == 0)
         {
-            await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_playback_leases WHERE play_session_id=@session", cancellationToken, ("session", playback.PlaySessionId ?? string.Empty)).ConfigureAwait(false);
-        }
-        else
-        {
-            await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_playback_leases(play_session_id,item_id,expires_at_utc) VALUES(@session,@item,now()+@lease) ON CONFLICT(play_session_id) DO UPDATE SET item_id=excluded.item_id,expires_at_utc=excluded.expires_at_utc,updated_at_utc=now()", cancellationToken, ("session", playback.PlaySessionId ?? string.Empty), ("item", playback.Item.Id), ("lease", PlaybackLeaseLifetime)).ConfigureAwait(false);
-            foreach (var user in playback.Users)
-            {
-                await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackInterestLifetime)).ConfigureAwait(false);
-                await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
-            }
+            return;
         }
 
-        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            if (lifecycle == HotCachePlaybackEvent.Stopped)
+            {
+                if (!string.IsNullOrWhiteSpace(playback.PlaySessionId))
+                {
+                    await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_playback_leases WHERE play_session_id=@session", cancellationToken, ("session", playback.PlaySessionId)).ConfigureAwait(false);
+                }
+            }
+            else
+            {
+                if (!string.IsNullOrWhiteSpace(playback.PlaySessionId))
+                {
+                    await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_playback_leases(play_session_id,item_id,expires_at_utc) VALUES(@session,@item,now()+@lease) ON CONFLICT(play_session_id) DO UPDATE SET item_id=excluded.item_id,expires_at_utc=excluded.expires_at_utc,updated_at_utc=now()", cancellationToken, ("session", playback.PlaySessionId), ("item", playback.Item.Id), ("lease", PlaybackLeaseLifetime)).ConfigureAwait(false);
+                }
+
+                foreach (var user in users)
+                {
+                    await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackInterestLifetime)).ConfigureAwait(false);
+                    await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "Hot-cache playback coordination is unavailable; playback continues from canonical storage.");
+        }
     }
 
     /// <inheritdoc />
@@ -100,16 +124,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <returns>A task that completes when the schema is available.</returns>
     public async Task EnsureMigratedAsync(CancellationToken cancellationToken)
     {
-        const string sql = """
-            CREATE TABLE IF NOT EXISTS hot_cache_jobs (id uuid PRIMARY KEY, kind text NOT NULL, state text NOT NULL DEFAULT 'pending', canonical_path text NOT NULL, hot_path text, source_length bigint NOT NULL DEFAULT 0, source_modified_utc timestamptz NOT NULL DEFAULT now(), priority integer NOT NULL DEFAULT 0, is_active boolean NOT NULL DEFAULT false, is_pinned boolean NOT NULL DEFAULT false, is_copying boolean NOT NULL DEFAULT false, last_access_utc timestamptz NOT NULL DEFAULT now(), bytes_copied bigint NOT NULL DEFAULT 0, attempts integer NOT NULL DEFAULT 0, max_attempts integer NOT NULL DEFAULT 3, last_error varchar(512), lease_owner text, lease_expires_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
-            CREATE TABLE IF NOT EXISTS hot_cache_events (id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, job_id uuid NOT NULL REFERENCES hot_cache_jobs(id), kind text NOT NULL, detail varchar(512) NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
-            CREATE TABLE IF NOT EXISTS hot_cache_interests (item_id uuid NOT NULL, user_id uuid NOT NULL, reason text NOT NULL, priority integer NOT NULL, first_observed_utc timestamptz NOT NULL DEFAULT now(), last_observed_utc timestamptz NOT NULL DEFAULT now(), expires_at_utc timestamptz NOT NULL, PRIMARY KEY(item_id,user_id,reason));
-            CREATE TABLE IF NOT EXISTS hot_cache_playback_leases (play_session_id text PRIMARY KEY, item_id uuid NOT NULL, expires_at_utc timestamptz NOT NULL, updated_at_utc timestamptz NOT NULL DEFAULT now());
-            CREATE INDEX IF NOT EXISTS hot_cache_playback_leases_item_expiry_idx ON hot_cache_playback_leases(item_id,expires_at_utc);
-            ALTER TABLE hot_cache_jobs ADD COLUMN IF NOT EXISTS item_id uuid;
-            CREATE UNIQUE INDEX IF NOT EXISTS hot_cache_jobs_item_unique_idx ON hot_cache_jobs(item_id) WHERE item_id IS NOT NULL;
-            """;
-        await using var command = _dataSource.CreateCommand(sql);
+        await using var command = _dataSource.CreateCommand(HotCacheSchema.Sql);
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
     }
 

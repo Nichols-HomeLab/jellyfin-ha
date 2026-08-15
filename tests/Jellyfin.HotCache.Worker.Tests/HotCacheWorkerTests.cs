@@ -63,6 +63,14 @@ public sealed class HotCacheWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task PublishedPromotionPersistsHotPathForCapacityEviction()
+    {
+        var store = new TestStore(CreatePromotion("video.bin", "abc"));
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
+        Assert.Equal(Path.Combine(HotRoot, "video.bin"), store.CompletedHotPath);
+    }
+
+    [Fact]
     public async Task MountLossDegradesToColdPlayback()
     {
         var store = new TestStore(CreatePromotion("video.bin", "abc"));
@@ -147,6 +155,8 @@ public sealed class HotCacheWorkerTests : IDisposable
 
         public int Renewals { get; private set; }
 
+        public string? CompletedHotPath { get; private set; }
+
         public Task<HotCacheJob?> ClaimAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
         {
             if (_next is null || (!LeaseExpired && _next.Attempts > 0))
@@ -166,8 +176,9 @@ public sealed class HotCacheWorkerTests : IDisposable
 
         public Task ProgressAsync(Guid jobId, string workerId, long bytes, CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public Task CompleteAsync(Guid jobId, string workerId, CancellationToken cancellationToken)
+        public Task CompleteAsync(Guid jobId, string workerId, string? hotPath, CancellationToken cancellationToken)
         {
+            CompletedHotPath = hotPath;
             _next = null;
             return Task.CompletedTask;
         }
@@ -179,8 +190,18 @@ public sealed class HotCacheWorkerTests : IDisposable
             return Task.CompletedTask;
         }
 
-        public Task<IReadOnlyList<HotCacheJob>> EvictionCandidatesAsync(CancellationToken cancellationToken)
-            => Task.FromResult<IReadOnlyList<HotCacheJob>>(Candidates);
+        public Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken cancellationToken)
+        {
+            var candidate = Candidates.FirstOrDefault();
+            if (candidate is not null)
+            {
+                Candidates.Remove(candidate);
+            }
+
+            return Task.FromResult(candidate);
+        }
+
+        public Task<bool> CanEvictAsync(Guid jobId, string workerId, CancellationToken cancellationToken) => Task.FromResult(true);
 
         public Task EventAsync(Guid jobId, string kind, string detail, CancellationToken cancellationToken) => Task.CompletedTask;
     }

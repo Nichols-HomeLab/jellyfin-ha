@@ -13,12 +13,12 @@ public sealed class HotCacheHostedService(PostgreSqlHotCacheCoordinator coordina
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await coordinator.EnsureMigratedAsync(stoppingToken).ConfigureAwait(false);
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(5));
         do
         {
             try
             {
+                await coordinator.EnsureMigratedAsync(stoppingToken).ConfigureAwait(false);
                 await coordinator.ReconcileAsync(stoppingToken).ConfigureAwait(false);
                 await coordinator.DrainObservationsAsync(stoppingToken).ConfigureAwait(false);
             }
