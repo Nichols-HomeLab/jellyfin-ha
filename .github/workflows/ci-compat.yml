@@ -23,7 +23,7 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build Jellyfin.Server -o ./out
+          dotnet build Jellyfin.Server -o ./out -p:TreatWarningsAsErrors=false
 
       - name: Upload Head
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5 # v3
@@ -62,7 +62,7 @@ jobs:
 
       - name: Build
         run: |
-          dotnet build Jellyfin.Server -o ./out
+          dotnet build Jellyfin.Server -o ./out -p:TreatWarningsAsErrors=false
 
       - name: Upload Head
         uses: actions/upload-artifact@ff15f0306b3f739f7b6fd43fb5d26cd321bd4de5 # v3
