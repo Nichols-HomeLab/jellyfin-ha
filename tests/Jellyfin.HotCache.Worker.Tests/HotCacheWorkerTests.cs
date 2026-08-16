@@ -78,6 +78,26 @@ public sealed class HotCacheWorkerTests : IDisposable
     }
 
     [Fact]
+    public async Task PostgreSqlTimestampPrecisionDoesNotRejectUnchangedSource()
+    {
+        var path = Path.Combine(ColdRoot, "video.bin");
+        await File.WriteAllTextAsync(path, "abc");
+        var now = DateTime.UtcNow;
+        var wholeMicrosecond = now.AddTicks(-(now.Ticks % 10));
+        File.SetLastWriteTimeUtc(path, wholeMicrosecond.AddTicks(7));
+        var info = new FileInfo(path);
+        Assert.NotEqual(0, info.LastWriteTimeUtc.Ticks % 10);
+        var storedTimestamp = info.LastWriteTimeUtc.AddTicks(-(info.LastWriteTimeUtc.Ticks % 10));
+        var job = new HotCacheJob(Guid.NewGuid(), HotCacheJobKind.Promotion, path, null, info.Length, storedTimestamp, 0, false, false, false, DateTime.UtcNow, 0);
+        var store = new TestStore(job);
+
+        await CreateWorker(store, new TestFiles()).ExecuteOnceAsync("one", default);
+
+        Assert.Equal(0, store.Failures);
+        Assert.Equal(Path.Combine(HotRoot, "video.bin"), store.CompletedHotPath);
+    }
+
+    [Fact]
     public async Task StaleHotCopyIsRepairedBeforePromotionCompletes()
     {
         var job = CreatePromotion("video.bin", "fresh-content");
