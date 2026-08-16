@@ -82,7 +82,7 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
         }
     }
 
-    /// <summary>Queues an episode or all episodes in a season selected from the Jellyfin library.</summary>
+    /// <summary>Queues a movie, an episode, or all episodes in a season selected from the Jellyfin library.</summary>
     /// <param name="request">The Jellyfin library item and whether to expand a season.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>A no-content response when items were queued, or an error response otherwise.</returns>
@@ -220,7 +220,7 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
                     <button is="emby-button" type="button" data-hot-cache-action="reconcile">Reconcile</button>
                   </div>
                   <div class="hc-panel-head" style="margin-top:1.25rem"><div><h2>Manual cache</h2><p class="hc-panel-copy">Enter a Jellyfin library episode ID, or expand a season into eligible episodes.</p></div></div>
-                  <label class="hc-field"><span>Episode or season ID</span><input id="hotCacheManualItem" type="text" placeholder="Jellyfin library item ID"></label>
+                  <label class="hc-field"><span>Movie, episode, or season ID</span><input id="hotCacheManualItem" type="text" placeholder="Jellyfin library item ID"></label>
                   <label class="hc-check"><input id="hotCacheManualSeason" type="checkbox"> Cache the full season</label>
                   <button is="emby-button" type="button" class="raised" id="hotCacheManualCache">Cache now</button>
                 </section>
@@ -284,7 +284,7 @@ public class HotCacheController(IHotCacheAdministration administration) : BaseJe
 
                 byId('hotCacheRefresh').onclick=load;
                 byId('hotCacheSave').onclick=async event=>{const settings={backend:byId('hotCacheBackend').value,paused:byId('hotCachePaused').checked,highWatermark:Number(byId('hotCacheHigh').value)/100,lowWatermark:Number(byId('hotCacheLow').value)/100,maxLookahead:Number(byId('hotCacheLookahead').value),reserveFreeBytes:Math.round(Number(byId('hotCacheReserve').value)*gibibyte)};await mutate(event.currentTarget,{url:root+'/Settings',type:'PUT',contentType:'application/json',data:JSON.stringify(settings)});};
-                byId('hotCacheManualCache').onclick=async event=>{const itemId=byId('hotCacheManualItem').value.trim();if(!itemId){showError(new Error('Enter an episode or season ID.'));return;}await mutate(event.currentTarget,{url:root+'/Cache',type:'POST',contentType:'application/json',data:JSON.stringify({itemId,includeSeason:byId('hotCacheManualSeason').checked})});};
+                byId('hotCacheManualCache').onclick=async event=>{const itemId=byId('hotCacheManualItem').value.trim();if(!itemId){showError(new Error('Enter a movie, episode, or season ID.'));return;}await mutate(event.currentTarget,{url:root+'/Cache',type:'POST',contentType:'application/json',data:JSON.stringify({itemId,includeSeason:byId('hotCacheManualSeason').checked})});};
                 page.querySelectorAll('[data-hot-cache-action]').forEach(button=>button.onclick=async()=>{const kind=button.dataset.hotCacheAction,id=byId('hotCacheItem').value||null,confirmBulkEviction=kind==='evict'&&!id&&window.confirm('Evict every eligible item? This only affects items that are safe to remove.');if(kind==='evict'&&!id&&!confirmBulkEviction)return;if((kind==='promote'||kind==='retry')&&!id){showError(new Error('Choose an inventory item first.'));return;}await mutate(button,{url:root+'/Actions',type:'POST',contentType:'application/json',data:JSON.stringify({kind,itemId:id,confirmBulkEviction})});});
                 byId('hotCacheHistoryKind').onchange=load;setInterval(load,2000);load();
               })();

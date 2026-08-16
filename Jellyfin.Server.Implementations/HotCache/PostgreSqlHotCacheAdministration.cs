@@ -106,7 +106,7 @@ public sealed class PostgreSqlHotCacheAdministration(NpgsqlDataSource dataSource
         var accepted = await coordinator.CacheLibraryItemAsync(request.ItemId, request.IncludeSeason, cancellationToken).ConfigureAwait(false);
         if (accepted > 0)
         {
-            await HistoryAsync("manual", $"item={request.ItemId}; scope={(request.IncludeSeason ? "season" : "episode")}; queued={accepted}", cancellationToken).ConfigureAwait(false);
+            await HistoryAsync("manual", $"item={request.ItemId}; scope={(request.IncludeSeason ? "season" : "item")}; queued={accepted}", cancellationToken).ConfigureAwait(false);
         }
 
         return accepted;

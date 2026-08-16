@@ -2,11 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Enums;
+using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Model.Entities;
@@ -24,6 +27,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private readonly NpgsqlDataSource _dataSource;
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -33,12 +37,14 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <param name="dataSource">The shared PostgreSQL data source.</param>
     /// <param name="userManager">The Jellyfin user source.</param>
     /// <param name="libraryManager">The Jellyfin library query source.</param>
+    /// <param name="httpClientFactory">The shared HTTP client factory.</param>
     /// <param name="logger">The cold-degradation diagnostic logger.</param>
-    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
+    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IHttpClientFactory httpClientFactory, ILogger<PostgreSqlHotCacheCoordinator> logger)
     {
         _dataSource = dataSource;
         _userManager = userManager;
         _libraryManager = libraryManager;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -114,6 +120,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <inheritdoc />
     public async Task ReconcileAsync(CancellationToken cancellationToken)
     {
+        var seerrRequests = await GetRecentSeerrMovieRequestsAsync(cancellationToken).ConfigureAwait(false);
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         await using var lockCommand = new NpgsqlCommand("SELECT pg_try_advisory_xact_lock(8430169)", connection, transaction);
@@ -125,6 +132,11 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         foreach (var user in _userManager.GetUsers())
         {
             await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (seerrRequests is not null)
+        {
+            await ReconcileSeerrMoviesAsync(connection, transaction, seerrRequests, cancellationToken).ConfigureAwait(false);
         }
 
         await ExecuteAsync(
@@ -165,21 +177,24 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             return 0;
         }
 
-        var episodes = includeSeason
+        var items = includeSeason
             ? _libraryManager.GetItemList(new InternalItemsQuery { IncludeItemTypes = [BaseItemKind.Episode], ParentId = itemId, OrderBy = [(ItemSortBy.ParentIndexNumber, SortOrder.Ascending), (ItemSortBy.IndexNumber, SortOrder.Ascending)] })
             : [item];
         await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
         var accepted = 0;
-        foreach (var episode in episodes)
+        foreach (var candidate in items)
         {
-            if (episode is not MediaBrowser.Controller.Entities.TV.Episode || string.IsNullOrWhiteSpace(episode.Path) || !Path.IsPathFullyQualified(episode.Path))
+            if ((candidate is not MediaBrowser.Controller.Entities.TV.Episode
+                    && candidate is not MediaBrowser.Controller.Entities.Movies.Movie)
+                || string.IsNullOrWhiteSpace(candidate.Path)
+                || !Path.IsPathFullyQualified(candidate.Path))
             {
                 continue;
             }
 
-            await RecordCandidateAsync(connection, transaction, episode, Guid.Empty, "manual", 100, cancellationToken).ConfigureAwait(false);
-            await LogReconcileAsync(connection, transaction, $"manual queue: {Describe(episode)}", cancellationToken).ConfigureAwait(false);
+            await RecordCandidateAsync(connection, transaction, candidate, Guid.Empty, "manual", 100, cancellationToken).ConfigureAwait(false);
+            await LogReconcileAsync(connection, transaction, $"manual queue: {Describe(candidate)}", cancellationToken).ConfigureAwait(false);
             accepted++;
         }
 
@@ -237,6 +252,91 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         }
 
         await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<IReadOnlyList<SeerrMovieRequest>?> GetRecentSeerrMovieRequestsAsync(CancellationToken cancellationToken)
+    {
+        var seerrUrl = Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_SEERR_URL");
+        var apiKey = Environment.GetEnvironmentVariable("JELLYFIN_HOT_CACHE_SEERR_API_KEY");
+        if (string.IsNullOrWhiteSpace(seerrUrl) || string.IsNullOrWhiteSpace(apiKey))
+        {
+            _logger.LogDebug("Seerr hot-cache scan is not configured.");
+            return null;
+        }
+
+        try
+        {
+            using var httpRequest = new HttpRequestMessage(
+                HttpMethod.Get,
+                new Uri(new Uri(seerrUrl.TrimEnd('/') + '/', UriKind.Absolute), "api/v1/request?take=100&skip=0&filter=available&sort=modified&sortDirection=desc&mediaType=movie"));
+            httpRequest.Headers.Add("X-Api-Key", apiKey);
+            using var response = await _httpClientFactory.CreateClient(NamedClient.Default).SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime);
+            var requests = new List<SeerrMovieRequest>();
+            if (!document.RootElement.TryGetProperty("results", out var results))
+            {
+                return requests;
+            }
+
+            foreach (var result in results.EnumerateArray())
+            {
+                if (!result.TryGetProperty("status", out var status)
+                    || !result.TryGetProperty("media", out var media)
+                    || !media.TryGetProperty("tmdbId", out var tmdbIdValue)
+                    || !media.TryGetProperty("updatedAt", out var availableAtValue)
+                    || !availableAtValue.TryGetDateTime(out var availableAt)
+                    || !tmdbIdValue.TryGetInt32(out var tmdbId))
+                {
+                    continue;
+                }
+
+                var request = new SeerrMovieRequest(tmdbId, status.GetInt32(), availableAt.ToUniversalTime());
+                if (request.Status == 5 && request.AvailableAt >= cutoff)
+                {
+                    requests.Add(request);
+                }
+            }
+
+            return requests;
+        }
+        catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "seerr scan unavailable; preserving existing interests");
+            return null;
+        }
+    }
+
+    private async Task ReconcileSeerrMoviesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, IReadOnlyList<SeerrMovieRequest> requests, CancellationToken cancellationToken)
+    {
+        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE reason='seerr-request'", cancellationToken).ConfigureAwait(false);
+        var requestsByTmdbId = requests
+            .GroupBy(request => request.TmdbId)
+            .ToDictionary(group => group.Key, group => group.MaxBy(request => request.AvailableAt)!);
+        var matchedTmdbIds = new HashSet<int>();
+        var matched = 0;
+        var movies = _libraryManager.GetItemList(new InternalItemsQuery
+        {
+            IncludeItemTypes = [BaseItemKind.Movie],
+            Recursive = true
+        });
+        foreach (var movie in movies)
+        {
+            if (!int.TryParse(movie.GetProviderId(MetadataProvider.Tmdb), out var tmdbId)
+                || !requestsByTmdbId.TryGetValue(tmdbId, out var request)
+                || !matchedTmdbIds.Add(tmdbId))
+            {
+                continue;
+            }
+
+            await RecordCandidateUntilAsync(connection, transaction, movie, Guid.Empty, "seerr-request", 10, request.AvailableAt + PlaybackInterestLifetime, cancellationToken).ConfigureAwait(false);
+            await LogReconcileAsync(connection, transaction, $"queue seerr-request: {Describe(movie)}", cancellationToken).ConfigureAwait(false);
+            matched++;
+        }
+
+        await LogReconcileAsync(connection, transaction, $"scan seerr; recent-movie-requests={requestsByTmdbId.Count}; matched={matched}", cancellationToken).ConfigureAwait(false);
     }
 
     private async Task ReconcileUserAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Jellyfin.Database.Implementations.Entities.User user, CancellationToken cancellationToken)
@@ -345,13 +445,19 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     }
 
     private async Task RecordCandidateAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, Guid userId, string reason, int priority, CancellationToken cancellationToken)
+        => await RecordCandidateUntilAsync(connection, transaction, item, userId, reason, priority, DateTime.UtcNow + PlaybackInterestLifetime, cancellationToken).ConfigureAwait(false);
+
+    private async Task RecordCandidateUntilAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, Guid userId, string reason, int priority, DateTime expiresAtUtc, CancellationToken cancellationToken)
     {
-        if (item is not MediaBrowser.Controller.Entities.TV.Episode || string.IsNullOrWhiteSpace(item.Path) || !Path.IsPathFullyQualified(item.Path))
+        if ((item is not MediaBrowser.Controller.Entities.TV.Episode
+                && item is not MediaBrowser.Controller.Entities.Movies.Movie)
+            || string.IsNullOrWhiteSpace(item.Path)
+            || !Path.IsPathFullyQualified(item.Path))
         {
             return;
         }
 
-        await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,@reason,@priority,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", item.Id), ("user", userId), ("reason", reason), ("priority", priority), ("expiry", PlaybackInterestLifetime)).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,@reason,@priority,@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", item.Id), ("user", userId), ("reason", reason), ("priority", priority), ("expiry", expiresAtUtc)).ConfigureAwait(false);
         await UpsertJobAsync(connection, transaction, item, priority, cancellationToken).ConfigureAwait(false);
     }
 
@@ -391,7 +497,15 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static Task LogReconcileAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string detail, CancellationToken cancellationToken)
         => ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_admin_history(kind,detail) VALUES('reconcile',@detail)", cancellationToken, ("detail", BoundDisplay(detail)));
 
-    private static string Describe(BaseItem item) => BoundDisplay($"{(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)} — {EpisodeLabel(item)}");
+    private static string Describe(BaseItem item)
+        => item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName)
+            ? BoundDisplay($"{series.SeriesName} — {EpisodeLabel(item)}")
+            : BoundDisplay(item.Name);
+
+    private static string SeriesLabel(BaseItem item)
+        => item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName)
+            ? series.SeriesName
+            : item is MediaBrowser.Controller.Entities.Movies.Movie ? "Movies" : item.Name;
 
     private static string EpisodeLabel(BaseItem item)
     {
@@ -408,10 +522,12 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static Task UpsertJobAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, int priority, CancellationToken cancellationToken)
     {
         var source = new FileInfo(item.Path);
-        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", BoundDisplay(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)), ("episode", BoundDisplay(EpisodeLabel(item))));
+        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", BoundDisplay(SeriesLabel(item))), ("episode", BoundDisplay(EpisodeLabel(item))));
     }
 
     private static string BoundDisplay(string value) => value.Length <= 512 ? value : value[..512];
 
     private readonly record struct ResolutionObservation(string CanonicalPath, string Reason, bool IsHot);
+
+    private readonly record struct SeerrMovieRequest(int TmdbId, int Status, DateTime AvailableAt);
 }

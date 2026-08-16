@@ -100,6 +100,8 @@ public sealed class HotCacheControllerTests
         Assert.Contains("Unable to load hot-cache state", page.Content, StringComparison.Ordinal);
         Assert.Contains("toLocaleString", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheManualItem", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Movie, episode, or season ID", page.Content, StringComparison.Ordinal);
+        Assert.Contains("Enter a movie, episode, or season ID.", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheSpinner", page.Content, StringComparison.Ordinal);
         Assert.Contains("setInterval(load,2000)", page.Content, StringComparison.Ordinal);
         Assert.Contains("const selectedItem=picker.value", page.Content, StringComparison.Ordinal);

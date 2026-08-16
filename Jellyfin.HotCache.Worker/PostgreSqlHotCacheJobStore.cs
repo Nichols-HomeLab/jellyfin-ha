@@ -20,7 +20,34 @@ public sealed class PostgreSqlHotCacheJobStore(NpgsqlDataSource dataSource) : IH
     public Task<bool> CompleteAsync(Guid id, string owner, string? hotPath, string backend, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET state='completed',is_copying=false,hot_path=CASE WHEN kind='eviction' THEN NULL ELSE COALESCE(@hotPath,hot_path) END,backend=CASE WHEN kind='eviction' THEN NULL ELSE @backend END,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("hotPath", (object?)hotPath ?? DBNull.Value), ("backend", backend));
     public Task<bool> FailAsync(Guid id, string owner, string error, CancellationToken ct) => ExecuteOwnedAsync("UPDATE hot_cache_jobs SET state=CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,is_copying=false,last_error=@error,lease_owner=NULL,lease_expires_at=NULL,updated_at=now() WHERE id=@id AND lease_owner=@owner AND lease_expires_at>now()", id, owner, ct, ("error", error));
     public async Task<HotCacheJob?> ClaimEvictionAsync(string workerId, TimeSpan leaseDuration, CancellationToken ct)
-    { const string sql = "WITH next AS (SELECT id FROM hot_cache_jobs j WHERE state='completed' AND hot_path IS NOT NULL AND NOT is_active AND NOT is_pinned AND NOT is_copying AND priority <= 0 AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now()) ORDER BY last_access_utc,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE hot_cache_jobs j SET kind='eviction',state='running',is_copying=true,lease_owner=@owner,lease_expires_at=now()+@lease,attempts=j.attempts+1,updated_at=now() FROM next WHERE j.id=next.id RETURNING j.id,j.kind,j.canonical_path,j.hot_path,j.source_length,j.source_modified_utc,j.priority,j.is_active,j.is_pinned,j.is_copying,j.last_access_utc,j.attempts,j.item_id;"; await using var cmd=dataSource.CreateCommand(sql); cmd.Parameters.AddWithValue("owner",workerId);cmd.Parameters.AddWithValue("lease",leaseDuration);await using var r=await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);return await r.ReadAsync(ct).ConfigureAwait(false)?Read(r):null; }
+    {
+        const string sql = """
+            WITH next AS (
+                SELECT id,item_id
+                FROM hot_cache_jobs j
+                WHERE state='completed' AND hot_path IS NOT NULL AND NOT is_active AND NOT is_pinned AND NOT is_copying
+                  AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases l WHERE l.item_id=j.item_id AND l.expires_at_utc>now())
+                  AND (priority <= 0 OR (
+                      EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.reason='seerr-request' AND interest.expires_at_utc>now())
+                      AND NOT EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.reason <> 'seerr-request' AND interest.expires_at_utc>now())))
+                ORDER BY CASE WHEN EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.reason='seerr-request' AND interest.expires_at_utc>now()) THEN 0 ELSE 1 END,last_access_utc,id
+                FOR UPDATE SKIP LOCKED LIMIT 1),
+            released AS (
+                DELETE FROM hot_cache_interests interest
+                USING next
+                WHERE interest.item_id=next.item_id AND interest.reason='seerr-request'
+                RETURNING interest.item_id)
+            UPDATE hot_cache_jobs j
+            SET kind='eviction',state='running',priority=0,is_copying=true,lease_owner=@owner,lease_expires_at=now()+@lease,attempts=j.attempts+1,updated_at=now()
+            FROM next WHERE j.id=next.id
+            RETURNING j.id,j.kind,j.canonical_path,j.hot_path,j.source_length,j.source_modified_utc,j.priority,j.is_active,j.is_pinned,j.is_copying,j.last_access_utc,j.attempts,j.item_id;
+            """;
+        await using var cmd = dataSource.CreateCommand(sql);
+        cmd.Parameters.AddWithValue("owner", workerId);
+        cmd.Parameters.AddWithValue("lease", leaseDuration);
+        await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        return await r.ReadAsync(ct).ConfigureAwait(false) ? Read(r) : null;
+    }
     public async Task<bool> TryEvictAsync(Guid id, string owner, Func<CancellationToken, Task> delete, CancellationToken ct)
     {
         await using var connection = await dataSource.OpenConnectionAsync(ct).ConfigureAwait(false);

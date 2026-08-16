@@ -28,7 +28,9 @@ public sealed class HotCacheSqlContractTests
     {
         var store = Read("Jellyfin.HotCache.Worker/PostgreSqlHotCacheJobStore.cs");
 
-        Contains("NOT is_active AND NOT is_pinned AND NOT is_copying AND priority <= 0", store);
+        Contains("NOT is_active AND NOT is_pinned AND NOT is_copying", store);
+        Contains("priority <= 0 OR", store);
+        Contains("interest.reason <> 'seerr-request'", store);
         Contains("l.expires_at_utc>now()", store);
         Contains("TryEvictAsync", store);
         Contains("FOR UPDATE", store);
@@ -114,6 +116,46 @@ public sealed class HotCacheSqlContractTests
 
         Contains("return $\"S{season:00}E{number:00} · {item.Name}\";", coordinator);
         Contains("(\"episode\", BoundDisplay(EpisodeLabel(item)))", coordinator);
+    }
+
+    [Fact]
+    public void ManualCachingAcceptsMoviesEpisodesAndSeasonExpansion()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("item is not MediaBrowser.Controller.Entities.TV.Episode", coordinator);
+        Contains("&& item is not MediaBrowser.Controller.Entities.Movies.Movie", coordinator);
+        Contains("item is MediaBrowser.Controller.Entities.Movies.Movie ? \"Movies\"", coordinator);
+        Contains("IncludeItemTypes = [BaseItemKind.Episode]", coordinator);
+    }
+
+    [Fact]
+    public void ReconciliationCachesRecentlyAvailableSeerrMoviesForTwoWeeks()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("JELLYFIN_HOT_CACHE_SEERR_URL", coordinator);
+        Contains("JELLYFIN_HOT_CACHE_SEERR_API_KEY", coordinator);
+        Contains("request?take=100&skip=0&filter=available&sort=modified&sortDirection=desc&mediaType=movie", coordinator);
+        Contains("request.Status == 5", coordinator);
+        Contains("request.AvailableAt + PlaybackInterestLifetime", coordinator);
+        Contains("GetProviderId(MetadataProvider.Tmdb)", coordinator);
+        Contains("var matchedTmdbIds = new HashSet<int>()", coordinator);
+        Contains("\"seerr-request\", 10", coordinator);
+        Contains("DELETE FROM hot_cache_interests WHERE reason='seerr-request'", coordinator);
+        Contains("seerr scan unavailable; preserving existing interests", coordinator);
+    }
+
+    [Fact]
+    public void StoragePressureEvictsSeerrOnlyMoviesBeforeOtherReleasedItems()
+    {
+        var store = Read("Jellyfin.HotCache.Worker/PostgreSqlHotCacheJobStore.cs");
+
+        Contains("interest.reason <> 'seerr-request'", store);
+        Contains("DELETE FROM hot_cache_interests interest", store);
+        Contains("interest.reason='seerr-request'", store);
+        Contains("CASE WHEN EXISTS", store);
+        Contains("THEN 0 ELSE 1 END", store);
     }
 
     [Fact]
