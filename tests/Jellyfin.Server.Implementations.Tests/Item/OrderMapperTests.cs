@@ -10,6 +10,35 @@ namespace Jellyfin.Server.Implementations.Tests.Item;
 public class OrderMapperTests
 {
     [Fact]
+    public void DatePlayedTreatsMissingUserDataAsOldest()
+    {
+        var user = new User("tester", "authentication", "password-reset");
+        var playedAt = DateTime.UtcNow.AddDays(-1);
+        var withoutPlayback = new BaseItemEntity { Id = Guid.NewGuid(), Type = "Test", UserData = [] };
+        var withPlayback = new BaseItemEntity
+        {
+            Id = Guid.NewGuid(),
+            Type = "Test",
+            UserData =
+            [
+                new UserData
+                {
+                    CustomDataKey = "played",
+                    ItemId = Guid.NewGuid(),
+                    Item = null,
+                    UserId = user.Id,
+                    User = user,
+                    LastPlayedDate = playedAt
+                }
+            ]
+        };
+        var orderFunc = OrderMapper.MapOrderByField(ItemSortBy.DatePlayed, new InternalItemsQuery(user), null!).Compile();
+
+        Assert.Equal(DateTime.MinValue, orderFunc(withoutPlayback));
+        Assert.Equal(playedAt, orderFunc(withPlayback));
+    }
+
+    [Fact]
     public void ShouldReturnMappedOrderForSortingByPremierDate()
     {
         var orderFunc = OrderMapper.MapOrderByField(ItemSortBy.PremiereDate, new InternalItemsQuery(), null!).Compile();
