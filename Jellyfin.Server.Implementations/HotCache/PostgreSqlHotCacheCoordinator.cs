@@ -51,9 +51,10 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <inheritdoc />
     public async Task RecordPlaybackAsync(PlaybackProgressEventArgs playback, HotCachePlaybackEvent lifecycle, CancellationToken cancellationToken)
     {
-        if (playback.Item is not MediaBrowser.Controller.Entities.TV.Episode episode
-            || string.IsNullOrWhiteSpace(episode.Path)
-            || !Path.IsPathFullyQualified(episode.Path)
+        if ((playback.Item is not MediaBrowser.Controller.Entities.TV.Episode
+                && playback.Item is not MediaBrowser.Controller.Entities.Movies.Movie)
+            || string.IsNullOrWhiteSpace(playback.Item.Path)
+            || !Path.IsPathFullyQualified(playback.Item.Path)
             || playback.Users is null
             || playback.Users.Count == 0)
         {
@@ -73,13 +74,19 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                     await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_playback_leases WHERE play_session_id=@session", cancellationToken, ("session", playback.PlaySessionId)).ConfigureAwait(false);
                 }
 
+                var playedToCompletion = playback is PlaybackStopEventArgs { PlayedToCompletion: true };
+                if (playedToCompletion && playback.Item is MediaBrowser.Controller.Entities.Movies.Movie)
+                {
+                    await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE item_id=@item AND reason='seerr-request'", cancellationToken, ("item", playback.Item.Id)).ConfigureAwait(false);
+                }
+
                 foreach (var user in users)
                 {
-                    if (playback is PlaybackStopEventArgs { PlayedToCompletion: true })
+                    if (playedToCompletion)
                     {
                         await ReleaseCompletedEpisodeAsync(connection, transaction, playback.Item.Id, user.Id, cancellationToken).ConfigureAwait(false);
                     }
-                    else
+                    else if (playback.Item is MediaBrowser.Controller.Entities.TV.Episode)
                     {
                         await RetainStoppedEpisodeAsync(connection, transaction, playback.Item.Id, user.Id, cancellationToken).ConfigureAwait(false);
                     }
@@ -96,13 +103,16 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                     await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_playback_leases(play_session_id,item_id,expires_at_utc) VALUES(@session,@item,now()+@lease) ON CONFLICT(play_session_id) DO UPDATE SET item_id=excluded.item_id,expires_at_utc=excluded.expires_at_utc,updated_at_utc=now()", cancellationToken, ("session", playback.PlaySessionId), ("item", playback.Item.Id), ("lease", PlaybackLeaseLifetime)).ConfigureAwait(false);
                 }
 
-                foreach (var user in users)
+                if (playback.Item is MediaBrowser.Controller.Entities.TV.Episode episode)
                 {
-                    await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackCurrentInterestLifetime)).ConfigureAwait(false);
-                    await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
-                    if (lifecycle == HotCachePlaybackEvent.Started)
+                    foreach (var user in users)
                     {
-                        await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+                        await ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()", cancellationToken, ("item", playback.Item.Id), ("user", user.Id), ("expiry", PlaybackCurrentInterestLifetime)).ConfigureAwait(false);
+                        await UpsertJobAsync(connection, transaction, playback.Item, 100, cancellationToken).ConfigureAwait(false);
+                        if (lifecycle == HotCachePlaybackEvent.Started)
+                        {
+                            await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false), cancellationToken).ConfigureAwait(false);
+                        }
                     }
                 }
 
@@ -317,6 +327,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             .ToDictionary(group => group.Key, group => group.MaxBy(request => request.AvailableAt)!);
         var matchedTmdbIds = new HashSet<int>();
         var matched = 0;
+        var skippedWatched = 0;
         var movies = _libraryManager.GetItemList(new InternalItemsQuery
         {
             IncludeItemTypes = [BaseItemKind.Movie],
@@ -331,12 +342,27 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
                 continue;
             }
 
+            if (await IsPlayedByAnyUserAsync(connection, transaction, movie.Id, cancellationToken).ConfigureAwait(false))
+            {
+                await LogReconcileAsync(connection, transaction, $"skip seerr-request: {Describe(movie)}: already watched", cancellationToken).ConfigureAwait(false);
+                skippedWatched++;
+                continue;
+            }
+
             await RecordCandidateUntilAsync(connection, transaction, movie, Guid.Empty, "seerr-request", 10, request.AvailableAt + PlaybackInterestLifetime, cancellationToken).ConfigureAwait(false);
             await LogReconcileAsync(connection, transaction, $"queue seerr-request: {Describe(movie)}", cancellationToken).ConfigureAwait(false);
             matched++;
         }
 
-        await LogReconcileAsync(connection, transaction, $"scan seerr; recent-movie-requests={requestsByTmdbId.Count}; matched={matched}", cancellationToken).ConfigureAwait(false);
+        await LogReconcileAsync(connection, transaction, $"scan seerr; recent-movie-requests={requestsByTmdbId.Count}; matched={matched}; skipped-watched={skippedWatched}", cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsPlayedByAnyUserAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid itemId, CancellationToken cancellationToken)
+    {
+        const string sql = """SELECT EXISTS(SELECT 1 FROM "UserData" data WHERE data."ItemId"=@item AND data."Played")""";
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("item", itemId);
+        return (bool)(await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false) ?? false);
     }
 
     private async Task ReconcileUserAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Jellyfin.Database.Implementations.Entities.User user, CancellationToken cancellationToken)

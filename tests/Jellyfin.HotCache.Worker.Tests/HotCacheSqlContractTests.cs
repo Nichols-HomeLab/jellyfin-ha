@@ -147,6 +147,18 @@ public sealed class HotCacheSqlContractTests
     }
 
     [Fact]
+    public void WatchedSeerrMoviesAreSkippedAndReleasedAfterPlayback()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("SELECT EXISTS(SELECT 1 FROM \"UserData\" data WHERE data.\"ItemId\"=@item AND data.\"Played\")", coordinator);
+        Contains("skip seerr-request: {Describe(movie)}: already watched", coordinator);
+        Contains("playback.Item is not MediaBrowser.Controller.Entities.TV.Episode", coordinator);
+        Contains("&& playback.Item is not MediaBrowser.Controller.Entities.Movies.Movie", coordinator);
+        Contains("DELETE FROM hot_cache_interests WHERE item_id=@item AND reason='seerr-request'", coordinator);
+    }
+
+    [Fact]
     public void StoragePressureEvictsSeerrOnlyMoviesBeforeOtherReleasedItems()
     {
         var store = Read("Jellyfin.HotCache.Worker/PostgreSqlHotCacheJobStore.cs");
