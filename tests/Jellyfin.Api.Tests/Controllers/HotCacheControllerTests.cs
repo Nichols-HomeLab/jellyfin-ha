@@ -102,6 +102,9 @@ public sealed class HotCacheControllerTests
         Assert.Contains("hotCacheManualItem", page.Content, StringComparison.Ordinal);
         Assert.Contains("hotCacheSpinner", page.Content, StringComparison.Ordinal);
         Assert.Contains("setInterval(load,2000)", page.Content, StringComparison.Ordinal);
+        Assert.Contains("const selectedItem=picker.value", page.Content, StringComparison.Ordinal);
+        Assert.Contains("details.dataset.series=series", page.Content, StringComparison.Ordinal);
+        Assert.Contains("viewState.openSeries.has(series)", page.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
     }
 
