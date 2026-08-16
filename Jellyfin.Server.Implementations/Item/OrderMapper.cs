@@ -31,7 +31,10 @@ public static class OrderMapper
             (ItemSortBy.AirTime, _) => e => e.SortName, // TODO
             (ItemSortBy.Runtime, _) => e => e.RunTimeTicks,
             (ItemSortBy.Random, _) => e => EF.Functions.Random(),
-            (ItemSortBy.DatePlayed, _) => e => e.UserData!.FirstOrDefault(f => f.UserId.Equals(query.User!.Id))!.LastPlayedDate,
+            (ItemSortBy.DatePlayed, _) => e => e.UserData!
+                .Where(f => f.UserId.Equals(query.User!.Id))
+                .Select(f => f.LastPlayedDate)
+                .FirstOrDefault() ?? DateTime.MinValue,
             (ItemSortBy.PlayCount, _) => e => e.UserData!.FirstOrDefault(f => f.UserId.Equals(query.User!.Id))!.PlayCount,
             (ItemSortBy.IsFavoriteOrLiked, _) => e => e.UserData!.FirstOrDefault(f => f.UserId.Equals(query.User!.Id))!.IsFavorite,
             (ItemSortBy.IsFolder, _) => e => e.IsFolder,
