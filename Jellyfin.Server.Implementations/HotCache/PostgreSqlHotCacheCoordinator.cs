@@ -18,6 +18,7 @@ namespace Jellyfin.Server.Implementations.HotCache;
 /// <summary>PostgreSQL authority for hot-cache interests, playback leases, and worker observations.</summary>
 public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 {
+    private const int RecentHistoryPageSize = 100;
     private static readonly TimeSpan PlaybackLeaseLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan PlaybackCurrentInterestLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan PlaybackInterestLifetime = TimeSpan.FromDays(14);
@@ -214,29 +215,46 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         // delete another user's interest in the same episode.
         await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE user_id=@user AND reason IN ('next-up','next-episode')", cancellationToken, ("user", user.Id)).ConfigureAwait(false);
 
-        var recent = _libraryManager.GetItemList(new InternalItemsQuery(user)
-        {
-            IncludeItemTypes = [BaseItemKind.Episode],
-            IsPlayed = true,
-            Limit = 100,
-            OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
-        });
         var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime);
         var newestBySeries = new HashSet<Guid>();
         var selected = 0;
         var lookahead = await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
-        foreach (var item in recent)
+        var startIndex = 0;
+        var reachedCutoff = false;
+        while (!reachedCutoff)
         {
-            if (item is not MediaBrowser.Controller.Entities.TV.Episode episode
-                || _userDataManager.GetUserData(user, item)?.LastPlayedDate is not DateTime lastPlayed
-                || lastPlayed < cutoff
-                || !newestBySeries.Add(episode.SeriesId))
+            var recent = _libraryManager.GetItemList(new InternalItemsQuery(user)
             {
-                continue;
+                IncludeItemTypes = [BaseItemKind.Episode],
+                StartIndex = startIndex,
+                Limit = RecentHistoryPageSize,
+                OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
+            });
+            foreach (var item in recent)
+            {
+                if (_userDataManager.GetUserData(user, item)?.LastPlayedDate is not DateTime lastPlayed
+                    || lastPlayed < cutoff)
+                {
+                    reachedCutoff = true;
+                    break;
+                }
+
+                if (item is not MediaBrowser.Controller.Entities.TV.Episode episode
+                    || !newestBySeries.Add(episode.SeriesId))
+                {
+                    continue;
+                }
+
+                selected++;
+                await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, lookahead, cancellationToken).ConfigureAwait(false);
             }
 
-            selected++;
-            await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, lookahead, cancellationToken).ConfigureAwait(false);
+            if (recent.Count < RecentHistoryPageSize)
+            {
+                break;
+            }
+
+            startIndex += recent.Count;
         }
 
         await LogReconcileAsync(connection, transaction, $"scan user={BoundDisplay(user.Username)}; recent-series={selected}; lookahead={lookahead}", cancellationToken).ConfigureAwait(false);
