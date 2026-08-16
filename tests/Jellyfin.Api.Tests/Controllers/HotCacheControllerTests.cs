@@ -110,6 +110,12 @@ public sealed class HotCacheControllerTests
         Assert.Contains("scrollBySeries:new Map()", page.Content, StringComparison.Ordinal);
         Assert.Contains("details.querySelector('.hc-table-wrap')?.scrollLeft||0", page.Content, StringComparison.Ordinal);
         Assert.Contains("tableWrap.scrollLeft=viewState.scrollBySeries.get(details.dataset.series)||0", page.Content, StringComparison.Ordinal);
+        Assert.Contains("if(document.activeElement!==picker)", page.Content, StringComparison.Ordinal);
+        Assert.Contains("const setControlValue=(id,value)=>", page.Content, StringComparison.Ordinal);
+        Assert.Contains("if(document.activeElement!==control)control.value=value", page.Content, StringComparison.Ordinal);
+        Assert.Contains("const isMovie=series==='Movies'", page.Content, StringComparison.Ordinal);
+        Assert.Contains("isMovie?'Movie':'Episode'", page.Content, StringComparison.Ordinal);
+        Assert.Contains("isMovie?(items.length===1?'movie':'movies')", page.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("innerHTML", page.Content, StringComparison.Ordinal);
     }
 
