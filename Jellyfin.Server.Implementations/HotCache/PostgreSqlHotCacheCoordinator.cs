@@ -69,8 +69,17 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 
                 foreach (var user in users)
                 {
-                    await ReleaseCompletedEpisodeAsync(connection, transaction, playback.Item.Id, user.Id, cancellationToken).ConfigureAwait(false);
+                    if (playback is PlaybackStopEventArgs { PlayedToCompletion: true })
+                    {
+                        await ReleaseCompletedEpisodeAsync(connection, transaction, playback.Item.Id, user.Id, cancellationToken).ConfigureAwait(false);
+                    }
+                    else
+                    {
+                        await RetainStoppedEpisodeAsync(connection, transaction, playback.Item.Id, user.Id, cancellationToken).ConfigureAwait(false);
+                    }
                 }
+
+                await ExecuteAsync(connection, transaction, "UPDATE hot_cache_jobs SET is_active=false,updated_at=now() WHERE item_id=@item", cancellationToken, ("item", playback.Item.Id)).ConfigureAwait(false);
             }
             else
             {
@@ -234,7 +243,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     {
         // This is the user's independent cache list. Refreshing it must never
         // delete another user's interest in the same episode.
-        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE user_id=@user AND reason IN ('next-up','next-episode')", cancellationToken, ("user", user.Id)).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE user_id=@user AND reason IN ('next-up','next-episode','recent-playback')", cancellationToken, ("user", user.Id)).ConfigureAwait(false);
 
         var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime);
         var newestBySeries = new HashSet<Guid>();
@@ -242,7 +251,8 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         var lookahead = await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
         await using var recentCommand = new NpgsqlCommand(
             """
-                SELECT resolved."Id"::text
+                SELECT resolved."Id"::text,
+                       COALESCE((SELECT BOOL_OR(data."Played") FROM "UserData" data WHERE data."ItemId"=resolved."Id" AND data."UserId"=@user),false)
                 FROM "ActivityLogs" activity
                 JOIN LATERAL (
                     SELECT item."Id"
@@ -264,27 +274,32 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             transaction);
         recentCommand.Parameters.AddWithValue("user", user.Id);
         recentCommand.Parameters.AddWithValue("cutoff", cutoff);
-        var recentItemIds = new List<Guid>();
+        var recentItems = new List<(Guid ItemId, bool Played)>();
         await using (var reader = await recentCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
         {
             while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
                 if (Guid.TryParse(reader.GetString(0), out var itemId))
                 {
-                    recentItemIds.Add(itemId);
+                    recentItems.Add((itemId, reader.GetBoolean(1)));
                 }
             }
         }
 
-        foreach (var itemId in recentItemIds)
+        foreach (var recent in recentItems)
         {
-            if (_libraryManager.GetItemById(itemId) is not MediaBrowser.Controller.Entities.TV.Episode episode
+            if (_libraryManager.GetItemById(recent.ItemId) is not MediaBrowser.Controller.Entities.TV.Episode episode
                 || !newestBySeries.Add(episode.SeriesId))
             {
                 continue;
             }
 
             selected++;
+            if (!recent.Played)
+            {
+                await RecordCandidateAsync(connection, transaction, episode, user.Id, "recent-playback", 100, cancellationToken).ConfigureAwait(false);
+            }
+
             await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, lookahead, cancellationToken).ConfigureAwait(false);
         }
 
@@ -296,7 +311,7 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         const string sql = """
             WITH released AS (
                 DELETE FROM hot_cache_interests
-                WHERE item_id=@item AND user_id=@user AND reason IN ('playback','next-up','next-episode')
+                WHERE item_id=@item AND user_id=@user AND reason IN ('playback','recent-playback','next-up','next-episode')
             ), evicted AS (
                 UPDATE hot_cache_jobs j
                 SET kind='eviction',state='pending',priority=0,is_active=false,lease_owner=NULL,lease_expires_at=NULL,updated_at=now()
@@ -309,6 +324,16 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             """;
         await ExecuteAsync(connection, transaction, sql, cancellationToken, ("item", itemId), ("user", userId)).ConfigureAwait(false);
     }
+
+    private static Task RetainStoppedEpisodeAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, Guid itemId, Guid userId, CancellationToken cancellationToken)
+        => ExecuteAsync(
+            connection,
+            transaction,
+            "WITH removed AS (DELETE FROM hot_cache_interests WHERE item_id=@item AND user_id=@user AND reason='playback') INSERT INTO hot_cache_interests(item_id,user_id,reason,priority,expires_at_utc) VALUES(@item,@user,'recent-playback',100,now()+@expiry) ON CONFLICT(item_id,user_id,reason) DO UPDATE SET priority=excluded.priority,expires_at_utc=excluded.expires_at_utc,last_observed_utc=now()",
+            cancellationToken,
+            ("item", itemId),
+            ("user", userId),
+            ("expiry", PlaybackInterestLifetime));
 
     // The configured maximum is six by default. Capacity independently limits
     // lookahead from the currently selected backend, leaving the reserve intact.
@@ -366,12 +391,24 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     private static Task LogReconcileAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, string detail, CancellationToken cancellationToken)
         => ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_admin_history(kind,detail) VALUES('reconcile',@detail)", cancellationToken, ("detail", BoundDisplay(detail)));
 
-    private static string Describe(BaseItem item) => BoundDisplay($"{(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)} — {item.Name}");
+    private static string Describe(BaseItem item) => BoundDisplay($"{(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)} — {EpisodeLabel(item)}");
+
+    private static string EpisodeLabel(BaseItem item)
+    {
+        if (item is MediaBrowser.Controller.Entities.TV.Episode episode
+            && episode.ParentIndexNumber is int season
+            && episode.IndexNumber is int number)
+        {
+            return $"S{season:00}E{number:00} · {item.Name}";
+        }
+
+        return item.Name;
+    }
 
     private static Task UpsertJobAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, BaseItem item, int priority, CancellationToken cancellationToken)
     {
         var source = new FileInfo(item.Path);
-        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", BoundDisplay(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)), ("episode", BoundDisplay(item.Name)));
+        return ExecuteAsync(connection, transaction, "INSERT INTO hot_cache_jobs(id,kind,state,item_id,canonical_path,source_length,source_modified_utc,priority,series_name,episode_name) VALUES(@id,'promotion','pending',@item,@path,@length,@mtime,@priority,@series,@episode) ON CONFLICT(item_id) WHERE item_id IS NOT NULL DO UPDATE SET priority=GREATEST(hot_cache_jobs.priority,excluded.priority),canonical_path=excluded.canonical_path,source_length=excluded.source_length,source_modified_utc=excluded.source_modified_utc,series_name=excluded.series_name,episode_name=excluded.episode_name,kind=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'promotion' ELSE hot_cache_jobs.kind END,state=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN 'pending' ELSE hot_cache_jobs.state END,lease_owner=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_owner END,lease_expires_at=CASE WHEN hot_cache_jobs.state <> 'running' AND hot_cache_jobs.hot_path IS NULL THEN NULL ELSE hot_cache_jobs.lease_expires_at END,updated_at=now()", cancellationToken, ("id", Guid.NewGuid()), ("item", item.Id), ("path", item.Path), ("length", source.Exists ? source.Length : 0L), ("mtime", source.Exists ? source.LastWriteTimeUtc : DateTime.UnixEpoch), ("priority", priority), ("series", BoundDisplay(item is IHasSeries series && !string.IsNullOrWhiteSpace(series.SeriesName) ? series.SeriesName : item.Name)), ("episode", BoundDisplay(EpisodeLabel(item))));
     }
 
     private static string BoundDisplay(string value) => value.Length <= 512 ? value : value[..512];
