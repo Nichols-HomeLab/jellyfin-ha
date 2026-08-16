@@ -332,17 +332,25 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 
     private async Task QueueFollowingEpisodesAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, MediaBrowser.Controller.Entities.TV.Episode episode, Guid userId, int lookahead, CancellationToken cancellationToken)
     {
-        var following = _libraryManager.GetItemList(new InternalItemsQuery
+        var user = _userManager.GetUserById(userId);
+        if (user is null)
+        {
+            await LogReconcileAsync(connection, transaction, $"skip {Describe(episode)}: user no longer exists", cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var following = _libraryManager.GetItemList(new InternalItemsQuery(user)
         {
             IncludeItemTypes = [BaseItemKind.Episode],
             ParentId = episode.SeasonId,
             MinParentAndIndexNumber = (episode.ParentIndexNumber ?? 0, (episode.IndexNumber ?? 0) + 1),
+            IsPlayed = false,
             Limit = lookahead,
             OrderBy = [(ItemSortBy.ParentIndexNumber, SortOrder.Ascending), (ItemSortBy.IndexNumber, SortOrder.Ascending)]
         });
         if (following.Count == 0)
         {
-            await LogReconcileAsync(connection, transaction, $"skip {Describe(episode)}: no following episodes in season", cancellationToken).ConfigureAwait(false);
+            await LogReconcileAsync(connection, transaction, $"skip {Describe(episode)}: no following unwatched episodes in season", cancellationToken).ConfigureAwait(false);
             return;
         }
 
