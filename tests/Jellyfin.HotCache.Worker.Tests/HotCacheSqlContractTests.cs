@@ -66,19 +66,41 @@ public sealed class HotCacheSqlContractTests
     }
 
     [Fact]
-    public void ReconciliationBuildsIndependentDeduplicatedTwoWeekUserLists()
+    public void ReconciliationBuildsIndependentDeduplicatedTwoWeekPlaybackLists()
     {
         var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
 
         Contains("foreach (var user in _userManager.GetUsers())", coordinator);
-        Assert.DoesNotContain("IsPlayed = true", coordinator, StringComparison.Ordinal);
-        Contains("StartIndex = startIndex", coordinator);
-        Contains("Limit = RecentHistoryPageSize", coordinator);
-        Contains("startIndex += recent.Count", coordinator);
         Contains("var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime)", coordinator);
-        Contains("lastPlayed < cutoff", coordinator);
+        Contains("FROM \"ActivityLogs\"", coordinator);
+        Contains("\"Type\"='VideoPlayback'", coordinator);
+        Contains("\"DateCreated\">=@cutoff", coordinator);
+        Contains("\"UserId\"=@user", coordinator);
+        Contains("JOIN LATERAL", coordinator);
+        Contains("strpos(activity.\"Name\",item.\"SeriesName\"||' - '||item.\"Name\")>0", coordinator);
+        Contains("ORDER BY MAX(activity.\"DateCreated\") DESC", coordinator);
         Contains("var newestBySeries = new HashSet<Guid>()", coordinator);
         Contains("DELETE FROM hot_cache_interests WHERE user_id=@user", coordinator);
+    }
+
+    [Fact]
+    public void ReconciliationEvictsCompletedItemsAfterAllTwoWeekInterestsExpire()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("j.state='completed' AND j.hot_path IS NOT NULL", coordinator);
+        Contains("NOT EXISTS(SELECT 1 FROM hot_cache_interests interest", coordinator);
+        Contains("NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases lease", coordinator);
+        Contains("SELECT id,'reconcile-release','two-week interests expired'", coordinator);
+    }
+
+    [Fact]
+    public void AdministrationCountsOnlyMaterializedFilesAsCachedAndHidesReleasedHistory()
+    {
+        var administration = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheAdministration.cs");
+
+        Contains("state='completed' AND hot_path IS NOT NULL THEN 'copied'", administration);
+        Contains("j.hot_path IS NOT NULL OR j.state IN ('pending','running') OR i.item_id IS NOT NULL", administration);
     }
 
     [Fact]
