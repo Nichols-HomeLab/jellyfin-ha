@@ -128,6 +128,17 @@ public sealed class HotCacheSqlContractTests
         Contains("if (lifecycle == HotCachePlaybackEvent.Started)", coordinator);
     }
 
+    [Fact]
+    public void PlaybackLookaheadSkipsEpisodesAlreadyWatchedByThatUser()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("var user = _userManager.GetUserById(userId)", coordinator);
+        Contains("new InternalItemsQuery(user)", coordinator);
+        Contains("IsPlayed = false", coordinator);
+        Contains("no following unwatched episodes in season", coordinator);
+    }
+
     private static string Read(string relativePath)
     {
         var directory = AppContext.BaseDirectory;
