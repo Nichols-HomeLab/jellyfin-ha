@@ -81,6 +81,9 @@ public sealed class HotCacheSqlContractTests
         Contains("ORDER BY MAX(activity.\"DateCreated\") DESC", coordinator);
         Contains("var newestBySeries = new HashSet<Guid>()", coordinator);
         Contains("DELETE FROM hot_cache_interests WHERE user_id=@user", coordinator);
+        Contains("BOOL_OR(data.\"Played\")", coordinator);
+        Contains("if (!recent.Played)", coordinator);
+        Contains("\"recent-playback\", 100", coordinator);
     }
 
     [Fact]
@@ -101,6 +104,16 @@ public sealed class HotCacheSqlContractTests
 
         Contains("state='completed' AND hot_path IS NOT NULL THEN 'copied'", administration);
         Contains("j.hot_path IS NOT NULL OR j.state IN ('pending','running') OR i.item_id IS NOT NULL", administration);
+        Contains("ORDER BY COALESCE(j.series_name,''),COALESCE(j.episode_name,''),j.id", administration);
+    }
+
+    [Fact]
+    public void InventoryEpisodeLabelsIncludeSeasonAndEpisodeNumbers()
+    {
+        var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
+
+        Contains("return $\"S{season:00}E{number:00} · {item.Name}\";", coordinator);
+        Contains("(\"episode\", BoundDisplay(EpisodeLabel(item)))", coordinator);
     }
 
     [Fact]
@@ -114,6 +127,8 @@ public sealed class HotCacheSqlContractTests
         Contains("NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases lease", coordinator);
         Contains("kind='eviction',state='pending'", coordinator);
         Contains("PlaybackCurrentInterestLifetime", coordinator);
+        Contains("playback is PlaybackStopEventArgs { PlayedToCompletion: true }", coordinator);
+        Contains("RetainStoppedEpisodeAsync", coordinator);
     }
 
     [Fact]
