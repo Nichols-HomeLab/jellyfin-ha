@@ -199,7 +199,7 @@ public sealed class HotCacheWorker
         var relative = Path.GetRelativePath(Path.GetFullPath(_options.CanonicalRoot), source);
         var target = Contained(_options.HotRoot, Path.Combine(_options.HotRoot, relative));
         var before = _files.GetFileInfo(source);
-        if (before.Length != job.SourceLength || before.LastWriteTimeUtc != job.SourceModifiedUtc)
+        if (before.Length != job.SourceLength || ToPostgreSqlTimestamp(before.LastWriteTimeUtc) != ToPostgreSqlTimestamp(job.SourceModifiedUtc))
         {
             throw new IOException("Source changed before promotion.");
         }
@@ -321,6 +321,7 @@ public sealed class HotCacheWorker
     }
     private double UsedRatio() => 1d - ((double)_files.GetAvailableSpace(_options.HotRoot) / _files.GetTotalSpace(_options.HotRoot));
     private bool TargetMatchesSource(string target, FileInfo source) { var targetInfo = _files.GetFileInfo(target); return targetInfo.Length == source.Length && targetInfo.LastWriteTimeUtc == source.LastWriteTimeUtc; }
+    private static DateTime ToPostgreSqlTimestamp(DateTime value) => value.AddTicks(-(value.Ticks % 10));
     private void CleanupPartials() { foreach (var path in _files.EnumerateFiles(_options.HotRoot, "*.partial")) { try { var contained = Contained(_options.HotRoot, path); if (DateTime.UtcNow - _files.GetFileInfo(contained).LastWriteTimeUtc > _options.PartialFileMaxAge) _files.Delete(contained); } catch (IOException) { _logger.LogWarning("Ignoring partial outside the configured hot-cache root: {Path}", path); } } }
     private static string Contained(string root, string path) { var fullRoot = Path.GetFullPath(root); var fullPath = Path.GetFullPath(path); var relative = Path.GetRelativePath(fullRoot, fullPath); if (relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal) || Path.IsPathRooted(relative) || HasLinkComponent(fullRoot, fullPath)) throw new IOException("Path escapes configured root."); return fullPath; }
     private static bool HasLinkComponent(string root, string path) { var current = root; if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return true; foreach (var part in Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)) { if (string.IsNullOrEmpty(part) || part == ".") continue; current = Path.Combine(current, part); if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return true; } return false; }

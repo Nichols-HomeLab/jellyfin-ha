@@ -71,7 +71,10 @@ public sealed class HotCacheSqlContractTests
         var coordinator = Read("Jellyfin.Server.Implementations/HotCache/PostgreSqlHotCacheCoordinator.cs");
 
         Contains("foreach (var user in _userManager.GetUsers())", coordinator);
-        Contains("IsPlayed = true", coordinator);
+        Assert.DoesNotContain("IsPlayed = true", coordinator, StringComparison.Ordinal);
+        Contains("StartIndex = startIndex", coordinator);
+        Contains("Limit = RecentHistoryPageSize", coordinator);
+        Contains("startIndex += recent.Count", coordinator);
         Contains("var cutoff = DateTime.UtcNow.Subtract(PlaybackInterestLifetime)", coordinator);
         Contains("lastPlayed < cutoff", coordinator);
         Contains("var newestBySeries = new HashSet<Guid>()", coordinator);

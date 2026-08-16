@@ -1,0 +1,7 @@
+FROM mcr.microsoft.com/dotnet/runtime:9.0
+
+WORKDIR /app
+COPY hot-cache-worker-output/ .
+
+USER 1000:1000
+ENTRYPOINT ["dotnet", "Jellyfin.HotCache.Worker.dll"]
