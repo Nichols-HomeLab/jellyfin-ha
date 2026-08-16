@@ -93,6 +93,16 @@ jobs:
             -p:TreatWarningsAsErrors=false \
             --output ./publish-output
 
+      - name: Publish hot-cache worker
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj
+          dotnet publish Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
+            --configuration Release \
+            --no-restore \
+            -p:TreatWarningsAsErrors=false \
+            --output ./hot-cache-worker-output
+
       - name: Connect to the nested Docker daemon
         run: |
           # act_runner creates this job inside the runner's sibling DinD
@@ -125,3 +135,15 @@ jobs:
           tags: |
             ${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.short_sha }}
             ${{ steps.meta.outputs.image_repo }}:latest
+
+      - name: Build and push hot-cache worker image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: Jellyfin.HotCache.Worker/Dockerfile.runtime
+          platforms: linux/amd64
+          push: ${{ github.event_name == 'push' }}
+          provenance: false
+          tags: |
+            git.nicholstech.org/nichols-homelab/jellyfin-hot-cache-worker:${{ steps.meta.outputs.short_sha }}
+            git.nicholstech.org/nichols-homelab/jellyfin-hot-cache-worker:latest
