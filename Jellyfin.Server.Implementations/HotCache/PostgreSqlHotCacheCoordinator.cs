@@ -18,14 +18,12 @@ namespace Jellyfin.Server.Implementations.HotCache;
 /// <summary>PostgreSQL authority for hot-cache interests, playback leases, and worker observations.</summary>
 public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
 {
-    private const int RecentHistoryPageSize = 100;
     private static readonly TimeSpan PlaybackLeaseLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan PlaybackCurrentInterestLifetime = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan PlaybackInterestLifetime = TimeSpan.FromDays(14);
     private readonly NpgsqlDataSource _dataSource;
     private readonly IUserManager _userManager;
     private readonly ILibraryManager _libraryManager;
-    private readonly IUserDataManager _userDataManager;
     private readonly ILogger<PostgreSqlHotCacheCoordinator> _logger;
     private readonly Channel<ResolutionObservation> _observations = Channel.CreateBounded<ResolutionObservation>(new BoundedChannelOptions(1024) { FullMode = BoundedChannelFullMode.DropWrite });
 
@@ -35,14 +33,12 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
     /// <param name="dataSource">The shared PostgreSQL data source.</param>
     /// <param name="userManager">The Jellyfin user source.</param>
     /// <param name="libraryManager">The Jellyfin library query source.</param>
-    /// <param name="userDataManager">The per-user playback state source.</param>
     /// <param name="logger">The cold-degradation diagnostic logger.</param>
-    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, IUserDataManager userDataManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
+    public PostgreSqlHotCacheCoordinator(NpgsqlDataSource dataSource, IUserManager userManager, ILibraryManager libraryManager, ILogger<PostgreSqlHotCacheCoordinator> logger)
     {
         _dataSource = dataSource;
         _userManager = userManager;
         _libraryManager = libraryManager;
-        _userDataManager = userDataManager;
         _logger = logger;
     }
 
@@ -122,7 +118,32 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
             await ReconcileUserAsync(connection, transaction, user, cancellationToken).ConfigureAwait(false);
         }
 
-        await ExecuteAsync(connection, transaction, "DELETE FROM hot_cache_interests WHERE expires_at_utc <= now(); DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now(); UPDATE hot_cache_jobs j SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),updated_at=now() WHERE j.state IN ('pending','running','completed');", cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(
+            connection,
+            transaction,
+            """
+            DELETE FROM hot_cache_interests WHERE expires_at_utc <= now();
+            DELETE FROM hot_cache_playback_leases WHERE expires_at_utc <= now();
+            UPDATE hot_cache_jobs j
+            SET priority=COALESCE((SELECT MAX(interest.priority) FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now()),0),
+                is_active=EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now()),
+                updated_at=now()
+            WHERE j.state IN ('pending','running','completed');
+            UPDATE hot_cache_jobs j
+            SET state='completed',priority=0,lease_owner=NULL,lease_expires_at=NULL,updated_at=now()
+            WHERE j.state='pending' AND j.hot_path IS NULL AND NOT j.is_pinned
+              AND NOT EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now());
+            WITH evicted AS (
+                UPDATE hot_cache_jobs j
+                SET kind='eviction',state='pending',priority=0,is_active=false,lease_owner=NULL,lease_expires_at=NULL,updated_at=now()
+                WHERE j.state='completed' AND j.hot_path IS NOT NULL AND NOT j.is_pinned
+                  AND NOT EXISTS(SELECT 1 FROM hot_cache_interests interest WHERE interest.item_id=j.item_id AND interest.expires_at_utc>now())
+                  AND NOT EXISTS(SELECT 1 FROM hot_cache_playback_leases lease WHERE lease.item_id=j.item_id AND lease.expires_at_utc>now())
+                RETURNING j.id)
+            INSERT INTO hot_cache_events(job_id,kind,detail)
+            SELECT id,'reconcile-release','two-week interests expired' FROM evicted;
+            """,
+            cancellationToken).ConfigureAwait(false);
         await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -219,42 +240,52 @@ public sealed class PostgreSqlHotCacheCoordinator : IHotCacheCoordinator
         var newestBySeries = new HashSet<Guid>();
         var selected = 0;
         var lookahead = await GetEffectiveLookaheadAsync(connection, transaction, cancellationToken).ConfigureAwait(false);
-        var startIndex = 0;
-        var reachedCutoff = false;
-        while (!reachedCutoff)
+        await using var recentCommand = new NpgsqlCommand(
+            """
+                SELECT resolved."Id"::text
+                FROM "ActivityLogs" activity
+                JOIN LATERAL (
+                    SELECT item."Id"
+                    FROM "BaseItems" item
+                    WHERE item."SeriesName" IS NOT NULL
+                      AND item."Path" IS NOT NULL
+                      AND (replace(item."Id"::text,'-','')=replace(lower(activity."ItemId"),'-','')
+                           OR strpos(activity."Name",item."SeriesName"||' - '||item."Name")>0)
+                    ORDER BY CASE WHEN replace(item."Id"::text,'-','')=replace(lower(activity."ItemId"),'-','') THEN 0 ELSE 1 END,
+                             length(item."SeriesName"||' - '||item."Name") DESC
+                    LIMIT 1) resolved ON true
+                WHERE activity."UserId"=@user
+                  AND activity."Type"='VideoPlayback'
+                  AND activity."DateCreated">=@cutoff
+                GROUP BY resolved."Id"
+                ORDER BY MAX(activity."DateCreated") DESC
+                """,
+            connection,
+            transaction);
+        recentCommand.Parameters.AddWithValue("user", user.Id);
+        recentCommand.Parameters.AddWithValue("cutoff", cutoff);
+        var recentItemIds = new List<Guid>();
+        await using (var reader = await recentCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
         {
-            var recent = _libraryManager.GetItemList(new InternalItemsQuery(user)
+            while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
             {
-                IncludeItemTypes = [BaseItemKind.Episode],
-                StartIndex = startIndex,
-                Limit = RecentHistoryPageSize,
-                OrderBy = [(ItemSortBy.DatePlayed, SortOrder.Descending)]
-            });
-            foreach (var item in recent)
+                if (Guid.TryParse(reader.GetString(0), out var itemId))
+                {
+                    recentItemIds.Add(itemId);
+                }
+            }
+        }
+
+        foreach (var itemId in recentItemIds)
+        {
+            if (_libraryManager.GetItemById(itemId) is not MediaBrowser.Controller.Entities.TV.Episode episode
+                || !newestBySeries.Add(episode.SeriesId))
             {
-                if (_userDataManager.GetUserData(user, item)?.LastPlayedDate is not DateTime lastPlayed
-                    || lastPlayed < cutoff)
-                {
-                    reachedCutoff = true;
-                    break;
-                }
-
-                if (item is not MediaBrowser.Controller.Entities.TV.Episode episode
-                    || !newestBySeries.Add(episode.SeriesId))
-                {
-                    continue;
-                }
-
-                selected++;
-                await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, lookahead, cancellationToken).ConfigureAwait(false);
+                continue;
             }
 
-            if (recent.Count < RecentHistoryPageSize)
-            {
-                break;
-            }
-
-            startIndex += recent.Count;
+            selected++;
+            await QueueFollowingEpisodesAsync(connection, transaction, episode, user.Id, lookahead, cancellationToken).ConfigureAwait(false);
         }
 
         await LogReconcileAsync(connection, transaction, $"scan user={BoundDisplay(user.Username)}; recent-series={selected}; lookahead={lookahead}", cancellationToken).ConfigureAwait(false);
