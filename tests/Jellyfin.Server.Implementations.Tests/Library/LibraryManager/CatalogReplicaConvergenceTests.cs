@@ -22,6 +22,21 @@ namespace Jellyfin.Server.Implementations.Tests.Library.LibraryManager;
 public sealed class CatalogReplicaConvergenceTests
 {
     [Fact]
+    public async Task OwnerUpdate_AtLibraryRoot_PublishesEmptyParentId()
+    {
+        var notifier = new FakeCatalogChangeNotifier();
+        var (owner, _) = CreateLibraryManager(notifier);
+        var item = new Folder { Id = Guid.NewGuid(), Name = "Shows" };
+
+        await owner.UpdateItemsAsync([item], null!, ItemUpdateType.MetadataEdit, CancellationToken.None);
+
+        var change = Assert.Single(notifier.Published);
+        Assert.Equal(CatalogChangeKind.Updated, change.Kind);
+        Assert.Equal(item.Id, change.ItemId);
+        Assert.Equal(Guid.Empty, change.ParentId);
+    }
+
+    [Fact]
     public async Task OwnerUpdate_EvictsFollowerItemAndReplaysLocalUpdate()
     {
         var hub = new FakeCatalogChangeHub();
