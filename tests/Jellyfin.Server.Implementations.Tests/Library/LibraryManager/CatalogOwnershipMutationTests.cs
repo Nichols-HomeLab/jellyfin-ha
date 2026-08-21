@@ -77,7 +77,8 @@ public sealed class CatalogOwnershipMutationTests
 
         var constructor = typeof(Emby.Server.Implementations.Library.LibraryManager)
             .GetConstructors()
-            .Single(c => c.GetParameters().Any(p => p.ParameterType == typeof(ICatalogOwnership)));
+            .Single(c => c.GetParameters().Any(p => p.ParameterType == typeof(ICatalogOwnership))
+                && c.GetParameters().Any(p => p.ParameterType == typeof(ICatalogChangeNotifier)));
         var context = new SpecimenContext(fixture);
         var arguments = constructor
             .GetParameters()

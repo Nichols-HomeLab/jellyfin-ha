@@ -183,9 +183,14 @@ public sealed class CatalogReplicaConvergenceTests
         var notifier = new FakeCatalogChangeNotifier();
         var (owner, _) = CreateLibraryManager(notifier);
         var parentId = Guid.NewGuid();
-        var item = new FastDeleteCatalogItem { Id = Guid.NewGuid(), ParentId = parentId, Name = "Removed movie" };
+        var item = new Mock<Folder> { CallBase = true };
+        item.Setup(i => i.GetInternalMetadataPath()).Returns("/path-that-does-not-exist/catalog-item");
+        item.Setup(i => i.GetDeletePaths()).Returns([]);
+        item.Object.Id = Guid.NewGuid();
+        item.Object.ParentId = parentId;
+        item.Object.Name = "Removed movie";
 
-        owner.DeleteItemsUnsafeFast([item]);
+        owner.DeleteItemsUnsafeFast([item.Object]);
 
         var change = Assert.Single(notifier.Published);
         Assert.Equal(CatalogChangeKind.Removed, change.Kind);
@@ -261,13 +266,6 @@ public sealed class CatalogReplicaConvergenceTests
                 }
             }
         }
-    }
-
-    private sealed class FastDeleteCatalogItem : Folder
-    {
-        public override string GetInternalMetadataPath() => "/path-that-does-not-exist/catalog-item";
-
-        public override IEnumerable<MediaBrowser.Model.IO.FileSystemMetadata> GetDeletePaths() => [];
     }
 
     private sealed class FakeCatalogChangeNotifier(FakeCatalogChangeHub? hub = null) : ICatalogChangeNotifier
