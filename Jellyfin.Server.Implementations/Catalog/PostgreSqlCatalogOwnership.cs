@@ -23,6 +23,7 @@ public sealed class PostgreSqlCatalogOwnership : BackgroundService, ICatalogOwne
     private readonly object _stateLock = new();
     private CancellationTokenSource _ownershipLostSource;
     private bool _isOwner;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="PostgreSqlCatalogOwnership"/> class.
@@ -56,6 +57,12 @@ public sealed class PostgreSqlCatalogOwnership : BackgroundService, ICatalogOwne
     {
         lock (_stateLock)
         {
+            if (_disposed)
+            {
+                ownershipLost = new CancellationToken(canceled: true);
+                return false;
+            }
+
             ownershipLost = _ownershipLostSource.Token;
             return _isOwner && !ownershipLost.IsCancellationRequested;
         }
@@ -109,6 +116,12 @@ public sealed class PostgreSqlCatalogOwnership : BackgroundService, ICatalogOwne
         await StopAsync(CancellationToken.None).ConfigureAwait(false);
         lock (_stateLock)
         {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
             _ownershipLostSource.Dispose();
         }
 
