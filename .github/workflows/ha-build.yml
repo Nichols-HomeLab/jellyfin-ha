@@ -86,7 +86,15 @@ jobs:
       - name: Restore NuGet packages
         run: |
           export PATH="$HOME/.dotnet:$PATH"
-          dotnet restore Jellyfin.Server/Jellyfin.Server.csproj --runtime linux-x64
+          for attempt in 1 2 3; do
+            if dotnet restore Jellyfin.Server/Jellyfin.Server.csproj --runtime linux-x64; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep "$((attempt * 10))"
+          done
 
       - name: Publish Jellyfin server
         run: |
@@ -105,7 +113,15 @@ jobs:
       - name: Publish hot-cache worker
         run: |
           export PATH="$HOME/.dotnet:$PATH"
-          dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj
+          for attempt in 1 2 3; do
+            if dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep "$((attempt * 10))"
+          done
           dotnet publish Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
             --configuration Release \
             --no-restore \
