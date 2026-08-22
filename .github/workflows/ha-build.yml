@@ -132,6 +132,7 @@ jobs:
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Build and push image
+        id: server_image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -140,9 +141,24 @@ jobs:
           # Only push the image on direct branch pushes, not on pull_request events.
           push: ${{ github.event_name == 'push' }}
           provenance: false
+          build-args: |
+            JELLYFIN_BUILD_IDENTITY=${{ github.sha }}
           tags: |
             ${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.short_sha }}
             ${{ steps.meta.outputs.image_repo }}:latest
+
+      - name: Verify published server image identity and record digest
+        if: github.event_name == 'push'
+        env:
+          EXPECTED_BUILD_IDENTITY: ${{ github.sha }}
+          SERVER_IMAGE_DIGEST: ${{ steps.server_image.outputs.digest }}
+          SERVER_IMAGE_REF: ${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.short_sha }}
+        run: |
+          test -n "$SERVER_IMAGE_DIGEST"
+          docker pull "$SERVER_IMAGE_REF"
+          actual_build_identity="$(docker run --rm --entrypoint /bin/sh "$SERVER_IMAGE_REF" -c 'printf %s "$JELLYFIN_BUILD_IDENTITY"')"
+          test "$actual_build_identity" = "$EXPECTED_BUILD_IDENTITY"
+          printf 'Server image: `%s@%s`\n' "${SERVER_IMAGE_REF%:*}" "$SERVER_IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build and push hot-cache worker image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7

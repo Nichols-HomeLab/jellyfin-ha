@@ -30,12 +30,14 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
     private readonly ILogger _logger;
     private readonly ITaskManager _taskManager;
     private readonly ICatalogOwnership _catalogOwnership;
+    private readonly ScheduledTaskDiagnostics _diagnostics;
     private readonly Lock _lastExecutionResultSyncLock = new();
     private bool _readFromFile;
     private TaskResult _lastExecutionResult;
     private Task _currentTask;
     private Tuple<TaskTriggerInfo, ITaskTrigger>[] _triggers;
     private string _id;
+    private ScheduledTaskDiagnosticRun _currentRun;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ScheduledTaskWorker" /> class for a single-instance deployment.
@@ -78,18 +80,31 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
         ITaskManager taskManager,
         ICatalogOwnership catalogOwnership,
         ILogger logger)
+        : this(scheduledTask, applicationPaths, taskManager, catalogOwnership, logger, new ScheduledTaskDiagnostics(logger))
+    {
+    }
+
+    internal ScheduledTaskWorker(
+        IScheduledTask scheduledTask,
+        IApplicationPaths applicationPaths,
+        ITaskManager taskManager,
+        ICatalogOwnership catalogOwnership,
+        ILogger logger,
+        ScheduledTaskDiagnostics diagnostics)
     {
         ArgumentNullException.ThrowIfNull(scheduledTask);
         ArgumentNullException.ThrowIfNull(applicationPaths);
         ArgumentNullException.ThrowIfNull(taskManager);
         ArgumentNullException.ThrowIfNull(catalogOwnership);
         ArgumentNullException.ThrowIfNull(logger);
+        ArgumentNullException.ThrowIfNull(diagnostics);
 
         ScheduledTask = scheduledTask;
         _applicationPaths = applicationPaths;
         _taskManager = taskManager;
         _catalogOwnership = catalogOwnership;
         _logger = logger;
+        _diagnostics = diagnostics;
 
         InitTriggerEvents();
     }
@@ -336,6 +351,7 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
         if (!_catalogOwnership.TryGetCatalogWriteToken(out var ownershipLost))
         {
             _logger.LogDebug("Skipping scheduled task {Name} because this instance does not own catalog writes", Name);
+            RecordFollowerSkip();
             return;
         }
 
@@ -343,16 +359,35 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
 
         CurrentCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(ownershipLost);
 
+        var diagnosticRun = _diagnostics.Admit(Id, ScheduledTask.Key);
+        _currentRun = diagnosticRun;
+        CurrentExecutionStartTime = diagnosticRun.StartedUtc;
+        var ownershipLossRegistration = ownershipLost.Register(() => RecordOwnershipLossSafe(diagnosticRun));
+
         _logger.LogDebug("Executing {0}", Name);
 
-        ((TaskManager)_taskManager).OnTaskExecuting(this);
+        try
+        {
+            ((TaskManager)_taskManager).OnTaskExecuting(this);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error announcing Scheduled Task execution");
+            await ownershipLossRegistration.DisposeAsync().ConfigureAwait(false);
+            CurrentCancellationTokenSource.Dispose();
+            CurrentCancellationTokenSource = null;
+            var failedAt = DateTime.UtcNow;
+            CompleteRun(diagnosticRun, CurrentExecutionStartTime, failedAt, TaskCompletionStatus.Failed, ex, "failed", ownershipLost.IsCancellationRequested ? "lost" : "owner");
+            Interlocked.CompareExchange(ref _currentRun, null, diagnosticRun);
+            throw;
+        }
 
         progress.ProgressChanged += OnProgressChanged;
 
         TaskCompletionStatus status;
-        CurrentExecutionStartTime = DateTime.UtcNow;
-
         Exception failureException = null;
+        string diagnosticOutcome;
+        string ownershipState;
 
         try
         {
@@ -364,10 +399,14 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
             await ScheduledTask.ExecuteAsync(progress, CurrentCancellationTokenSource.Token).ConfigureAwait(false);
 
             status = TaskCompletionStatus.Completed;
+            diagnosticOutcome = "completed";
+            ownershipState = ownershipLost.IsCancellationRequested ? "lost" : "owner";
         }
         catch (OperationCanceledException)
         {
             status = TaskCompletionStatus.Cancelled;
+            diagnosticOutcome = ownershipLost.IsCancellationRequested ? "ownership_lost" : "cancelled";
+            ownershipState = ownershipLost.IsCancellationRequested ? "lost" : "owner";
         }
         catch (Exception ex)
         {
@@ -376,17 +415,51 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
             failureException = ex;
 
             status = TaskCompletionStatus.Failed;
+            diagnosticOutcome = "failed";
+            ownershipState = ownershipLost.IsCancellationRequested ? "lost" : "owner";
         }
 
         var startTime = CurrentExecutionStartTime;
         var endTime = DateTime.UtcNow;
 
         progress.ProgressChanged -= OnProgressChanged;
+        await ownershipLossRegistration.DisposeAsync().ConfigureAwait(false);
         CurrentCancellationTokenSource.Dispose();
         CurrentCancellationTokenSource = null;
         CurrentProgress = null;
 
-        OnTaskCompleted(startTime, endTime, status, failureException);
+        CompleteRun(diagnosticRun, startTime, endTime, status, failureException, diagnosticOutcome, ownershipState);
+        Interlocked.CompareExchange(ref _currentRun, null, diagnosticRun);
+    }
+
+    internal void RecordFollowerSkip()
+        => _diagnostics.RecordFollowerSkip(Id, ScheduledTask.Key);
+
+    private void RecordOwnershipLossSafe(ScheduledTaskDiagnosticRun run)
+    {
+        try
+        {
+            _diagnostics.RecordOwnershipLoss(run);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error emitting scheduled task ownership-loss diagnostics");
+        }
+    }
+
+    private void CompleteRun(
+        ScheduledTaskDiagnosticRun run,
+        DateTime startTime,
+        DateTime endTime,
+        TaskCompletionStatus status,
+        Exception exception,
+        string diagnosticOutcome,
+        string ownershipState)
+    {
+        if (_diagnostics.TryRecordTerminal(run, diagnosticOutcome, endTime, ownershipState))
+        {
+            OnTaskCompleted(startTime, endTime, status, exception);
+        }
     }
 
     /// <summary>
@@ -576,8 +649,9 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
         {
             DisposeTriggers();
 
-            var wasRunning = State == TaskState.Running;
-            var startTime = CurrentExecutionStartTime;
+            var run = _currentRun;
+            var wasRunning = run is not null && State == TaskState.Running;
+            var startTime = run?.StartedUtc ?? CurrentExecutionStartTime;
 
             var token = CurrentCancellationTokenSource;
             if (token is not null)
@@ -594,12 +668,13 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
             }
 
             var task = _currentTask;
+            var exited = task is null;
             if (task is not null)
             {
                 try
                 {
                     _logger.LogInformation("{Name}: Waiting on Task", Name);
-                    var exited = task.Wait(2000);
+                    exited = task.Wait(2000);
 
                     if (exited)
                     {
@@ -629,9 +704,9 @@ public class ScheduledTaskWorker : IScheduledTaskWorker
                 }
             }
 
-            if (wasRunning)
+            if (wasRunning && !exited && run is not null)
             {
-                OnTaskCompleted(startTime, DateTime.UtcNow, TaskCompletionStatus.Aborted, null);
+                CompleteRun(run, startTime, DateTime.UtcNow, TaskCompletionStatus.Aborted, null, "aborted", "owner");
             }
         }
     }
