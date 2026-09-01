@@ -347,15 +347,15 @@ podAntiAffinity:
 
 # ---------------------------------------------------------------------------
 # Prometheus ServiceMonitor
-# Note: Jellyfin has no native /metrics endpoint. This ServiceMonitor is
-# included for future use (e.g. if you add a sidecar exporter) or for
-# blackbox-style readiness monitoring. Disable if not using kube-prometheus-stack.
+# This fork exposes native prometheus-net runtime, HTTP, catalog, and bounded
+# scheduled-task lifecycle metrics at /metrics. Disable if the deployment is
+# not observed by Prometheus Operator.
 # ---------------------------------------------------------------------------
 serviceMonitor:
   enabled: false
   # -- Scrape interval.
   interval: "30s"
-  # -- Scrape path (Jellyfin does not expose Prometheus metrics natively).
+  # -- Native Jellyfin Prometheus scrape path.
   path: /metrics
   # -- Additional labels to add to the ServiceMonitor (e.g. to match a Prometheus release label).
   additionalLabels: {}
