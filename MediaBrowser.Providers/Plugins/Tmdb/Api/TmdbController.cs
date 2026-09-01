@@ -1,3 +1,4 @@
+using System;
 using System.Net.Mime;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -35,7 +36,8 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Api
         [ProducesResponseType(StatusCodes.Status200OK)]
         public async Task<ConfigImageTypes> TmdbClientConfiguration()
         {
-            return (await _tmdbClientManager.GetClientConfiguration().ConfigureAwait(false)).Images;
+            return (await _tmdbClientManager.GetClientConfiguration().ConfigureAwait(false)).Images
+                ?? throw new InvalidOperationException("TMDb image configuration was not returned.");
         }
     }
 }
