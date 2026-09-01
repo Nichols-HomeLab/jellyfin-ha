@@ -177,6 +177,7 @@ public class TaskManager : ITaskManager
         if (!_catalogOwnership.TryGetCatalogWriteToken(out _))
         {
             _logger.LogDebug("Skipping scheduled task {Name} because this instance does not own catalog writes", type.Name);
+            ((ScheduledTaskWorker)task).RecordFollowerSkip();
             return;
         }
 
