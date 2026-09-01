@@ -51,33 +51,50 @@ jobs:
           echo "image_repo=${REPO}" >> "$GITHUB_OUTPUT"
           echo "short_sha=${SHORT_SHA}"  >> "$GITHUB_OUTPUT"
 
-      - name: Install .NET SDK
-        # Build on the runner host filesystem (native I/O) to avoid DinD
-        # overlay-on-overlay throttling which makes dotnet publish ~20x slower.
+      - name: Connect to the nested Docker daemon
+        run: |
+          # act_runner creates this job inside the runner's sibling DinD
+          # daemon. The daemon is listening on the job bridge gateway, not on
+          # this container's /var/run/docker.sock.
+          # The minimal runner image does not include iproute2. Linux exposes
+          # the default gateway in little-endian hex through /proc/net/route.
+          gateway_hex="$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)"
+          test "${#gateway_hex}" -eq 8
+          printf -v docker_gateway '%d.%d.%d.%d' \
+            "0x${gateway_hex:6:2}" "0x${gateway_hex:4:2}" \
+            "0x${gateway_hex:2:2}" "0x${gateway_hex:0:2}"
+          test -n "${docker_gateway}"
+          docker_host="tcp://${docker_gateway}:2375"
+          DOCKER_HOST="${docker_host}" docker version >/dev/null
+          echo "DOCKER_HOST=${docker_host}" >> "$GITHUB_ENV"
+
+      - name: Install pinned .NET SDK
+        # The runner image intentionally stays small. Copy the version pinned
+        # by global.json from Microsoft's SDK image instead of the dot.net
+        # installer redirect, which is unavailable during DNS incidents.
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
-          mkdir -p "$DOTNET_INSTALL_DIR"
-          # global.json pins the server build to .NET 9. Installing only the
-          # .NET 10 SDK leaves dotnet unable to resolve that pinned SDK.
-          if ! "$DOTNET_INSTALL_DIR/dotnet" --list-sdks 2>/dev/null | grep -q "^9\\."; then
-            for attempt in 1 2 3 4 5; do
-              if curl -fsSL --retry 3 --retry-all-errors https://dot.net/v1/dotnet-install.sh |
-                bash /dev/stdin --channel 9.0 --install-dir "$DOTNET_INSTALL_DIR"; then
-                break
-              fi
-              if [ "$attempt" -eq 5 ]; then
-                exit 1
-              fi
-              sleep "$((attempt * 5))"
-            done
-          fi
+          DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:9.0.317-noble"
+          rm -rf "$DOTNET_INSTALL_DIR"
+          sdk_container="$(docker create "$DOTNET_IMAGE")"
+          trap 'docker rm -f "$sdk_container" >/dev/null 2>&1 || true' EXIT
+          docker cp "$sdk_container":/usr/share/dotnet "$DOTNET_INSTALL_DIR"
+          "$DOTNET_INSTALL_DIR/dotnet" --info >/dev/null
           echo "DOTNET_ROOT=$DOTNET_INSTALL_DIR" >> "$GITHUB_ENV"
           echo "PATH=$DOTNET_INSTALL_DIR:$PATH" >> "$GITHUB_ENV"
 
       - name: Restore NuGet packages
         run: |
           export PATH="$HOME/.dotnet:$PATH"
-          dotnet restore Jellyfin.Server/Jellyfin.Server.csproj --runtime linux-x64
+          for attempt in 1 2 3; do
+            if dotnet restore Jellyfin.Server/Jellyfin.Server.csproj --runtime linux-x64; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep "$((attempt * 10))"
+          done
 
       - name: Publish Jellyfin server
         run: |
@@ -96,34 +113,26 @@ jobs:
       - name: Publish hot-cache worker
         run: |
           export PATH="$HOME/.dotnet:$PATH"
-          dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj
+          for attempt in 1 2 3; do
+            if dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj; then
+              break
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep "$((attempt * 10))"
+          done
           dotnet publish Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
             --configuration Release \
             --no-restore \
             -p:TreatWarningsAsErrors=false \
             --output ./hot-cache-worker-output
 
-      - name: Connect to the nested Docker daemon
-        run: |
-          # act_runner creates this job inside the runner's sibling DinD
-          # daemon. The daemon is listening on the job bridge gateway, not on
-          # this container's /var/run/docker.sock.
-          # The minimal runner image does not include iproute2. Linux exposes
-          # the default gateway in little-endian hex through /proc/net/route.
-          gateway_hex="$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)"
-          test "${#gateway_hex}" -eq 8
-          printf -v docker_gateway '%d.%d.%d.%d' \
-            "0x${gateway_hex:6:2}" "0x${gateway_hex:4:2}" \
-            "0x${gateway_hex:2:2}" "0x${gateway_hex:0:2}"
-          test -n "${docker_gateway}"
-          docker_host="tcp://${docker_gateway}:2375"
-          DOCKER_HOST="${docker_host}" docker version >/dev/null
-          echo "DOCKER_HOST=${docker_host}" >> "$GITHUB_ENV"
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
 
       - name: Build and push image
+        id: server_image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
@@ -132,9 +141,24 @@ jobs:
           # Only push the image on direct branch pushes, not on pull_request events.
           push: ${{ github.event_name == 'push' }}
           provenance: false
+          build-args: |
+            JELLYFIN_BUILD_IDENTITY=${{ github.sha }}
           tags: |
             ${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.short_sha }}
             ${{ steps.meta.outputs.image_repo }}:latest
+
+      - name: Verify published server image identity and record digest
+        if: github.event_name == 'push'
+        env:
+          EXPECTED_BUILD_IDENTITY: ${{ github.sha }}
+          SERVER_IMAGE_DIGEST: ${{ steps.server_image.outputs.digest }}
+          SERVER_IMAGE_REF: ${{ steps.meta.outputs.image_repo }}:${{ steps.meta.outputs.short_sha }}
+        run: |
+          test -n "$SERVER_IMAGE_DIGEST"
+          docker pull "$SERVER_IMAGE_REF"
+          actual_build_identity="$(docker run --rm --entrypoint /bin/sh "$SERVER_IMAGE_REF" -c 'printf %s "$JELLYFIN_BUILD_IDENTITY"')"
+          test "$actual_build_identity" = "$EXPECTED_BUILD_IDENTITY"
+          printf 'Server image: `%s@%s`\n' "${SERVER_IMAGE_REF%:*}" "$SERVER_IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build and push hot-cache worker image
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7

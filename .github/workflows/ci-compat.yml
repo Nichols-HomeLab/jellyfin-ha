@@ -31,7 +31,15 @@ jobs:
           name: abi-head
           retention-days: 14
           if-no-files-found: error
-          path: out/
+          path: |
+            out/Jellyfin.Data.dll
+            out/MediaBrowser.Common.dll
+            out/MediaBrowser.Controller.dll
+            out/MediaBrowser.Model.dll
+            out/Emby.Naming.dll
+            out/Jellyfin.Extensions.dll
+            out/Jellyfin.MediaEncoding.Keyframes.dll
+            out/Jellyfin.Database.Implementations.dll
 
   abi-base:
     name: ABI - BASE
@@ -70,7 +78,15 @@ jobs:
           name: abi-base
           retention-days: 14
           if-no-files-found: error
-          path: out/
+          path: |
+            out/Jellyfin.Data.dll
+            out/MediaBrowser.Common.dll
+            out/MediaBrowser.Controller.dll
+            out/MediaBrowser.Model.dll
+            out/Emby.Naming.dll
+            out/Jellyfin.Extensions.dll
+            out/Jellyfin.MediaEncoding.Keyframes.dll
+            out/Jellyfin.Database.Implementations.dll
 
   abi-diff:
     permissions:
@@ -96,9 +112,14 @@ jobs:
           name: abi-base
           path: abi-base
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '9.0.x'
+
       - name: Setup ApiCompat
         run: |
-          dotnet tool install --global Microsoft.DotNet.ApiCompat.Tool
+          dotnet tool install --tool-path ./.tools Microsoft.DotNet.ApiCompat.Tool
 
       - name: Run ApiCompat
         id: diff
@@ -106,7 +127,7 @@ jobs:
           {
             echo 'body<<EOF'
             for file in Jellyfin.Data.dll MediaBrowser.Common.dll MediaBrowser.Controller.dll MediaBrowser.Model.dll Emby.Naming.dll Jellyfin.Extensions.dll Jellyfin.MediaEncoding.Keyframes.dll Jellyfin.Database.Implementations.dll; do
-              COMPAT_OUTPUT="$( { apicompat --left ./abi-base/${file} --right ./abi-head/${file}; } 2>&1 )"
+              COMPAT_OUTPUT="$(./.tools/apicompat --left ./abi-base/${file} --right ./abi-head/${file} 2>&1)" || true
               if [ "APICompat ran successfully without finding any breaking changes." != "${COMPAT_OUTPUT}" ]; then
                 printf "\n${file}\n${COMPAT_OUTPUT}\n"
               fi
