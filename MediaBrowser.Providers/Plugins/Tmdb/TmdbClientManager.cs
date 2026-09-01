@@ -195,7 +195,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             await EnsureClientConfigAsync().ConfigureAwait(false);
 
             var series = await GetSeriesAsync(tvShowId, language, imageLanguages, countryCode, cancellationToken).ConfigureAwait(false);
-            var episodeGroupId = series?.EpisodeGroups.Results.Find(g => g.Type == groupType)?.Id;
+            var episodeGroupId = series?.EpisodeGroups?.Results?.Find(g => g.Type == groupType)?.Id;
 
             if (episodeGroupId is null)
             {
@@ -276,13 +276,13 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             var group = await GetSeriesGroupAsync(tvShowId, displayOrder, language, imageLanguages, countryCode, cancellationToken).ConfigureAwait(false);
             if (group is not null)
             {
-                var season = group.Groups.Find(s => s.Order == seasonNumber);
+                var season = group.Groups?.Find(s => s.Order == seasonNumber);
                 // Episode order starts at 0
-                var ep = season?.Episodes.Find(e => e.Order == episodeNumber - 1);
+                var ep = season?.Episodes?.Find(e => e.Order == episodeNumber - 1);
                 if (ep is not null)
                 {
                     seasonNumber = ep.SeasonNumber;
-                    episodeNumber = ep.EpisodeNumber;
+                    episodeNumber = checked((int)ep.EpisodeNumber);
                 }
             }
 
@@ -385,9 +385,10 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         public async Task<IReadOnlyList<SearchTv>> SearchSeriesAsync(string name, string language, string? countryCode, int year = 0, CancellationToken cancellationToken = default)
         {
             var key = $"searchseries-{name}-{year.ToString(CultureInfo.InvariantCulture)}-{language}";
-            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchTv>? series) && series is not null)
+            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchTv>? series)
+                && series?.Results is { } cachedResults)
             {
-                return series.Results;
+                return cachedResults;
             }
 
             await EnsureClientConfigAsync().ConfigureAwait(false);
@@ -395,13 +396,14 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             var searchResults = await _tmDbClient
                 .SearchTvShowAsync(name, TmdbUtils.NormalizeLanguage(language, countryCode), includeAdult: Plugin.Instance.Configuration.IncludeAdult, firstAirDateYear: year, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            var results = searchResults?.Results ?? [];
 
-            if (searchResults.Results.Count > 0)
+            if (results.Count > 0 && searchResults is not null)
             {
                 _memoryCache.Set(key, searchResults, TimeSpan.FromHours(CacheDurationInHours));
             }
 
-            return searchResults.Results;
+            return results;
         }
 
         /// <summary>
@@ -413,9 +415,10 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         public async Task<IReadOnlyList<SearchPerson>> SearchPersonAsync(string name, CancellationToken cancellationToken)
         {
             var key = $"searchperson-{name}";
-            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchPerson>? person) && person is not null)
+            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchPerson>? person)
+                && person?.Results is { } cachedResults)
             {
-                return person.Results;
+                return cachedResults;
             }
 
             await EnsureClientConfigAsync().ConfigureAwait(false);
@@ -423,13 +426,14 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             var searchResults = await _tmDbClient
                 .SearchPersonAsync(name, includeAdult: Plugin.Instance.Configuration.IncludeAdult, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            var results = searchResults?.Results ?? [];
 
-            if (searchResults.Results.Count > 0)
+            if (results.Count > 0 && searchResults is not null)
             {
                 _memoryCache.Set(key, searchResults, TimeSpan.FromHours(CacheDurationInHours));
             }
 
-            return searchResults.Results;
+            return results;
         }
 
         /// <summary>
@@ -456,9 +460,10 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         public async Task<IReadOnlyList<SearchMovie>> SearchMovieAsync(string name, int year, string language, string? countryCode, CancellationToken cancellationToken)
         {
             var key = $"moviesearch-{name}-{year.ToString(CultureInfo.InvariantCulture)}-{language}";
-            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchMovie>? movies) && movies is not null)
+            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchMovie>? movies)
+                && movies?.Results is { } cachedResults)
             {
-                return movies.Results;
+                return cachedResults;
             }
 
             await EnsureClientConfigAsync().ConfigureAwait(false);
@@ -466,13 +471,14 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             var searchResults = await _tmDbClient
                 .SearchMovieAsync(name, TmdbUtils.NormalizeLanguage(language, countryCode), includeAdult: Plugin.Instance.Configuration.IncludeAdult, year: year, cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            var results = searchResults?.Results ?? [];
 
-            if (searchResults.Results.Count > 0)
+            if (results.Count > 0 && searchResults is not null)
             {
                 _memoryCache.Set(key, searchResults, TimeSpan.FromHours(CacheDurationInHours));
             }
 
-            return searchResults.Results;
+            return results;
         }
 
         /// <summary>
@@ -486,9 +492,10 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         public async Task<IReadOnlyList<SearchCollection>> SearchCollectionAsync(string name, string language, string? countryCode, CancellationToken cancellationToken)
         {
             var key = $"collectionsearch-{name}-{language}";
-            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchCollection>? collections) && collections is not null)
+            if (_memoryCache.TryGetValue(key, out SearchContainer<SearchCollection>? collections)
+                && collections?.Results is { } cachedResults)
             {
-                return collections.Results;
+                return cachedResults;
             }
 
             await EnsureClientConfigAsync().ConfigureAwait(false);
@@ -496,13 +503,14 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
             var searchResults = await _tmDbClient
                 .SearchCollectionAsync(name, TmdbUtils.NormalizeLanguage(language, countryCode), cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
+            var results = searchResults?.Results ?? [];
 
-            if (searchResults.Results.Count > 0)
+            if (results.Count > 0 && searchResults is not null)
             {
                 _memoryCache.Set(key, searchResults, TimeSpan.FromHours(CacheDurationInHours));
             }
 
-            return searchResults.Results;
+            return results;
         }
 
         /// <summary>
@@ -511,7 +519,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         /// <param name="size">The image size to fetch.</param>
         /// <param name="path">The relative URL of the image.</param>
         /// <returns>The absolute URL.</returns>
-        private string? GetUrl(string? size, string path)
+        private string? GetUrl(string? size, string? path)
         {
             if (string.IsNullOrEmpty(path))
             {
@@ -529,7 +537,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         /// </summary>
         /// <param name="posterPath">The relative URL of the poster.</param>
         /// <returns>The absolute URL.</returns>
-        public string? GetPosterUrl(string posterPath)
+        public string? GetPosterUrl(string? posterPath)
         {
             return GetUrl(Plugin.Instance.Configuration.PosterSize, posterPath);
         }
@@ -539,7 +547,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         /// </summary>
         /// <param name="actorProfilePath">The relative URL of the profile image.</param>
         /// <returns>The absolute URL.</returns>
-        public string? GetProfileUrl(string actorProfilePath)
+        public string? GetProfileUrl(string? actorProfilePath)
         {
             return GetUrl(Plugin.Instance.Configuration.ProfileSize, actorProfilePath);
         }
@@ -642,32 +650,41 @@ namespace MediaBrowser.Providers.Plugins.Tmdb
         private static void ValidatePreferences(TMDbConfig config)
         {
             var imageConfig = config.Images;
+            if (imageConfig is null)
+            {
+                return;
+            }
 
             var pluginConfig = Plugin.Instance.Configuration;
 
-            if (!imageConfig.PosterSizes.Contains(pluginConfig.PosterSize))
+            if (imageConfig.PosterSizes is { Count: > 0 } posterSizes
+                && (pluginConfig.PosterSize is null || !posterSizes.Contains(pluginConfig.PosterSize)))
             {
-                pluginConfig.PosterSize = imageConfig.PosterSizes[^1];
+                pluginConfig.PosterSize = posterSizes[^1];
             }
 
-            if (!imageConfig.BackdropSizes.Contains(pluginConfig.BackdropSize))
+            if (imageConfig.BackdropSizes is { Count: > 0 } backdropSizes
+                && (pluginConfig.BackdropSize is null || !backdropSizes.Contains(pluginConfig.BackdropSize)))
             {
-                pluginConfig.BackdropSize = imageConfig.BackdropSizes[^1];
+                pluginConfig.BackdropSize = backdropSizes[^1];
             }
 
-            if (!imageConfig.LogoSizes.Contains(pluginConfig.LogoSize))
+            if (imageConfig.LogoSizes is { Count: > 0 } logoSizes
+                && (pluginConfig.LogoSize is null || !logoSizes.Contains(pluginConfig.LogoSize)))
             {
-                pluginConfig.LogoSize = imageConfig.LogoSizes[^1];
+                pluginConfig.LogoSize = logoSizes[^1];
             }
 
-            if (!imageConfig.ProfileSizes.Contains(pluginConfig.ProfileSize))
+            if (imageConfig.ProfileSizes is { Count: > 0 } profileSizes
+                && (pluginConfig.ProfileSize is null || !profileSizes.Contains(pluginConfig.ProfileSize)))
             {
-                pluginConfig.ProfileSize = imageConfig.ProfileSizes[^1];
+                pluginConfig.ProfileSize = profileSizes[^1];
             }
 
-            if (!imageConfig.StillSizes.Contains(pluginConfig.StillSize))
+            if (imageConfig.StillSizes is { Count: > 0 } stillSizes
+                && (pluginConfig.StillSize is null || !stillSizes.Contains(pluginConfig.StillSize)))
             {
-                pluginConfig.StillSize = imageConfig.StillSizes[^1];
+                pluginConfig.StillSize = stillSizes[^1];
             }
         }
 

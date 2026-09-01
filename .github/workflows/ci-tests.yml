@@ -16,7 +16,7 @@ jobs:
     runs-on: [self-hosted, k3s, linux, amd64]
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_DB: jellyfin_catalog_test
           POSTGRES_USER: jellyfin

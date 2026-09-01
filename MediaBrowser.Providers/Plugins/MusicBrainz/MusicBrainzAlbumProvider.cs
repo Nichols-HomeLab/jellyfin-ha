@@ -83,7 +83,7 @@ public class MusicBrainzAlbumProvider : IRemoteMetadataProvider<MusicAlbum, Albu
         if (!string.IsNullOrEmpty(releaseGroupId))
         {
             var releaseGroupResult = await _musicBrainzQuery.LookupReleaseGroupAsync(new Guid(releaseGroupId), Include.Releases, null, cancellationToken).ConfigureAwait(false);
-            return GetReleaseGroupResult(releaseGroupResult.Releases);
+            return await GetReleaseGroupResult(releaseGroupResult.Releases, cancellationToken).ConfigureAwait(false);
         }
 
         var artistMusicBrainzId = searchInfo.GetMusicBrainzArtistId();
@@ -128,19 +128,25 @@ public class MusicBrainzAlbumProvider : IRemoteMetadataProvider<MusicAlbum, Albu
         }
     }
 
-    private IEnumerable<RemoteSearchResult> GetReleaseGroupResult(IEnumerable<IRelease>? releaseSearchResults)
+    private async Task<IEnumerable<RemoteSearchResult>> GetReleaseGroupResult(IEnumerable<IRelease>? releaseSearchResults, CancellationToken cancellationToken)
     {
         if (releaseSearchResults is null)
         {
-            yield break;
+            return Enumerable.Empty<RemoteSearchResult>();
         }
 
+        var results = new List<RemoteSearchResult>();
         foreach (var result in releaseSearchResults)
         {
             // Fetch full release info, otherwise artists are missing
-            var fullResult = _musicBrainzQuery.LookupRelease(result.Id, Include.Artists | Include.ReleaseGroups);
-            yield return GetReleaseResult(fullResult);
+            var fullResult = await _musicBrainzQuery.LookupReleaseAsync(
+                result.Id,
+                Include.Artists | Include.ReleaseGroups,
+                cancellationToken).ConfigureAwait(false);
+            results.Add(GetReleaseResult(fullResult));
         }
+
+        return results;
     }
 
     private RemoteSearchResult GetReleaseResult(IRelease releaseSearchResult)
