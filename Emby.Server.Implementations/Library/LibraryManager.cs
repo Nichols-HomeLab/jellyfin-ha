@@ -2378,7 +2378,7 @@ namespace Emby.Server.Implementations.Library
 
             foreach (var item in items)
             {
-                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Updated, item.Id, parent.Id));
+                _catalogChangeNotifier.Publish(CatalogChange.Local(CatalogChangeKind.Updated, item.Id, parent?.Id ?? Guid.Empty));
             }
         }
 

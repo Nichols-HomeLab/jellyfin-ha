@@ -1,4 +1,4 @@
-> **Last updated: 2026-03-04**
+> **Last updated: 2026-08-22**
 
 # Jellyfin Server Architecture
 
@@ -8,10 +8,10 @@ High-level overview of the Jellyfin server structure, layer responsibilities, an
 
 | Component | Value |
 |---|---|
-| Framework | .NET 10 / ASP.NET Core 10 |
-| Target | `net10.0` |
+| Framework | .NET 9 application / self-contained runtime on ASP.NET Core 10 image |
+| Target | `net9.0` |
 | Entry point | `Jellyfin.Server` |
-| Version | `10.12.0` (see `SharedVersion.cs`) |
+| Version | `10.11.11` (see `SharedVersion.cs`) |
 
 ---
 
@@ -164,7 +164,15 @@ Custom Roslyn analyzer. Runs only in Debug builds. Enforces project-specific rul
 prometheus-net serves metrics at `/metrics`. Key meters:
 - `prometheus-net.AspNetCore` — HTTP request duration/count
 - `prometheus-net.DotNetRuntime` — GC, thread pool, JIT metrics
-- Custom counters can be added via `Metrics.CreateCounter(...)` in any service
+- `jellyfin_scheduled_task_diagnostics_info` — confirms bounded task diagnostics are active
+- `jellyfin_scheduled_task_lifecycle_total{task_key,outcome}` — fixed-cardinality task lifecycle events
+- Other custom counters can be added via `Metrics.CreateCounter(...)` in any service
+
+### Scheduled task diagnostics
+
+`ScheduledTaskWorker` emits `scheduled_task_lifecycle_v1` structured markers for admitted starts, terminal outcomes, ownership loss, and follower skips. Each admitted run has one opaque correlation ID and exactly one terminal marker. Marker values are restricted to fixed task identities and bounded run, timing, ownership, pod, and build context; arbitrary plugin identities collapse to `other`.
+
+Raw exceptions remain in the existing restricted exception log and task history. They are never copied into lifecycle markers or Prometheus labels. Published server images receive the full source commit through `JELLYFIN_BUILD_IDENTITY`; the build workflow verifies that value in the pushed image and records its immutable registry digest.
 
 ### Logging
 
