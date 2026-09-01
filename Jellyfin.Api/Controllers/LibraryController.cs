@@ -53,6 +53,7 @@ public class LibraryController : BaseJellyfinApiController
     private readonly IActivityManager _activityManager;
     private readonly ILocalizationManager _localization;
     private readonly ILibraryMonitor _libraryMonitor;
+    private readonly ICatalogOwnership _catalogOwnership;
     private readonly ILogger<LibraryController> _logger;
     private readonly IServerConfigurationManager _serverConfigurationManager;
 
@@ -66,6 +67,7 @@ public class LibraryController : BaseJellyfinApiController
     /// <param name="activityManager">Instance of the <see cref="IActivityManager"/> interface.</param>
     /// <param name="localization">Instance of the <see cref="ILocalizationManager"/> interface.</param>
     /// <param name="libraryMonitor">Instance of the <see cref="ILibraryMonitor"/> interface.</param>
+    /// <param name="catalogOwnership">Instance of the <see cref="ICatalogOwnership"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{LibraryController}"/> interface.</param>
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     public LibraryController(
@@ -76,6 +78,7 @@ public class LibraryController : BaseJellyfinApiController
         IActivityManager activityManager,
         ILocalizationManager localization,
         ILibraryMonitor libraryMonitor,
+        ICatalogOwnership catalogOwnership,
         ILogger<LibraryController> logger,
         IServerConfigurationManager serverConfigurationManager)
     {
@@ -86,6 +89,7 @@ public class LibraryController : BaseJellyfinApiController
         _activityManager = activityManager;
         _localization = localization;
         _libraryMonitor = libraryMonitor;
+        _catalogOwnership = catalogOwnership;
         _logger = logger;
         _serverConfigurationManager = serverConfigurationManager;
     }
@@ -639,12 +643,20 @@ public class LibraryController : BaseJellyfinApiController
     /// </summary>
     /// <param name="dto">The update paths.</param>
     /// <response code="204">Report success.</response>
-    /// <returns>A <see cref="NoContentResult"/>.</returns>
+    /// <response code="503">This replica does not own catalog writes.</response>
+    /// <returns>A <see cref="NoContentResult"/> or <see cref="StatusCodeResult"/>.</returns>
     [HttpPost("Library/Media/Updated")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public ActionResult PostUpdatedMedia([FromBody, Required] MediaUpdateInfoDto dto)
     {
+        if (!_catalogOwnership.TryGetCatalogWriteToken(out var ownershipLost)
+            || ownershipLost.IsCancellationRequested)
+        {
+            return StatusCode(StatusCodes.Status503ServiceUnavailable);
+        }
+
         foreach (var item in dto.Updates)
         {
             _libraryMonitor.ReportFileSystemChanged(item.Path ?? throw new ArgumentException("Item path can't be null."));

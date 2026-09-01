@@ -26,6 +26,9 @@ FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
 # compatible Intel iHD VAAPI driver. Keep the package immutable so a base-image
 # rebuild cannot silently change the hardware-transcode contract.
 ARG JELLYFIN_FFMPEG_VERSION=7.1.4-3-noble
+ARG JELLYFIN_BUILD_IDENTITY=unknown
+
+LABEL org.opencontainers.image.revision=${JELLYFIN_BUILD_IDENTITY}
 
 # Install Jellyfin FFmpeg, Intel QSV/VAAPI userspace, and native dependencies
 # required by SkiaSharp and fontconfig.
@@ -48,7 +51,8 @@ RUN apt-get update \
  && ln -s /usr/lib/jellyfin-ffmpeg/ffprobe /usr/local/bin/ffprobe \
  && rm -rf /var/lib/apt/lists/*
 
-ENV LIBVA_DRIVER_NAME=iHD
+ENV LIBVA_DRIVER_NAME=iHD \
+    JELLYFIN_BUILD_IDENTITY=${JELLYFIN_BUILD_IDENTITY}
 
 COPY scripts/verify-qsv-runtime.sh /usr/local/bin/verify-qsv-runtime
 RUN chmod 0755 /usr/local/bin/verify-qsv-runtime \

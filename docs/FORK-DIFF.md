@@ -162,7 +162,7 @@ HLS session registration. When a new HLS transcode starts, `SetAsync` is called 
 
 ### `.github/workflows/ha-build.yml` (new, +90)
 
-Build-and-push workflow for the fork image. Runs on push to `main`/`feat/ha-*`/`copilot/*`. Publishes with `dotnet publish` on the runner host (not inside Docker), then builds the runtime image and pushes to ECR.
+Build-and-push workflow for the fork image. Runs on the configured HA branches and on `main`. It publishes with `dotnet publish` on the runner host (not inside Docker), builds the runtime image, and pushes short-SHA and `latest` tags to the private Gitea registry. The server image embeds the full source SHA, verifies that identity after publication, and records the immutable manifest digest in the Actions summary.
 
 ### `.github/workflows/ci-tests.yml` (+87 / -5)
 
