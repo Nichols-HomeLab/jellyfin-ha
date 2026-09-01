@@ -92,6 +92,12 @@ public class MediaSegmentManager : IMediaSegmentManager
     /// <inheritdoc/>
     public async Task RunSegmentPluginProviders(BaseItem baseItem, LibraryOptions libraryOptions, bool forceOverwrite, CancellationToken cancellationToken)
     {
+        if (!_catalogOwnership.TryGetCatalogWriteToken(out _))
+        {
+            _logger.LogDebug("Skipping media segment extraction for {MediaPath} because this instance does not own catalog writes", baseItem.Path);
+            return;
+        }
+
         using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
         var catalogWriteToken = catalogWrite.Token;
         var changed = false;
