@@ -167,9 +167,9 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
             if (string.IsNullOrEmpty(tmdbId) && !string.IsNullOrEmpty(imdbId))
             {
                 var movieResultFromImdbId = await _tmdbClientManager.FindByExternalIdAsync(imdbId, FindExternalSource.Imdb, info.MetadataLanguage, info.MetadataCountryCode, cancellationToken).ConfigureAwait(false);
-                if (movieResultFromImdbId?.MovieResults.Count > 0)
+                if (movieResultFromImdbId?.MovieResults is { Count: > 0 } movieResults)
                 {
-                    tmdbId = movieResultFromImdbId.MovieResults[0].Id.ToString(CultureInfo.InvariantCulture);
+                    tmdbId = movieResults[0].Id.ToString(CultureInfo.InvariantCulture);
                 }
             }
 
@@ -193,7 +193,10 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
                 OriginalTitle = movieResult.OriginalTitle,
                 Overview = movieResult.Overview?.Replace("\n\n", "\n", StringComparison.InvariantCulture),
                 Tagline = movieResult.Tagline,
-                ProductionLocations = movieResult.ProductionCountries.Select(pc => pc.Name).ToArray()
+                ProductionLocations = (movieResult.ProductionCountries ?? [])
+                    .Select(pc => pc.Name)
+                    .OfType<string>()
+                    .ToArray()
             };
             var metadataResult = new MetadataResult<Movie>
             {
@@ -218,7 +221,9 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
 
                 var ourRelease = releases.FirstOrDefault(c => string.Equals(c.Iso_3166_1, info.MetadataCountryCode, StringComparison.OrdinalIgnoreCase));
 
-                if (ourRelease is not null)
+                if (ourRelease is not null
+                    && !string.IsNullOrEmpty(ourRelease.Iso_3166_1)
+                    && !string.IsNullOrEmpty(ourRelease.Certification))
                 {
                     movie.OfficialRating = TmdbUtils.BuildParentalRating(ourRelease.Iso_3166_1, ourRelease.Certification);
                 }
@@ -240,9 +245,9 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
                 movie.SetStudios(movieResult.ProductionCompanies.Select(c => c.Name));
             }
 
-            var genres = movieResult.Genres;
+            var genres = movieResult.Genres ?? [];
 
-            foreach (var genre in genres.Select(g => g.Name).Trimmed())
+            foreach (var genre in genres.Select(g => g.Name).OfType<string>().Trimmed())
             {
                 movie.AddGenre(genre);
             }
@@ -251,7 +256,11 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
             {
                 for (var i = 0; i < movieResult.Keywords.Keywords.Count; i++)
                 {
-                    movie.AddTag(movieResult.Keywords.Keywords[i].Name);
+                    var keyword = movieResult.Keywords.Keywords[i].Name;
+                    if (!string.IsNullOrWhiteSpace(keyword))
+                    {
+                        movie.AddTag(keyword);
+                    }
                 }
             }
 
