@@ -174,18 +174,18 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
             if (string.IsNullOrEmpty(tmdbId) && info.TryGetProviderId(MetadataProvider.Imdb, out var imdbId))
             {
                 var searchResult = await _tmdbClientManager.FindByExternalIdAsync(imdbId, FindExternalSource.Imdb, info.MetadataLanguage, info.MetadataCountryCode, cancellationToken).ConfigureAwait(false);
-                if (searchResult?.TvResults.Count > 0)
+                if (searchResult?.TvResults is { Count: > 0 } tvResults)
                 {
-                    tmdbId = searchResult.TvResults[0].Id.ToString(CultureInfo.InvariantCulture);
+                    tmdbId = tvResults[0].Id.ToString(CultureInfo.InvariantCulture);
                 }
             }
 
             if (string.IsNullOrEmpty(tmdbId) && info.TryGetProviderId(MetadataProvider.Tvdb, out var tvdbId))
             {
                 var searchResult = await _tmdbClientManager.FindByExternalIdAsync(tvdbId, FindExternalSource.TvDb, info.MetadataLanguage, info.MetadataCountryCode, cancellationToken).ConfigureAwait(false);
-                if (searchResult?.TvResults.Count > 0)
+                if (searchResult?.TvResults is { Count: > 0 } tvResults)
                 {
-                    tmdbId = searchResult.TvResults[0].Id.ToString(CultureInfo.InvariantCulture);
+                    tmdbId = tvResults[0].Id.ToString(CultureInfo.InvariantCulture);
                 }
             }
 
@@ -264,15 +264,22 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
             {
                 for (var i = 0; i < seriesResult.Keywords.Results.Count; i++)
                 {
-                    series.AddTag(seriesResult.Keywords.Results[i].Name);
+                    var keyword = seriesResult.Keywords.Results[i].Name;
+                    if (!string.IsNullOrWhiteSpace(keyword))
+                    {
+                        series.AddTag(keyword);
+                    }
                 }
             }
 
             series.HomePageUrl = seriesResult.Homepage;
 
-            series.RunTimeTicks = seriesResult.EpisodeRunTime.Select(i => TimeSpan.FromMinutes(i).Ticks).FirstOrDefault();
+            series.RunTimeTicks = seriesResult.EpisodeRunTime?
+                .Select(i => TimeSpan.FromMinutes(i).Ticks)
+                .FirstOrDefault();
 
-            if (Emby.Naming.TV.TvParserHelpers.TryParseSeriesStatus(seriesResult.Status, out var seriesStatus))
+            if (!string.IsNullOrEmpty(seriesResult.Status)
+                && Emby.Naming.TV.TvParserHelpers.TryParseSeriesStatus(seriesResult.Status, out var seriesStatus))
             {
                 series.Status = seriesStatus;
             }
@@ -288,13 +295,15 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
                 series.TrySetProviderId(MetadataProvider.Tvdb, ids.TvdbId);
             }
 
-            var contentRatings = seriesResult.ContentRatings.Results ?? new List<ContentRating>();
+            var contentRatings = seriesResult.ContentRatings?.Results ?? [];
 
             var ourRelease = contentRatings.FirstOrDefault(c => string.Equals(c.Iso_3166_1, preferredCountryCode, StringComparison.OrdinalIgnoreCase));
             var usRelease = contentRatings.FirstOrDefault(c => string.Equals(c.Iso_3166_1, "US", StringComparison.OrdinalIgnoreCase));
             var minimumRelease = contentRatings.FirstOrDefault();
 
-            if (ourRelease is not null)
+            if (ourRelease is not null
+                && !string.IsNullOrEmpty(ourRelease.Iso_3166_1)
+                && !string.IsNullOrEmpty(ourRelease.Rating))
             {
                 series.OfficialRating = TmdbUtils.BuildParentalRating(ourRelease.Iso_3166_1, ourRelease.Rating);
             }
@@ -311,7 +320,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
             {
                 foreach (var video in seriesResult.Videos.Results)
                 {
-                    if (TmdbUtils.IsTrailerType(video))
+                    if (TmdbUtils.IsTrailerType(video) && !string.IsNullOrEmpty(video.Key))
                     {
                         series.AddTrailerUrl("https://www.youtube.com/watch?v=" + video.Key);
                     }

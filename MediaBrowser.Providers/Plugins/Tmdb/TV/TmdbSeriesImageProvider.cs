@@ -76,9 +76,9 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
                 return Enumerable.Empty<RemoteImageInfo>();
             }
 
-            var posters = series.Images.Posters;
-            var backdrops = series.Images.Backdrops;
-            var logos = series.Images.Logos;
+            var posters = series.Images.Posters ?? [];
+            var backdrops = series.Images.Backdrops ?? [];
+            var logos = series.Images.Logos ?? [];
             var remoteImages = new List<RemoteImageInfo>(posters.Count + backdrops.Count + logos.Count);
 
             remoteImages.AddRange(_tmdbClientManager.ConvertPostersToRemoteImageInfo(posters, language));
