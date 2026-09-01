@@ -112,7 +112,7 @@ postgresql:
 
   image:
     repository: postgres
-    tag: "16.11-alpine3.21"
+    tag: "18.1-alpine3.21"
     pullPolicy: IfNotPresent
 
   resources:
