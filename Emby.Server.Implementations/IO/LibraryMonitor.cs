@@ -8,6 +8,7 @@ using Emby.Server.Implementations.Library;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.IO;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,8 @@ namespace Emby.Server.Implementations.IO
         private readonly IServerConfigurationManager _configurationManager;
         private readonly IFileSystem _fileSystem;
         private readonly ICatalogOwnership _catalogOwnership;
+        private readonly IDirectoryService _directoryService;
+        private readonly DotIgnoreIgnoreRule _dotIgnoreIgnoreRule;
 
         /// <summary>
         /// The file system watchers.
@@ -47,41 +50,30 @@ namespace Emby.Server.Implementations.IO
         /// <param name="libraryManager">The library manager.</param>
         /// <param name="configurationManager">The configuration manager.</param>
         /// <param name="fileSystem">The filesystem.</param>
+        /// <param name="directoryService">The directory service.</param>
         /// <param name="appLifetime">The <see cref="IHostApplicationLifetime"/>.</param>
-        public LibraryMonitor(
-            ILogger<LibraryMonitor> logger,
-            ILibraryManager libraryManager,
-            IServerConfigurationManager configurationManager,
-            IFileSystem fileSystem,
-            IHostApplicationLifetime appLifetime)
-            : this(logger, libraryManager, configurationManager, fileSystem, new SingleInstanceCatalogOwnership(), appLifetime)
-        {
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="LibraryMonitor" /> class.
-        /// </summary>
-        /// <param name="logger">The logger.</param>
-        /// <param name="libraryManager">The library manager.</param>
-        /// <param name="configurationManager">The configuration manager.</param>
-        /// <param name="fileSystem">The filesystem.</param>
+        /// <param name="dotIgnoreIgnoreRule">The .ignore rule handler.</param>
         /// <param name="catalogOwnership">The cluster-wide catalog ownership.</param>
-        /// <param name="appLifetime">The <see cref="IHostApplicationLifetime"/>.</param>
         public LibraryMonitor(
             ILogger<LibraryMonitor> logger,
             ILibraryManager libraryManager,
             IServerConfigurationManager configurationManager,
             IFileSystem fileSystem,
-            ICatalogOwnership catalogOwnership,
-            IHostApplicationLifetime appLifetime)
+            IDirectoryService directoryService,
+            IHostApplicationLifetime appLifetime,
+            DotIgnoreIgnoreRule dotIgnoreIgnoreRule,
+            ICatalogOwnership catalogOwnership)
         {
             _libraryManager = libraryManager;
             _logger = logger;
             _configurationManager = configurationManager;
             _fileSystem = fileSystem;
             _catalogOwnership = catalogOwnership;
+            _directoryService = directoryService;
+            _dotIgnoreIgnoreRule = dotIgnoreIgnoreRule;
 
             appLifetime.ApplicationStarted.Register(Start);
+            appLifetime.ApplicationStopping.Register(Stop);
         }
 
         /// <inheritdoc />
@@ -381,10 +373,12 @@ namespace Emby.Server.Implementations.IO
             }
 
             var fileInfo = _fileSystem.GetFileSystemInfo(path);
-            if (DotIgnoreIgnoreRule.IsIgnored(fileInfo, null))
+            if (_dotIgnoreIgnoreRule.ShouldIgnore(fileInfo, null))
             {
                 return;
             }
+
+            _directoryService.Invalidate(path);
 
             // Ignore certain files, If the parent of an ignored path has a change event, ignore that too
             foreach (var i in _tempIgnoredPaths.Keys)

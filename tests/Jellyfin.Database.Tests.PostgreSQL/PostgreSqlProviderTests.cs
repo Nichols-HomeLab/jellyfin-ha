@@ -2,7 +2,6 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using DotNet.Testcontainers.Builders;
 using Jellyfin.Database.Implementations;
 using Jellyfin.Database.Implementations.DbConfiguration;
 using Jellyfin.Database.Implementations.Entities;
@@ -11,18 +10,17 @@ using Jellyfin.Database.Providers.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
-using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Jellyfin.Database.Tests.PostgreSQL;
 
 /// <summary>
-/// Integration tests for CRUD operations, optimisation, and purge against a real PostgreSQL 16 container.
+/// Integration tests for CRUD operations, optimisation, and purge against a real PostgreSQL database.
 /// </summary>
 [Xunit.Trait("Category", "RequiresDocker")]
 public sealed class PostgreSqlProviderTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container;
+    private readonly PostgreSqlTestDatabase _container;
     private NpgsqlDataSource? _dataSource;
     private PostgreSqlDatabaseProvider? _provider;
 
@@ -31,16 +29,14 @@ public sealed class PostgreSqlProviderTests : IAsyncLifetime
     /// </summary>
     public PostgreSqlProviderTests()
     {
-        _container = new PostgreSqlBuilder("postgres:16-alpine")
-            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("pg_isready"))
-            .Build();
+        _container = new PostgreSqlTestDatabase();
     }
 
     /// <summary>
     /// Starts the PostgreSQL container and applies migrations before any tests in the class run.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         await _container.StartAsync().ConfigureAwait(false);
 
@@ -59,7 +55,7 @@ public sealed class PostgreSqlProviderTests : IAsyncLifetime
     /// Stops and removes the PostgreSQL container after all tests in the class have run.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_dataSource is not null)
         {
@@ -155,7 +151,10 @@ public sealed class PostgreSqlProviderTests : IAsyncLifetime
         var ctx = CreateContext();
         await using (ctx)
         {
-            var userId = Guid.NewGuid();
+            var user = new User("preferences-user", "auth", "reset");
+            ctx.Users.Add(user);
+            await ctx.SaveChangesAsync();
+            var userId = user.Id;
             var itemId = Guid.NewGuid();
 
             // Create
@@ -278,7 +277,7 @@ public sealed class PostgreSqlProviderTests : IAsyncLifetime
 
             // session_replication_role should be reset to 'origin' (default)
             var role = await ctx.Database
-                .SqlQueryRaw<string>("SELECT current_setting('session_replication_role')")
+                .SqlQueryRaw<string>("SELECT current_setting('session_replication_role') AS \"Value\"")
                 .FirstAsync();
             Assert.Equal("origin", role);
         }

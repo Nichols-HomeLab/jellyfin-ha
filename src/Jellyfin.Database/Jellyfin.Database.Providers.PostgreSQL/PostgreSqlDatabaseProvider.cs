@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Database.Implementations;
@@ -32,6 +33,84 @@ public sealed class PostgreSqlDatabaseProvider : IJellyfinDatabaseProvider
 
     /// <inheritdoc/>
     public IDbContextFactory<JellyfinDbContext>? DbContextFactory { get; set; }
+
+    /// <summary>
+    /// Backfills existing usernames with the same invariant normalization used by Jellyfin,
+    /// before the schema migration creates their unique index.
+    /// </summary>
+    /// <param name="context">The context to upgrade.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The asynchronous operation.</returns>
+    public static async Task PrepareSchemaUpgradeAsync(JellyfinDbContext context, CancellationToken cancellationToken = default)
+    {
+        var connection = context.Database.GetDbConnection();
+        var openedHere = connection.State != ConnectionState.Open;
+        if (openedHere)
+        {
+            await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        try
+        {
+            await using var exists = connection.CreateCommand();
+            exists.CommandText = "SELECT to_regclass('\"Users\"') IS NOT NULL";
+            if (!(bool)(await exists.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false))!)
+            {
+                return;
+            }
+
+            await using var transaction = await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT \"Id\", \"Username\" FROM \"Users\" FOR UPDATE";
+            var users = new List<(Guid Id, string Name)>();
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))
+            {
+                while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+                {
+                    var name = reader.GetString(1).ToUpperInvariant();
+                    if (!names.Add(name))
+                    {
+                        throw new InvalidOperationException("Cannot upgrade PostgreSQL: existing usernames collide after invariant normalization. Rename conflicting users before upgrading.");
+                    }
+
+                    users.Add((reader.GetGuid(0), name));
+                }
+            }
+
+            command.CommandText = """
+                ALTER TABLE "Users" ADD COLUMN IF NOT EXISTS "NormalizedUsername" character varying(255) NOT NULL DEFAULT '';
+                DROP INDEX IF EXISTS "IX_Users_NormalizedUsername";
+                """;
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            command.CommandText = "UPDATE \"Users\" SET \"NormalizedUsername\" = @name WHERE \"Id\" = @id";
+            var nameParameter = command.CreateParameter();
+            nameParameter.ParameterName = "name";
+            command.Parameters.Add(nameParameter);
+            var idParameter = command.CreateParameter();
+            idParameter.ParameterName = "id";
+            command.Parameters.Add(idParameter);
+            foreach (var user in users)
+            {
+                nameParameter.Value = user.Name;
+                idParameter.Value = user.Id;
+                await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            command.Parameters.Clear();
+            command.CommandText = "CREATE UNIQUE INDEX \"IX_Users_NormalizedUsername\" ON \"Users\" (\"NormalizedUsername\")";
+            await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (openedHere)
+            {
+                await connection.CloseAsync().ConfigureAwait(false);
+            }
+        }
+    }
 
     /// <inheritdoc/>
     public void Initialise(DbContextOptionsBuilder options, DatabaseConfigurationOptions databaseConfiguration)

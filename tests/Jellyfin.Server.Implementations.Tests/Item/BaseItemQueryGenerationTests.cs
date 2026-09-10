@@ -9,6 +9,20 @@ namespace Jellyfin.Server.Implementations.Tests.Item;
 public class BaseItemQueryGenerationTests
 {
     [Fact]
+    public void SelectRepresentativeIdsPrefersPrimaryVersionOverLowerIdentifier()
+    {
+        var versionId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var primaryId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+        var items = new[]
+        {
+            new BaseItemEntity { Id = versionId, Type = "Movie", PresentationUniqueKey = "movie", PrimaryVersionId = primaryId },
+            new BaseItemEntity { Id = primaryId, Type = "Movie", PresentationUniqueKey = "movie" }
+        }.AsQueryable();
+
+        Assert.Equal(primaryId, BaseItemRepository.SelectRepresentativeIds(items, item => item.PresentationUniqueKey).Single());
+    }
+
+    [Fact]
     public void SelectRepresentativeIdsUsesStableAggregate()
     {
         var firstGroupLowestId = Guid.Parse("00000000-0000-0000-0000-000000000001");

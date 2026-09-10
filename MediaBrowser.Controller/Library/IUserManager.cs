@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 using Jellyfin.Data.Events;
 using Jellyfin.Database.Implementations.Entities;
@@ -25,26 +24,14 @@ namespace MediaBrowser.Controller.Library
         /// <summary>
         /// Gets the users.
         /// </summary>
-        /// <value>The users.</value>
-        IEnumerable<User> Users { get; }
+        /// <returns>The users.</returns>
+        IEnumerable<User> GetUsers();
 
         /// <summary>
         /// Gets the user ids.
         /// </summary>
-        /// <value>The users ids.</value>
-        IEnumerable<Guid> UsersIds { get; }
-
-        /// <summary>
-        /// Gets the users.
-        /// </summary>
-        /// <returns>The users.</returns>
-        IEnumerable<User> GetUsers() => Users;
-
-        /// <summary>
-        /// Gets the user ids without materializing complete user entities.
-        /// </summary>
-        /// <returns>The user ids.</returns>
-        IEnumerable<Guid> GetUsersIds() => UsersIds;
+        /// <returns>The users ids.</returns>
+        IEnumerable<Guid> GetUsersIds();
 
         /// <summary>
         /// Initializes the user manager and ensures that a user exists.
@@ -64,7 +51,7 @@ namespace MediaBrowser.Controller.Library
         /// Gets the first available user.
         /// </summary>
         /// <returns>The first user, or <c>null</c> if no users exist.</returns>
-        User? GetFirstUser() => Users.FirstOrDefault();
+        User? GetFirstUser();
 
         /// <summary>
         /// Gets the name of the user by.
@@ -76,24 +63,13 @@ namespace MediaBrowser.Controller.Library
         /// <summary>
         /// Renames the user.
         /// </summary>
-        /// <param name="user">The user.</param>
-        /// <param name="newName">The new name.</param>
-        /// <returns>Task.</returns>
-        /// <exception cref="ArgumentNullException">If user is <c>null</c>.</exception>
-        /// <exception cref="ArgumentException">If the provided user doesn't exist.</exception>
-        Task RenameUser(User user, string newName);
-
-        /// <summary>
-        /// Renames the user without requiring callers to retain a tracked entity.
-        /// </summary>
         /// <param name="userId">The UserId to change.</param>
         /// <param name="oldName">The old Username.</param>
         /// <param name="newName">The new name.</param>
         /// <returns>Task.</returns>
         /// <exception cref="ArgumentNullException">If user is <c>null</c>.</exception>
         /// <exception cref="ArgumentException">If the provided user doesn't exist.</exception>
-        Task RenameUser(Guid userId, string oldName, string newName)
-            => RenameUser(GetUserById(userId) ?? throw new ArgumentException("User does not exist.", nameof(userId)), newName);
+        Task RenameUser(Guid userId, string oldName, string newName);
 
         /// <summary>
         /// Updates the user.
@@ -123,34 +99,17 @@ namespace MediaBrowser.Controller.Library
         /// <summary>
         /// Resets the password.
         /// </summary>
-        /// <param name="user">The user.</param>
-        /// <returns>Task.</returns>
-        Task ResetPassword(User user);
-
-        /// <summary>
-        /// Resets the password without requiring callers to retain a tracked entity.
-        /// </summary>
         /// <param name="userId">The users Id.</param>
         /// <returns>Task.</returns>
-        Task ResetPassword(Guid userId)
-            => ResetPassword(GetUserById(userId) ?? throw new ArgumentException("User does not exist.", nameof(userId)));
+        Task ResetPassword(Guid userId);
 
         /// <summary>
         /// Changes the password.
         /// </summary>
-        /// <param name="user">The user.</param>
-        /// <param name="newPassword">New password to use.</param>
-        /// <returns>Awaitable task.</returns>
-        Task ChangePassword(User user, string newPassword);
-
-        /// <summary>
-        /// Changes the password without requiring callers to retain a tracked entity.
-        /// </summary>
         /// <param name="userId">The users id.</param>
         /// <param name="newPassword">New password to use.</param>
         /// <returns>Awaitable task.</returns>
-        Task ChangePassword(Guid userId, string newPassword)
-            => ChangePassword(GetUserById(userId) ?? throw new ArgumentException("User does not exist.", nameof(userId)), newPassword);
+        Task ChangePassword(Guid userId, string newPassword);
 
         /// <summary>
         /// Gets the user dto.

@@ -5,14 +5,14 @@
   ],
   "packageRules": [
     {
-      "description": "Keep Microsoft packages below v10 until the project targets .NET 10",
+      "description": "Keep Microsoft runtime packages on the .NET 10 major",
       "matchDatasources": [
         "nuget"
       ],
       "matchPackageNames": [
-        "/^Microsoft\\./"
+        "/^Microsoft\\.(AspNetCore|Data|EntityFrameworkCore|Extensions)\\./"
       ],
-      "allowedVersions": "<10"
+      "allowedVersions": "<11"
     }
   ]
 }

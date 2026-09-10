@@ -74,7 +74,7 @@ jobs:
         # installer redirect, which is unavailable during DNS incidents.
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
-          DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:9.0.317-noble"
+          DOTNET_IMAGE="mcr.microsoft.com/dotnet/sdk:10.0.401-noble"
           rm -rf "$DOTNET_INSTALL_DIR"
           sdk_container="$(docker create "$DOTNET_IMAGE")"
           trap 'docker rm -f "$sdk_container" >/dev/null 2>&1 || true' EXIT
@@ -99,9 +99,7 @@ jobs:
       - name: Publish Jellyfin server
         run: |
           export PATH="$HOME/.dotnet:$PATH"
-          # The source is pinned to net9.0 while the runtime image currently
-          # carries ASP.NET 10. Match the known-good production artifact by
-          # publishing the .NET 9 runtime with the server.
+          # Publish the .NET 10 runtime with the server for reproducible deployment.
           dotnet publish Jellyfin.Server/Jellyfin.Server.csproj \
             --configuration Release \
             --runtime linux-x64 \

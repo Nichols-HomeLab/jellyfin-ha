@@ -12,7 +12,7 @@ public sealed class HotCachePostgreSqlIntegrationTests : IAsyncLifetime
     private PostgreSqlContainer? _container;
     private string _connectionString = string.Empty;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _connectionString = Environment.GetEnvironmentVariable("HOT_CACHE_TEST_POSTGRES_CONNECTION_STRING") ?? string.Empty;
         if (!string.IsNullOrEmpty(_connectionString))
@@ -25,7 +25,7 @@ public sealed class HotCachePostgreSqlIntegrationTests : IAsyncLifetime
         _connectionString = _container.GetConnectionString();
     }
 
-    public Task DisposeAsync() => _container?.DisposeAsync().AsTask() ?? Task.CompletedTask;
+    public ValueTask DisposeAsync() => _container?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     [Fact]
     public async Task FreshAndLegacyLedgerUpgradesAreRepeatableAndPreserveQueueContracts()

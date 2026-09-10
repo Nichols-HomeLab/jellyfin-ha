@@ -112,7 +112,7 @@ namespace MediaBrowser.Providers.Manager
             using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
             cancellationToken = catalogWrite.Token;
 
-            var saveLocally = item.SupportsLocalMetadata && item.IsSaveLocalMetadataEnabled() && !item.ExtraType.HasValue && item is not Audio;
+            var saveLocally = item.SupportsLocalMetadata && item.IsSaveLocalMetadataEnabled() && !item.ExtraType.HasValue && (item is AudioBook || item is not Audio);
 
             if (type != ImageType.Primary && item is Episode)
             {

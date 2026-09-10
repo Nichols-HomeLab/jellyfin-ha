@@ -10,6 +10,7 @@ using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Configuration;
 using MediaBrowser.Model.IO;
+using MediaBrowser.Model.Querying;
 using Moq;
 using Xunit;
 
@@ -38,8 +39,13 @@ public sealed class PeopleBatchTests : IDisposable
 
         var peopleRepository = fixture.Freeze<Mock<IPeopleRepository>>();
         peopleRepository
-            .Setup(repository => repository.GetPeopleNames(It.IsAny<InternalPeopleQuery>()))
-            .Returns(["Alice Example", "Bob Example"]);
+            .Setup(repository => repository.GetPeople(It.IsAny<InternalPeopleQuery>()))
+            .Returns(new QueryResult<PersonInfo>
+            {
+                Items = [new PersonInfo { Name = "Alice Example" }, new PersonInfo { Name = "Bob Example" }],
+                StartIndex = 10,
+                TotalRecordCount = 42
+            });
 
         var itemRepository = fixture.Freeze<Mock<IItemRepository>>();
         itemRepository
@@ -59,7 +65,9 @@ public sealed class PeopleBatchTests : IDisposable
 
         var result = libraryManager.GetPeopleItems(new InternalPeopleQuery());
 
-        Assert.Equal(["Alice Example", "Bob Example"], result.Select(person => person.Name));
+        Assert.Equal(["Alice Example", "Bob Example"], result.Items.Select(person => person.Name));
+        Assert.Equal(10, result.StartIndex);
+        Assert.Equal(42, result.TotalRecordCount);
         itemRepository.Verify(
             repository => repository.GetItemList(It.Is<InternalItemsQuery>(query => query.ItemIds.Length == 2)),
             Times.Once);

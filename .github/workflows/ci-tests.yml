@@ -3,13 +3,14 @@ on:
   push:
     branches:
       - master
+      - main
   # Run tests against the forked branch, but
   # do not allow access to secrets
   # https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflows-in-forked-repositories
   pull_request:
 
 env:
-  SDK_VERSION: "9.0.x"
+  SDK_VERSION: "10.0.x"
 
 jobs:
   catalog-ownership-postgresql:
@@ -35,6 +36,7 @@ jobs:
           --health-retries 12
     env:
       JELLYFIN_CATALOG_TEST_POSTGRES: Host=postgres;Port=5432;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test
+      JELLYFIN_TEST_POSTGRES_CONNECTION_STRING: Host=postgres;Port=5432;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test
       JELLYFIN_TEST_REDIS: redis:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,17 +45,34 @@ jobs:
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
           mkdir -p "$DOTNET_INSTALL_DIR"
-          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir "$DOTNET_INSTALL_DIR"
+          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir "$DOTNET_INSTALL_DIR"
           echo "DOTNET_ROOT=$DOTNET_INSTALL_DIR" >> "$GITHUB_ENV"
           echo "PATH=$DOTNET_INSTALL_DIR:$PATH" >> "$GITHUB_ENV"
 
-      - name: Test cluster-wide catalog ownership
+      - name: Test PostgreSQL migrations, provider, concurrency, and catalog ownership
         run: |
           export PATH="$HOME/.dotnet:$PATH"
           dotnet test tests/Jellyfin.Database.Tests.PostgreSQL/Jellyfin.Database.Tests.PostgreSQL.csproj \
             --configuration Release \
+            --verbosity minimal
+
+      - name: Publish server for full migration startup tests
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          dotnet publish Jellyfin.Server/Jellyfin.Server.csproj \
+            --configuration Release \
+            --self-contained false \
+            --output ./test-server-output
+          echo "JELLYFIN_TEST_SERVER_DLL=$PWD/test-server-output/jellyfin.dll" >> "$GITHUB_ENV"
+
+      - name: Test fresh and upgraded PostgreSQL startup and restart
+        run: |
+          export PATH="$HOME/.dotnet:$PATH"
+          test -f "$JELLYFIN_TEST_SERVER_DLL"
+          dotnet test tests/Jellyfin.Server.Tests/Jellyfin.Server.Tests.csproj \
+            --configuration Release \
             --verbosity minimal \
-            --filter "FullyQualifiedName~PostgreSqlCatalogOwnershipTests"
+            --filter "FullyQualifiedName~PostgreSqlStartupMigrationTests"
 
       - name: Test cluster-wide catalog propagation
         run: |
@@ -61,7 +80,7 @@ jobs:
           dotnet test tests/Jellyfin.Server.Implementations.Tests/Jellyfin.Server.Implementations.Tests.csproj \
             --configuration Release \
             --verbosity minimal \
-            --filter "FullyQualifiedName~CatalogReplicaConvergenceTests|FullyQualifiedName~RedisCatalogChangeNotifierIntegrationTests"
+            --filter "FullyQualifiedName~CatalogReplicaConvergenceTests|FullyQualifiedName~Redis"
 
   run-tests:
     runs-on: [self-hosted, k3s, linux, amd64]
@@ -74,7 +93,7 @@ jobs:
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
           mkdir -p "$DOTNET_INSTALL_DIR"
-          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir "$DOTNET_INSTALL_DIR"
+          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir "$DOTNET_INSTALL_DIR"
           echo "DOTNET_ROOT=$DOTNET_INSTALL_DIR" >> "$GITHUB_ENV"
           echo "PATH=$DOTNET_INSTALL_DIR:$PATH" >> "$GITHUB_ENV"
 
@@ -111,7 +130,7 @@ jobs:
         run: |
           DOTNET_INSTALL_DIR="$HOME/.dotnet"
           mkdir -p "$DOTNET_INSTALL_DIR"
-          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 9.0 --install-dir "$DOTNET_INSTALL_DIR"
+          curl -fsSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 10.0 --install-dir "$DOTNET_INSTALL_DIR"
           echo "DOTNET_ROOT=$DOTNET_INSTALL_DIR" >> "$GITHUB_ENV"
           echo "PATH=$DOTNET_INSTALL_DIR:$PATH" >> "$GITHUB_ENV"
 

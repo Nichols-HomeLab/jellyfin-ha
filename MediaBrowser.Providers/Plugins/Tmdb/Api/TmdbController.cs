@@ -15,6 +15,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Api
     [Authorize]
     [Route("[controller]")]
     [Produces(MediaTypeNames.Application.Json)]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public class TmdbController : ControllerBase
     {
         private readonly TmdbClientManager _tmdbClientManager;
@@ -34,7 +35,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Api
         /// <returns>The image portion of the TMDb client configuration.</returns>
         [HttpGet("ClientConfiguration")]
         [ProducesResponseType(StatusCodes.Status200OK)]
-        public async Task<ConfigImageTypes> TmdbClientConfiguration()
+        public async Task<ConfigImageTypes?> TmdbClientConfiguration()
         {
             return (await _tmdbClientManager.GetClientConfiguration().ConfigureAwait(false)).Images
                 ?? throw new InvalidOperationException("TMDb image configuration was not returned.");

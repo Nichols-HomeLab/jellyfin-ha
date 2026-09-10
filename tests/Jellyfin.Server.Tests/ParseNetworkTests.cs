@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
 using Jellyfin.Networking.Manager;
 using Jellyfin.Server.Extensions;
 using MediaBrowser.Common.Configuration;
@@ -11,7 +12,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 using IConfigurationManager = MediaBrowser.Common.Configuration.IConfigurationManager;
-using IPNetwork = Microsoft.AspNetCore.HttpOverrides.IPNetwork;
 
 namespace Jellyfin.Server.Tests
 {
@@ -20,12 +20,15 @@ namespace Jellyfin.Server.Tests
         public static TheoryData<bool, bool, string[], IPAddress[], IPNetwork[]> TestNetworks_TestData()
         {
             var data = new TheoryData<bool, bool, string[], IPAddress[], IPNetwork[]>();
+            // Hosts and containers may resolve localhost through only one address family.
+            // Literal IPv4/IPv6 cases above remain independent of host DNS configuration.
+            var localhostAddresses = Dns.GetHostAddresses("localhost");
             data.Add(
                 true,
                 true,
                 new string[] { "192.168.t", "127.0.0.1", "::1", "1234.1232.12.1234" },
-                new IPAddress[] { IPAddress.Loopback },
-                new IPNetwork[] { new IPNetwork(IPAddress.IPv6Loopback, 128) });
+                new IPAddress[] { IPAddress.Loopback, IPAddress.IPv6Loopback },
+                Array.Empty<IPNetwork>());
 
             data.Add(
                 true,
@@ -38,8 +41,8 @@ namespace Jellyfin.Server.Tests
                 true,
                 true,
                 new string[] { "::1" },
-                Array.Empty<IPAddress>(),
-                new IPNetwork[] { new IPNetwork(IPAddress.IPv6Loopback, 128) });
+                new IPAddress[] { IPAddress.IPv6Loopback },
+                Array.Empty<IPNetwork>());
 
             data.Add(
                 false,
@@ -52,22 +55,22 @@ namespace Jellyfin.Server.Tests
                 true,
                 false,
                 new string[] { "localhost" },
-                new IPAddress[] { IPAddress.Loopback },
+                localhostAddresses.Where(address => address.AddressFamily == AddressFamily.InterNetwork).ToArray(),
                 Array.Empty<IPNetwork>());
 
             data.Add(
                 false,
                 true,
                 new string[] { "localhost" },
-                Array.Empty<IPAddress>(),
-                new IPNetwork[] { new IPNetwork(IPAddress.IPv6Loopback, 128) });
+                localhostAddresses.Where(address => address.AddressFamily == AddressFamily.InterNetworkV6).ToArray(),
+                Array.Empty<IPNetwork>());
 
             data.Add(
                 true,
                 true,
                 new string[] { "localhost" },
-                new IPAddress[] { IPAddress.Loopback },
-                new IPNetwork[] { new IPNetwork(IPAddress.IPv6Loopback, 128) });
+                localhostAddresses,
+                Array.Empty<IPNetwork>());
             return data;
         }
 
@@ -87,7 +90,7 @@ namespace Jellyfin.Server.Tests
 
             // Need this here as ::1 and 127.0.0.1 are in them by default.
             options.KnownProxies.Clear();
-            options.KnownNetworks.Clear();
+            options.KnownIPNetworks.Clear();
 
             ApiServiceCollectionExtensions.AddProxyAddresses(settings, hostList, options);
 
@@ -97,10 +100,10 @@ namespace Jellyfin.Server.Tests
                 Assert.True(options.KnownProxies.Contains(item));
             }
 
-            Assert.Equal(knownNetworks.Length, options.KnownNetworks.Count);
+            Assert.Equal(knownNetworks.Length, options.KnownIPNetworks.Count);
             foreach (var item in knownNetworks)
             {
-                Assert.NotNull(options.KnownNetworks.FirstOrDefault(x => x.Prefix.Equals(item.Prefix) && x.PrefixLength == item.PrefixLength));
+                Assert.NotEqual(default, options.KnownIPNetworks.FirstOrDefault(x => x.BaseAddress.Equals(item.BaseAddress) && x.PrefixLength == item.PrefixLength));
             }
         }
 

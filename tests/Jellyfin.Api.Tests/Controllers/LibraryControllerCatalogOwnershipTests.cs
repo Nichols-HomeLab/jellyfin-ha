@@ -1,6 +1,7 @@
 using System.Threading;
 using Jellyfin.Api.Controllers;
 using Jellyfin.Api.Models.LibraryDtos;
+using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Library;
@@ -59,8 +60,10 @@ public static class LibraryControllerCatalogOwnershipTests
     private static LibraryController CreateController(ILibraryMonitor libraryMonitor, bool isOwner)
         => new(
             Mock.Of<IProviderManager>(),
+            Mock.Of<ISimilarItemsManager>(),
             Mock.Of<ILibraryManager>(),
             Mock.Of<IUserManager>(),
+            Mock.Of<ICollectionManager>(),
             Mock.Of<IDtoService>(),
             Mock.Of<IActivityManager>(),
             Mock.Of<ILocalizationManager>(),

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using AutoFixture;
@@ -46,7 +47,7 @@ public sealed class CatalogReplicaConvergenceTests
         var parentId = Guid.NewGuid();
         var persistedName = "[tmdbid-739405]";
         var ownerItem = new Movie { Id = itemId, Name = "Operation Fortune: Ruse de Guerre" };
-        var parent = new Folder { Id = parentId, Name = "Movies" };
+        var parent = new CollectionFolder { Id = parentId, Name = "Movies", CollectionType = Jellyfin.Data.Enums.CollectionType.movies };
 
         var (owner, ownerRepository) = CreateLibraryManager(ownerNotifier);
         var (follower, followerRepository) = CreateLibraryManager(followerNotifier);
@@ -56,7 +57,7 @@ public sealed class CatalogReplicaConvergenceTests
         followerRepository
             .Setup(r => r.RetrieveItem(parentId))
             .Returns(() => new Folder { Id = parentId, Name = "Movies" });
-        ownerRepository
+        ownerRepository.As<IItemPersistenceService>()
             .Setup(r => r.SaveItems(It.IsAny<IReadOnlyList<BaseItem>>(), It.IsAny<CancellationToken>()))
             .Callback<IReadOnlyList<BaseItem>, CancellationToken>((items, _) => persistedName = items.Single().Name);
 
@@ -134,8 +135,8 @@ public sealed class CatalogReplicaConvergenceTests
 
         Assert.Equal("After reconnect", follower.GetItemById(itemId)!.Name);
         Assert.Empty(notifier.Published);
-        repository.Verify(r => r.SaveItems(It.IsAny<IReadOnlyList<BaseItem>>(), It.IsAny<CancellationToken>()), Times.Never);
-        repository.Verify(r => r.SaveImages(It.IsAny<BaseItem>()), Times.Never);
+        repository.As<IItemPersistenceService>().Verify(r => r.SaveItems(It.IsAny<IReadOnlyList<BaseItem>>(), It.IsAny<CancellationToken>()), Times.Never);
+        repository.As<IItemPersistenceService>().Verify(r => r.SaveImagesAsync(It.IsAny<BaseItem>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -215,7 +216,7 @@ public sealed class CatalogReplicaConvergenceTests
 
         owner.DeleteItemsFromCatalog([item], parent);
 
-        ownerRepository.Verify(r => r.DeleteItem(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(item.Id))), Times.Once);
+        ownerRepository.As<IItemPersistenceService>().Verify(r => r.DeleteItem(It.Is<IReadOnlyList<Guid>>(ids => ids.Contains(item.Id))), Times.Once);
         Assert.Equal(item.Id, removed?.Id);
         Assert.Null(follower.GetItemById(item.Id));
     }
@@ -230,6 +231,7 @@ public sealed class CatalogReplicaConvergenceTests
         var config = fixture.Freeze<Mock<IServerConfigurationManager>>();
         config.Setup(c => c.Configuration).Returns(new MediaBrowser.Model.Configuration.ServerConfiguration());
         var repository = fixture.Freeze<Mock<IItemRepository>>();
+        fixture.Inject(repository.As<IItemPersistenceService>().Object);
 
         var constructor = typeof(Emby.Server.Implementations.Library.LibraryManager)
             .GetConstructors()
@@ -240,7 +242,13 @@ public sealed class CatalogReplicaConvergenceTests
             .Select(p => p.ParameterType == typeof(ICatalogChangeNotifier) ? notifier : context.Resolve(p.ParameterType))
             .ToArray();
 
-        return ((Emby.Server.Implementations.Library.LibraryManager)constructor.Invoke(arguments), repository);
+        var manager = (Emby.Server.Implementations.Library.LibraryManager)constructor.Invoke(arguments);
+        // Catalog propagation tests use an in-memory root; v12 metadata writes inspect its
+        // collection folders without needing the on-disk user-view discovery path.
+        typeof(Emby.Server.Implementations.Library.LibraryManager)
+            .GetField("_userRootFolder", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(manager, new UserRootFolder { Id = Guid.NewGuid(), Children = [] });
+        return (manager, repository);
     }
 
     private sealed class FakeCatalogChangeHub
