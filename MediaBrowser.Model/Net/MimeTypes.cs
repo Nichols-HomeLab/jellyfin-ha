@@ -132,7 +132,6 @@ namespace MediaBrowser.Model.Net
 
             // Type image
             new("image/jpeg", ".jpg"),
-            new("image/jpg", ".jpg"),
             new("image/tiff", ".tiff"),
             new("image/x-png", ".png"),
             new("image/x-icon", ".ico"),

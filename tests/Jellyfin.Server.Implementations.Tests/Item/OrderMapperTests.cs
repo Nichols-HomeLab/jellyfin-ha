@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using Jellyfin.Data.Enums;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Server.Implementations.Item;
@@ -8,7 +7,7 @@ using Xunit;
 
 namespace Jellyfin.Server.Implementations.Tests.Item;
 
-public class OrderMapperTests : SqliteDbTestFixture
+public class OrderMapperTests
 {
     [Fact]
     public void DatePlayedTreatsMissingUserDataAsOldest()
@@ -33,17 +32,10 @@ public class OrderMapperTests : SqliteDbTestFixture
                 }
             ]
         };
-        withPlayback.UserData!.Single().ItemId = withPlayback.Id;
-        using var context = CreateDbContext();
-        context.Users.Add(user);
-        context.BaseItems.AddRange(withoutPlayback, withPlayback);
-        context.SaveChanges();
-        var orderExpression = OrderMapper.MapOrderByField(ItemSortBy.DatePlayed, new InternalItemsQuery(user), context);
-        var itemIds = new[] { withoutPlayback.Id, withPlayback.Id };
-        var ordered = context.BaseItems.Where(item => itemIds.Contains(item.Id))
-            .OrderByDescending(orderExpression).Select(item => item.Id).ToArray();
+        var orderFunc = OrderMapper.MapOrderByField(ItemSortBy.DatePlayed, new InternalItemsQuery(user), null!).Compile();
 
-        Assert.Equal([withPlayback.Id, withoutPlayback.Id], ordered);
+        Assert.Equal(DateTime.MinValue, orderFunc(withoutPlayback));
+        Assert.Equal(playedAt, orderFunc(withPlayback));
     }
 
     [Fact]

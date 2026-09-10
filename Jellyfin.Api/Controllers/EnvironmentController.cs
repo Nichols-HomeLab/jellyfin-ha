@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
+using Jellyfin.Api.Constants;
 using Jellyfin.Api.Models.EnvironmentDtos;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Common.Extensions;
@@ -125,6 +126,20 @@ public class EnvironmentController : BaseJellyfinApiController
         }
 
         return NoContent();
+    }
+
+    /// <summary>
+    /// Gets network paths.
+    /// </summary>
+    /// <response code="200">Empty array returned.</response>
+    /// <returns>List of entries.</returns>
+    [Obsolete("This endpoint is obsolete.")]
+    [HttpGet("NetworkShares")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<IEnumerable<FileSystemEntryInfo>> GetNetworkShares()
+    {
+        _logger.LogWarning("Obsolete endpoint accessed: /Environment/NetworkShares");
+        return Array.Empty<FileSystemEntryInfo>();
     }
 
     /// <summary>

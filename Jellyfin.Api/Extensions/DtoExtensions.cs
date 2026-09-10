@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
-using Jellyfin.Data.Enums;
+using System.Security.Claims;
+using Jellyfin.Extensions;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Model.Querying;
 
 namespace Jellyfin.Api.Extensions;
 
@@ -11,34 +14,52 @@ namespace Jellyfin.Api.Extensions;
 public static class DtoExtensions
 {
     /// <summary>
-    /// Gets the BaseItemKind values associated with the specified CollectionType.
+    /// Add additional fields depending on client.
     /// </summary>
-    /// <param name="collectionType">The collection type to map to BaseItemKind values.</param>
-    /// <returns>An array of BaseItemKind values that correspond to the collection type.</returns>
-    public static BaseItemKind[] GetBaseItemKindsForCollectionType(CollectionType? collectionType)
+    /// <remarks>
+    /// Use in place of GetDtoOptions.
+    /// Legacy order: 2.
+    /// </remarks>
+    /// <param name="dtoOptions">DtoOptions object.</param>
+    /// <param name="user">Current claims principal.</param>
+    /// <returns>Modified DtoOptions object.</returns>
+    internal static DtoOptions AddClientFields(
+        this DtoOptions dtoOptions, ClaimsPrincipal user)
     {
-        switch (collectionType)
+        string? client = user.GetClient();
+
+        // No client in claim
+        if (string.IsNullOrEmpty(client))
         {
-            case CollectionType.movies:
-                return [BaseItemKind.Movie];
-            case CollectionType.tvshows:
-                return [BaseItemKind.Series];
-            case CollectionType.music:
-                return [BaseItemKind.MusicAlbum];
-            case CollectionType.musicvideos:
-                return [BaseItemKind.MusicVideo];
-            case CollectionType.books:
-                return [BaseItemKind.Book, BaseItemKind.AudioBook];
-            case CollectionType.boxsets:
-                return [BaseItemKind.BoxSet];
-            case CollectionType.homevideos:
-            case CollectionType.photos:
-                return [BaseItemKind.Video, BaseItemKind.Photo];
-            case CollectionType.folders:
-                return [];
-            default:
-                return [BaseItemKind.Video, BaseItemKind.Audio, BaseItemKind.Photo, BaseItemKind.Movie, BaseItemKind.Series];
+            return dtoOptions;
         }
+
+        if (!dtoOptions.ContainsField(ItemFields.RecursiveItemCount))
+        {
+            if (client.Contains("kodi", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("wmc", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("media center", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("classic", StringComparison.OrdinalIgnoreCase))
+            {
+                dtoOptions.Fields = [..dtoOptions.Fields, ItemFields.RecursiveItemCount];
+            }
+        }
+
+        if (!dtoOptions.ContainsField(ItemFields.ChildCount))
+        {
+            if (client.Contains("kodi", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("wmc", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("media center", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("classic", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("roku", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("samsung", StringComparison.OrdinalIgnoreCase) ||
+                client.Contains("androidtv", StringComparison.OrdinalIgnoreCase))
+            {
+                dtoOptions.Fields = [..dtoOptions.Fields, ItemFields.ChildCount];
+            }
+        }
+
+        return dtoOptions;
     }
 
     /// <summary>

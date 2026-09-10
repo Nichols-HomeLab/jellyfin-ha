@@ -22,7 +22,7 @@ public sealed class RedisUserDataCacheInvalidatorTests
                 It.IsAny<RedisChannel>(),
                 It.IsAny<Action<RedisChannel, RedisValue>>(),
                 CommandFlags.None))
-            .Throws(new RedisConnectionException(ConnectionFailureType.UnableToConnect, CommandFlags.None, "test subscription failure", null, CommandStatus.Unknown));
+            .Throws(new RedisConnectionException(ConnectionFailureType.UnableToConnect, "test subscription failure"));
 
         using var redis = new RedisConnectionManager(
             () => connection.Object,
@@ -60,7 +60,7 @@ public sealed class RedisUserDataCacheInvalidatorTests
                 subscriptionAttempts++;
                 if (subscriptionAttempts == 1)
                 {
-                    throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, CommandFlags.None, "test subscription failure", null, CommandStatus.Unknown);
+                    throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "test subscription failure");
                 }
 
                 handler = subscribedHandler;

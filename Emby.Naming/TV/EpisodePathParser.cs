@@ -125,7 +125,7 @@ namespace Emby.Naming.TV
                             result.Success = true;
                         }
                     }
-                    else if (DateTime.TryParse(match.Groups[0].ValueSpan, CultureInfo.InvariantCulture, out date))
+                    else if (DateTime.TryParse(match.Groups[0].ValueSpan, out date))
                     {
                         result.Year = date.Year;
                         result.Month = date.Month;
@@ -158,9 +158,7 @@ namespace Emby.Naming.TV
                         if (nextIndex >= name.Length
                             || !"0123456789iIpP".Contains(name[nextIndex], StringComparison.Ordinal))
                         {
-                            // A range cannot end before it starts, so a lower number belongs to the episode title rather than to a range.
-                            if (int.TryParse(endingNumberGroup.ValueSpan, NumberStyles.Integer, CultureInfo.InvariantCulture, out num)
-                                && num >= result.EpisodeNumber)
+                            if (int.TryParse(endingNumberGroup.ValueSpan, NumberStyles.Integer, CultureInfo.InvariantCulture, out num))
                             {
                                 result.EndingEpisodeNumber = num;
                             }
@@ -228,7 +226,7 @@ namespace Emby.Naming.TV
                     info.SeriesName = result.SeriesName;
                 }
 
-                if (!info.EndingEpisodeNumber.HasValue && result.EndingEpisodeNumber >= info.EpisodeNumber)
+                if (!info.EndingEpisodeNumber.HasValue && info.EpisodeNumber.HasValue)
                 {
                     info.EndingEpisodeNumber = result.EndingEpisodeNumber;
                 }

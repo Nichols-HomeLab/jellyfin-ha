@@ -3,14 +3,34 @@
 
 using System;
 using Jellyfin.Data.Enums;
+using Jellyfin.Database.Implementations.Entities;
 using MediaBrowser.Controller.Entities;
+using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Sorting;
 using MediaBrowser.Model.Querying;
 
 namespace Emby.Server.Implementations.Sorting
 {
-    public class DateLastMediaAddedComparer : IBaseItemComparer
+    public class DateLastMediaAddedComparer : IUserBaseItemComparer
     {
+        /// <summary>
+        /// Gets or sets the user.
+        /// </summary>
+        /// <value>The user.</value>
+        public User User { get; set; }
+
+        /// <summary>
+        /// Gets or sets the user manager.
+        /// </summary>
+        /// <value>The user manager.</value>
+        public IUserManager UserManager { get; set; }
+
+        /// <summary>
+        /// Gets or sets the user data manager.
+        /// </summary>
+        /// <value>The user data manager.</value>
+        public IUserDataManager UserDataManager { get; set; }
+
         /// <summary>
         /// Gets the name.
         /// </summary>

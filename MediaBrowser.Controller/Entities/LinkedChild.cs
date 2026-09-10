@@ -3,6 +3,7 @@
 #pragma warning disable CS1591
 
 using System;
+using System.Globalization;
 
 namespace MediaBrowser.Controller.Entities
 {
@@ -12,18 +13,10 @@ namespace MediaBrowser.Controller.Entities
         {
         }
 
-        /// <summary>
-        /// Gets or sets the path.
-        /// </summary>
-        [Obsolete("Use ItemId instead")]
         public string Path { get; set; }
 
         public LinkedChildType Type { get; set; }
 
-        /// <summary>
-        /// Gets or sets the library item id.
-        /// </summary>
-        [Obsolete("Use ItemId instead")]
         public string LibraryItemId { get; set; }
 
         /// <summary>
@@ -35,11 +28,18 @@ namespace MediaBrowser.Controller.Entities
         {
             ArgumentNullException.ThrowIfNull(item);
 
-            return new LinkedChild
+            var child = new LinkedChild
             {
-                ItemId = item.Id,
+                Path = item.Path,
                 Type = LinkedChildType.Manual
             };
+
+            if (string.IsNullOrEmpty(child.Path))
+            {
+                child.LibraryItemId = item.Id.ToString("N", CultureInfo.InvariantCulture);
+            }
+
+            return child;
         }
     }
 }

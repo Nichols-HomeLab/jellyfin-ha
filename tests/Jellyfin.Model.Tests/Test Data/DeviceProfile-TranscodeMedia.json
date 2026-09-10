@@ -16,6 +16,7 @@
             "EnableSubtitlesInManifest": false,
             "MinSegments": 0,
             "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
             "$type": "TranscodingProfile"
         },
         {
@@ -27,6 +28,7 @@
             "Protocol": "hls",
             "MaxAudioChannels": "2",
             "MinSegments": "2",
+            "BreakOnNonKeyFrames": true,
             "$type": "TranscodingProfile"
         },
         {
@@ -38,6 +40,7 @@
             "Protocol": "hls",
             "MaxAudioChannels": "2",
             "MinSegments": "2",
+            "BreakOnNonKeyFrames": true,
             "$type": "TranscodingProfile"
         },
         {
@@ -61,6 +64,7 @@
             "EnableSubtitlesInManifest": false,
             "MinSegments": 0,
             "SegmentLength": 0,
+            "BreakOnNonKeyFrames": false,
             "$type": "TranscodingProfile"
         }
     ],

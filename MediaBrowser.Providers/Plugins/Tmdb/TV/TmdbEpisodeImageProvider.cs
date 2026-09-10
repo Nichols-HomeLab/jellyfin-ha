@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -54,9 +56,9 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
             var episode = (Controller.Entities.TV.Episode)item;
             var series = episode.Series;
 
-            var seriesTmdbId = 0;
+            var seriesTmdbId = Convert.ToInt32(series?.GetProviderId(MetadataProvider.Tmdb), CultureInfo.InvariantCulture);
 
-            if (series?.TryGetTmdbId(out seriesTmdbId) != true)
+            if (series is null || seriesTmdbId <= 0)
             {
                 return Enumerable.Empty<RemoteImageInfo>();
             }

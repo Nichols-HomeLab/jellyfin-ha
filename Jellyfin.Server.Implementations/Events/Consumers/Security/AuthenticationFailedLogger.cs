@@ -35,7 +35,7 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Security
             await _activityManager.CreateAsync(new ActivityLog(
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("FailedLoginAttemptWithUserName"),
+                    _localizationManager.GetLocalizedString("FailedLoginAttemptWithUserName"),
                     eventArgs.Username),
                 "AuthenticationFailed",
                 Guid.Empty)
@@ -43,7 +43,7 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Security
                 LogSeverity = LogLevel.Error,
                 ShortOverview = string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("LabelIpAddressValue"),
+                    _localizationManager.GetLocalizedString("LabelIpAddressValue"),
                     eventArgs.RemoteEndPoint),
             }).ConfigureAwait(false);
         }

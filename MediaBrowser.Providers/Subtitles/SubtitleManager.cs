@@ -33,7 +33,6 @@ namespace MediaBrowser.Providers.Subtitles
         private readonly ILibraryMonitor _monitor;
         private readonly IMediaSourceManager _mediaSourceManager;
         private readonly ILocalizationManager _localization;
-        private readonly IDirectoryService _directoryService;
         private readonly HashSet<string> _allowedSubtitleFormats;
 
         private readonly ISubtitleProvider[] _subtitleProviders;
@@ -44,7 +43,6 @@ namespace MediaBrowser.Providers.Subtitles
             ILibraryMonitor monitor,
             IMediaSourceManager mediaSourceManager,
             ILocalizationManager localizationManager,
-            IDirectoryService directoryService,
             IEnumerable<ISubtitleProvider> subtitleProviders,
             NamingOptions namingOptions)
         {
@@ -53,7 +51,6 @@ namespace MediaBrowser.Providers.Subtitles
             _monitor = monitor;
             _mediaSourceManager = mediaSourceManager;
             _localization = localizationManager;
-            _directoryService = directoryService;
             _subtitleProviders = subtitleProviders
                 .OrderBy(i => i is IHasOrder hasOrder ? hasOrder.Order : 0)
                 .ToArray();
@@ -231,11 +228,10 @@ namespace MediaBrowser.Providers.Subtitles
                     var mediaFolderPath = Path.GetFullPath(Path.Combine(video.ContainingFolderPath, saveFileName));
                     savePaths.Add(mediaFolderPath);
                 }
-                else
-                {
-                    var internalPath = Path.GetFullPath(Path.Combine(video.GetInternalMetadataPath(), saveFileName));
-                    savePaths.Add(internalPath);
-                }
+
+                var internalPath = Path.GetFullPath(Path.Combine(video.GetInternalMetadataPath(), saveFileName));
+
+                savePaths.Add(internalPath);
 
                 await TrySaveToFiles(memoryStream, savePaths, video, response.Format.ToLowerInvariant()).ConfigureAwait(false);
             }
@@ -283,8 +279,6 @@ namespace MediaBrowser.Providers.Subtitles
                         {
                             await stream.CopyToAsync(fs).ConfigureAwait(false);
                         }
-
-                        _directoryService.Invalidate(path);
 
                         return;
                     }
@@ -399,8 +393,6 @@ namespace MediaBrowser.Providers.Subtitles
             {
                 _monitor.ReportFileSystemChangeComplete(path, false);
             }
-
-            _directoryService.Invalidate(path);
 
             return item.RefreshMetadata(CancellationToken.None);
         }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Threading.Tasks;
-using AutoFixture.Xunit3;
+using AutoFixture.Xunit2;
 using Jellyfin.Api.Controllers;
 using Jellyfin.Database.Implementations.Entities;
 using MediaBrowser.Common.Net;

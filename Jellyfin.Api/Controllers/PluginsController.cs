@@ -6,7 +6,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Jellyfin.Api.Attributes;
-using Jellyfin.Extensions;
+using Jellyfin.Api.Constants;
 using Jellyfin.Extensions.Json;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Common.Plugins;
@@ -23,7 +23,6 @@ namespace Jellyfin.Api.Controllers;
 /// Plugins controller.
 /// </summary>
 [Authorize(Policy = Policies.RequiresElevation)]
-[Tags("Plugin")]
 public class PluginsController : BaseJellyfinApiController
 {
     private readonly IInstallationManager _installationManager;
@@ -137,6 +136,7 @@ public class PluginsController : BaseJellyfinApiController
     [HttpDelete("{pluginId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [Obsolete("Please use the UninstallPluginByVersion API.")]
     public ActionResult UninstallPlugin([FromRoute, Required] Guid pluginId)
     {
         // If no version is given, return the current instance.
@@ -227,35 +227,16 @@ public class PluginsController : BaseJellyfinApiController
             return NotFound();
         }
 
-        string? imagePath = plugin.Manifest.ImagePath;
-        if (!string.IsNullOrWhiteSpace(imagePath))
+        var imagePath = Path.Combine(plugin.Path, plugin.Manifest.ImagePath ?? string.Empty);
+        if (plugin.Manifest.ImagePath is null || !System.IO.File.Exists(imagePath))
         {
-            var pluginPath = Path.TrimEndingDirectorySeparator(Path.GetFullPath(plugin.Path));
-            imagePath = Path.GetFullPath(imagePath, pluginPath);
-            // Require a separator after the plugin path so a sibling like "<pluginPath>-evil" can't pass.
-            if (imagePath.StartsWith(pluginPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) is false || System.IO.File.Exists(imagePath) is false)
-            {
-                return NotFound();
-            }
-
-            Response.Headers.ContentDisposition = "attachment";
-            return PhysicalFile(imagePath, MimeTypes.GetMimeType(imagePath));
+            return NotFound();
         }
 
-        var resourceName = plugin.Manifest.ImageResourceName;
-        if (!string.IsNullOrEmpty(resourceName) && plugin.Instance is not null)
-        {
-            var stream = plugin.Instance.GetType().Assembly.GetManifestResourceStream(resourceName);
-            if (stream is null)
-            {
-                return NotFound();
-            }
+        Response.Headers.ContentDisposition = "attachment";
 
-            Response.Headers.ContentDisposition = "attachment";
-            return File(stream, MimeTypes.GetMimeType(resourceName));
-        }
-
-        return NotFound();
+        imagePath = Path.Combine(plugin.Path, plugin.Manifest.ImagePath);
+        return PhysicalFile(imagePath, MimeTypes.GetMimeType(imagePath));
     }
 
     /// <summary>

@@ -5,6 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Jellyfin.Api.Attributes;
 using Jellyfin.Api.Extensions;
+using Jellyfin.Api.Helpers;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Trickplay;
@@ -20,7 +21,6 @@ namespace Jellyfin.Api.Controllers;
 /// </summary>
 [Route("")]
 [Authorize]
-[Tags("TrickPlay")]
 public class TrickplayController : BaseJellyfinApiController
 {
     private readonly ILibraryManager _libraryManager;

@@ -65,7 +65,7 @@ public sealed class CatalogOwnershipMutationTests
             libraryManager.CreateItems([new Folder { Name = "Catalog item" }], null, CancellationToken.None));
     }
 
-    private static (Emby.Server.Implementations.Library.LibraryManager Manager, Mock<IItemPersistenceService> Repository) CreateLibraryManager(
+    private static (Emby.Server.Implementations.Library.LibraryManager Manager, Mock<IItemRepository> Repository) CreateLibraryManager(
         ICatalogOwnership ownership)
     {
         var fixture = new Fixture().Customize(new AutoMoqCustomization());
@@ -73,7 +73,7 @@ public sealed class CatalogOwnershipMutationTests
         fixture.Inject(ownership);
         var config = fixture.Freeze<Mock<IServerConfigurationManager>>();
         config.Setup(c => c.Configuration).Returns(new MediaBrowser.Model.Configuration.ServerConfiguration());
-        var repository = fixture.Freeze<Mock<IItemPersistenceService>>();
+        var repository = fixture.Freeze<Mock<IItemRepository>>();
 
         var constructor = typeof(Emby.Server.Implementations.Library.LibraryManager)
             .GetConstructors()

@@ -35,7 +35,7 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Updates
             await _activityManager.CreateAsync(new ActivityLog(
                     string.Format(
                         CultureInfo.InvariantCulture,
-                        _localizationManager.GetServerLocalizedString("PluginUninstalledWithName"),
+                        _localizationManager.GetLocalizedString("PluginUninstalledWithName"),
                         eventArgs.Argument.Name),
                     NotificationType.PluginUninstalled.ToString(),
                     Guid.Empty))

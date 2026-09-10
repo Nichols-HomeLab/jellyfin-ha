@@ -10,24 +10,16 @@ namespace Emby.Naming.TV
     /// </summary>
     public static partial class SeasonPathParser
     {
-        private const string SeasonKeywordPattern =
-            @"시즌|シーズン|сезон" +
-            @"|season|sæson|saison|staffel|series|stagione|säsong|seizoen|seasong" +
-            @"|sezon|sezona|sezóna|sezonul|série|séria|serie|seria|temporada|kausi";
-
         private static readonly Regex CleanNameRegex = new(@"[ ._\-\[\]]", RegexOptions.Compiled);
 
-        [GeneratedRegex(@"^\s*((?<seasonnumber>(?>\d+))(?:st|nd|rd|th|\.)*(?!\s*[Ee]\d+))\s*(?:" + SeasonKeywordPattern + @")\s*(?<rightpart>.*)$", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"^\s*((?<seasonnumber>(?>\d+))(?:st|nd|rd|th|\.)*(?!\s*[Ee]\d+))\s*(?:[[시즌]*|[シーズン]*|[sS](?:eason|æson|aison|taffel|eries|tagione|äsong|eizoen|easong|ezon|ezona|ezóna|ezonul)*|[tT](?:emporada)*|[kK](?:ausi)*|[Сс](?:езон)*)\s*(?<rightpart>.*)$", RegexOptions.IgnoreCase)]
         private static partial Regex ProcessPre();
 
-        [GeneratedRegex(@"^\s*(?:" + SeasonKeywordPattern + @")\s*(?<seasonnumber>\d+?)(?=\d{3,4}p|[^\d]|$)(?!\s*[Ee]\d)(?<rightpart>.*)$", RegexOptions.IgnoreCase)]
+        [GeneratedRegex(@"^\s*(?:[[시즌]*|[シーズン]*|[sS](?:eason|æson|aison|taffel|eries|tagione|äsong|eizoen|easong|ezon|ezona|ezóna|ezonul)*|[tT](?:emporada)*|[kK](?:ausi)*|[Сс](?:езон)*)\s*(?<seasonnumber>\d+?)(?=\d{3,4}p|[^\d]|$)(?!\s*[Ee]\d)(?<rightpart>.*)$", RegexOptions.IgnoreCase)]
         private static partial Regex ProcessPost();
 
         [GeneratedRegex(@"[sS](\d{1,4})(?!\d|[eE]\d)(?=\.|_|-|\[|\]|\s|$)", RegexOptions.None)]
         private static partial Regex SeasonPrefix();
-
-        [GeneratedRegex(SeasonKeywordPattern, RegexOptions.IgnoreCase)]
-        private static partial Regex SeasonKeyword();
 
         /// <summary>
         /// Attempts to parse season number from path.
@@ -99,25 +91,14 @@ namespace Emby.Naming.TV
                 return (val, true);
             }
 
-            bool isMixedLibrary = !supportNumericSeasonFolders && !supportSpecialAliases;
             var preMatch = ProcessPre().Match(filename);
             if (preMatch.Success)
             {
-                if (isMixedLibrary && !SeasonKeyword().IsMatch(fileName))
-                {
-                    return (null, false);
-                }
-
                 return CheckMatch(preMatch);
             }
             else
             {
                 var postMatch = ProcessPost().Match(filename);
-                if (postMatch.Success && isMixedLibrary && !SeasonKeyword().IsMatch(fileName))
-                {
-                    return (null, false);
-                }
-
                 return CheckMatch(postMatch);
             }
         }

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Jellyfin.Extensions;
+using MediaBrowser.Model.MediaInfo;
 using Microsoft.Extensions.Logging;
 using Nikse.SubtitleEdit.Core.Common;
 using SubtitleFormat = Nikse.SubtitleEdit.Core.SubtitleFormats.SubtitleFormat;
@@ -28,7 +30,7 @@ namespace MediaBrowser.MediaEncoding.Subtitles
         }
 
         /// <inheritdoc />
-        public Subtitle Parse(Stream stream, string fileExtension)
+        public SubtitleTrackInfo Parse(Stream stream, string fileExtension)
         {
             var subtitle = new Subtitle();
             var lines = stream.ReadAllLines().ToList();
@@ -74,7 +76,21 @@ namespace MediaBrowser.MediaEncoding.Subtitles
                 throw new ArgumentException("Unsupported format: " + fileExtension);
             }
 
-            return subtitle;
+            var trackInfo = new SubtitleTrackInfo();
+            int len = subtitle.Paragraphs.Count;
+            var trackEvents = new SubtitleTrackEvent[len];
+            for (int i = 0; i < len; i++)
+            {
+                var p = subtitle.Paragraphs[i];
+                trackEvents[i] = new SubtitleTrackEvent(p.Number.ToString(CultureInfo.InvariantCulture), p.Text)
+                {
+                    StartPositionTicks = p.StartTime.TimeSpan.Ticks,
+                    EndPositionTicks = p.EndTime.TimeSpan.Ticks
+                };
+            }
+
+            trackInfo.TrackEvents = trackEvents;
+            return trackInfo;
         }
 
         /// <inheritdoc />

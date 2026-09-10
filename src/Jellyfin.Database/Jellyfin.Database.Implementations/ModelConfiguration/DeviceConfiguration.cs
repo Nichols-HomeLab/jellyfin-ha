@@ -20,6 +20,9 @@ namespace Jellyfin.Database.Implementations.ModelConfiguration
 
             builder
                 .HasIndex(entity => new { entity.UserId, entity.DeviceId });
+
+            builder
+                .HasIndex(entity => entity.DeviceId);
         }
     }
 }

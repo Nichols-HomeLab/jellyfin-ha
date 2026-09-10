@@ -1,35 +1,28 @@
 # Jellyfin HA with PostgreSQL
 
-This fork combines these components on the Jellyfin 12.0 release:
+This fork combines three pieces on a Jellyfin 10.11.11 base:
 
 - the Redis-backed transcode coordination code from `ZoltyMat/jellyfin-ha`;
 - the PostgreSQL query optimizations from `Nichols-HomeLab/jellyfin`;
-- the in-tree PostgreSQL database provider, ported to the Jellyfin 12 schema and Entity Framework Core 10;
-- catalog writer election and replica cache propagation;
-- the independently deployed PostgreSQL-backed hot-cache worker.
+- the PostgreSQL database provider from `Nichols-HomeLab/Jellyfin.Pgsql`, pinned as a Git submodule.
 
 The PostgreSQL provider remains experimental. Back up the Jellyfin config and
 database before migrating an existing server.
 
 ## Build
 
-Build the server with the .NET 10 SDK:
+Clone the fork and initialize the provider submodule:
 
 ```bash
-dotnet publish Jellyfin.Server/Jellyfin.Server.csproj --configuration Release
+git clone https://github.com/Nichols-HomeLab/jellyfin-ha.git
+cd jellyfin-ha
+git submodule update --init plugins/Jellyfin.Pgsql
+docker build -f Dockerfile.pgsql -t jellyfin-ha-pgsql:10.11.11 .
 ```
 
-The supported container build uses `Dockerfile`; `Dockerfile.pgsql` remains a
-compatibility entry point for the same in-tree provider image. Both bundle the
-matching Jellyfin Web v12.0 release. The production workflow publishes the server
-and hot-cache worker separately to `git.nicholstech.org/nichols-homelab`.
-
-```bash
-docker build -t jellyfin-ha-pgsql:12.0 .
-docker build -f Jellyfin.HotCache.Worker/Dockerfile -t jellyfin-hot-cache-worker:12.0 .
-```
-
-The legacy `plugins/Jellyfin.Pgsql` submodule is not required by these builds.
+The image publishes the complete HA server and the PostgreSQL plugin together.
+It deliberately does not overlay a single patched assembly on an official
+Jellyfin image because the HA changes span several server assemblies.
 
 ## Required configuration
 
@@ -38,7 +31,7 @@ Configure both PostgreSQL and Redis:
 ```yaml
 services:
   jellyfin:
-    image: jellyfin-ha-pgsql:12.0
+    image: jellyfin-ha-pgsql:10.11.11
     environment:
       POSTGRES_CONNECTION_STRING: >-
         Host=postgres;Port=5432;Database=jellyfin;Username=jellyfin;Password=change-me
@@ -54,9 +47,10 @@ services:
       - /path/to/media:/media:ro
 ```
 
-`POSTGRES_CONNECTION_STRING` takes precedence over the connection string in
-`database.xml`. The in-tree provider requires a complete Npgsql connection
-string; the legacy plugin’s individual `POSTGRES_*` variables are not used.
+`POSTGRES_CONNECTION_STRING` takes precedence over the legacy
+`POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_DB`, `POSTGRES_USER`, and
+`POSTGRES_PASSWORD` variables. `JELLYFIN_POSTGRES_CONNECTION_STRING` is also
+accepted as an alias.
 
 For multiple replicas, every instance needs:
 
@@ -83,13 +77,14 @@ single-instance behavior and require no additional configuration.
 ## First start
 
 Use an empty PostgreSQL database and an empty Jellyfin config directory for the
-first validation start. The PostgreSQL provider is included in the server. Configure the database
-provider as `Jellyfin-PostgreSQL` in `database.xml` and supply the connection
-string through `POSTGRES_CONNECTION_STRING`.
+first validation start. The entrypoint installs the provider under
+`/config/plugins/PostgreSQL`, creates `/config/config/database.xml` when it is
+missing, and writes the configured connection string into that file before
+starting Jellyfin.
 
-For an existing PostgreSQL installation, follow [the v12 upgrade notes](docs/jellyfin-v12-upgrade.md).
-The legacy plugin’s SQLite conversion instructions target its older schema;
-they are not a v12 migration procedure.
+The existing SQLite-to-PostgreSQL migration procedure is documented in the
+provider submodule's `README.md`. Do not point an untested build at the only
+copy of an existing Jellyfin library.
 
 ## Validation
 
@@ -97,9 +92,9 @@ The server build and HA-focused tests can be run without installing the .NET
 SDK on the host:
 
 ```bash
-docker run --rm -v "$PWD:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
+docker run --rm -v "$PWD:/src" -w /src mcr.microsoft.com/dotnet/sdk:9.0 \
   dotnet build Jellyfin.Server/Jellyfin.Server.csproj --configuration Release
 ```
 
-Build the final image with `Dockerfile` to validate the in-tree provider,
-server, matching web client, and QSV runtime together.
+Build the final image with `Dockerfile.pgsql` to validate that the pinned
+provider and server source compile together.

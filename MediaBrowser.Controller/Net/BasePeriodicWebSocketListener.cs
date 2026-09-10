@@ -40,6 +40,11 @@ namespace MediaBrowser.Controller.Net
         /// </summary>
         private readonly List<(IWebSocketConnection Connection, CancellationTokenSource CancellationTokenSource, TStateType State)> _activeConnections = new();
 
+        /// <summary>
+        /// The logger.
+        /// </summary>
+        protected readonly ILogger<BasePeriodicWebSocketListener<TReturnDataType, TStateType>> Logger;
+
         private readonly Task _messageConsumerTask;
 
         protected BasePeriodicWebSocketListener(ILogger<BasePeriodicWebSocketListener<TReturnDataType, TStateType>> logger)
@@ -50,11 +55,6 @@ namespace MediaBrowser.Controller.Net
 
             _messageConsumerTask = HandleMessages();
         }
-
-        /// <summary>
-        /// Gets the Logger.
-        /// </summary>
-        protected ILogger<BasePeriodicWebSocketListener<TReturnDataType, TStateType>> Logger { get; }
 
         /// <summary>
         /// Gets the type used for the messages sent to the client.
@@ -208,11 +208,6 @@ namespace MediaBrowser.Controller.Net
             {
                 var (connection, cts, state) = tuple;
                 var cancellationToken = cts.Token;
-
-                // Restore the culture context captured when the connection was established
-                // so that GetDataToSendForConnection produces a localized payload matching
-                // the client's Accept-Language preference rather than the server default.
-                connection.ApplyRequestCulture();
 
                 var data = await GetDataToSendForConnection(connection).ConfigureAwait(false);
                 if (data is null)

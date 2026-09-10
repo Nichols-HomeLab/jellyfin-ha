@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using DotNet.Testcontainers.Builders;
 using Jellyfin.Database.Implementations;
 using Jellyfin.Database.Implementations.DbConfiguration;
 using Jellyfin.Database.Implementations.Entities;
@@ -9,17 +10,18 @@ using Jellyfin.Database.Providers.PostgreSQL;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Jellyfin.Database.Tests.PostgreSQL;
 
 /// <summary>
-/// Integration tests that verify concurrent access patterns against a real PostgreSQL database.
+/// Integration tests that verify concurrent access patterns against a real PostgreSQL 16 container.
 /// </summary>
 [Xunit.Trait("Category", "RequiresDocker")]
 public sealed class PostgreSqlConcurrencyTests : IAsyncLifetime
 {
-    private readonly PostgreSqlTestDatabase _container;
+    private readonly PostgreSqlContainer _container;
     private NpgsqlDataSource? _dataSource;
     private PostgreSqlDatabaseProvider? _provider;
 
@@ -28,14 +30,16 @@ public sealed class PostgreSqlConcurrencyTests : IAsyncLifetime
     /// </summary>
     public PostgreSqlConcurrencyTests()
     {
-        _container = new PostgreSqlTestDatabase();
+        _container = new PostgreSqlBuilder("postgres:16-alpine")
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("pg_isready"))
+            .Build();
     }
 
     /// <summary>
     /// Starts the PostgreSQL container and applies migrations before any tests in the class run.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async ValueTask InitializeAsync()
+    public async Task InitializeAsync()
     {
         await _container.StartAsync().ConfigureAwait(false);
 
@@ -54,7 +58,7 @@ public sealed class PostgreSqlConcurrencyTests : IAsyncLifetime
     /// Stops and removes the PostgreSQL container after all tests in the class have run.
     /// </summary>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public async ValueTask DisposeAsync()
+    public async Task DisposeAsync()
     {
         if (_dataSource is not null)
         {

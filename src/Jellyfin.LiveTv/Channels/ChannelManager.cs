@@ -240,9 +240,12 @@ namespace Jellyfin.LiveTv.Channels
             var all = channels;
             var totalCount = all.Count;
 
-            int startIndex = query.StartIndex ?? 0;
-            int count = (query.Limit ?? 0) > 0 ? Math.Min(query.Limit.Value, totalCount - startIndex) : totalCount - startIndex;
-            all = all.GetRange(query.StartIndex ?? 0, count);
+            if (query.StartIndex.HasValue || query.Limit.HasValue)
+            {
+                int startIndex = query.StartIndex ?? 0;
+                int count = query.Limit is null ? totalCount - startIndex : Math.Min(query.Limit.Value, totalCount - startIndex);
+                all = all.GetRange(startIndex, count);
+            }
 
             if (query.RefreshLatestChannelItems)
             {
@@ -1129,7 +1132,7 @@ namespace Jellyfin.LiveTv.Channels
             {
                 if (!item.Tags.Contains("livestream", StringComparison.OrdinalIgnoreCase))
                 {
-                    item.Tags = [.. item.Tags, "livestream"];
+                    item.Tags = [..item.Tags, "livestream"];
                     _logger.LogDebug("Forcing update due to Tags {0}", item.Name);
                     forceUpdate = true;
                 }

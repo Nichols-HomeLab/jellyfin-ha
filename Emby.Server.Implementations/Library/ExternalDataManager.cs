@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediaBrowser.Controller.Chapters;
@@ -51,33 +52,26 @@ public class ExternalDataManager : IExternalDataManager
     /// <inheritdoc/>
     public async Task DeleteExternalItemDataAsync(BaseItem item, CancellationToken cancellationToken)
     {
-        DeleteExternalItemFiles(item);
-
+        var validPaths = _pathManager.GetExtractedDataPaths(item).Where(Directory.Exists).ToList();
         var itemId = item.Id;
+        if (validPaths.Count > 0)
+        {
+            foreach (var path in validPaths)
+            {
+                try
+                {
+                    Directory.Delete(path, true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Unable to prune external item data at {Path}: {Exception}", path, ex);
+                }
+            }
+        }
+
         await _keyframeManager.DeleteKeyframeDataAsync(itemId, cancellationToken).ConfigureAwait(false);
         await _mediaSegmentManager.DeleteSegmentsAsync(itemId, cancellationToken).ConfigureAwait(false);
         await _trickplayManager.DeleteTrickplayDataAsync(itemId, cancellationToken).ConfigureAwait(false);
         await _chapterManager.DeleteChapterDataAsync(itemId, cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
-    public void DeleteExternalItemFiles(BaseItem item)
-    {
-        foreach (var path in _pathManager.GetExtractedDataPaths(item))
-        {
-            if (!Directory.Exists(path))
-            {
-                continue;
-            }
-
-            try
-            {
-                Directory.Delete(path, true);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning("Unable to prune external item data at {Path}: {Exception}", path, ex);
-            }
-        }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -40,23 +41,20 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
         /// <inheritdoc />
         public async Task<MetadataResult<Season>> GetMetadata(SeasonInfo info, CancellationToken cancellationToken)
         {
-            var result = new MetadataResult<Season>
-            {
-                ResultLanguage = info.MetadataLanguage
-            };
+            var result = new MetadataResult<Season>();
             var config = Plugin.Instance.Configuration;
 
             info.SeriesProviderIds.TryGetValue(MetadataProvider.Tmdb.ToString(), out string? seriesTmdbId);
 
             var seasonNumber = info.IndexNumber;
 
-            if (!seasonNumber.HasValue || !TmdbUtils.TryParseTmdbId(seriesTmdbId, out var seriesId))
+            if (string.IsNullOrWhiteSpace(seriesTmdbId) || !seasonNumber.HasValue)
             {
                 return result;
             }
 
             var seasonResult = await _tmdbClientManager
-                .GetSeasonAsync(seriesId, seasonNumber.Value, info.MetadataLanguage, TmdbUtils.GetImageLanguagesParam(info.MetadataLanguage, info.MetadataCountryCode), info.MetadataCountryCode, cancellationToken)
+                .GetSeasonAsync(Convert.ToInt32(seriesTmdbId, CultureInfo.InvariantCulture), seasonNumber.Value, info.MetadataLanguage, TmdbUtils.GetImageLanguagesParam(info.MetadataLanguage, info.MetadataCountryCode), info.MetadataCountryCode, cancellationToken)
                 .ConfigureAwait(false);
 
             if (seasonResult is null)
@@ -78,10 +76,11 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.TV
                 result.Item.Name = seasonResult.Name;
             }
 
-            result.Item.TrySetProviderId(MetadataProvider.Tmdb, seasonResult.Id?.ToString(CultureInfo.InvariantCulture));
             result.Item.TrySetProviderId(MetadataProvider.Tvdb, seasonResult.ExternalIds?.TvdbId);
 
+            // TODO why was this disabled?
             var credits = seasonResult.Credits;
+
             if (credits?.Cast is not null)
             {
                 var castQuery = config.HideMissingCastMembers

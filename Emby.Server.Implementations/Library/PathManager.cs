@@ -43,12 +43,6 @@ public class PathManager : IPathManager
     /// <inheritdoc />
     public string? GetAttachmentPath(string mediaSourceId, string fileName)
     {
-        var folder = GetAttachmentFolderPath(mediaSourceId);
-        if (folder is null)
-        {
-            return null;
-        }
-
         var safeName = PathHelper.GetSafeLeafFileName(fileName);
         if (safeName is null)
         {
@@ -56,40 +50,29 @@ public class PathManager : IPathManager
             return null;
         }
 
-        return Path.Combine(folder, safeName);
+        return Path.Combine(GetAttachmentFolderPath(mediaSourceId), safeName);
     }
 
     /// <inheritdoc />
-    public string? GetAttachmentFolderPath(string mediaSourceId)
+    public string GetAttachmentFolderPath(string mediaSourceId)
     {
-        if (!Guid.TryParse(mediaSourceId, out var parsed))
-        {
-            _logger.LogDebug("MediaSource Id '{MediaSourceId}' is not a GUID; no on-disk attachment folder.", mediaSourceId);
-            return null;
-        }
+        var id = Guid.Parse(mediaSourceId).ToString("D", CultureInfo.InvariantCulture).AsSpan();
 
-        var id = parsed.ToString("D", CultureInfo.InvariantCulture).AsSpan();
         return Path.Join(AttachmentCachePath, id[..2], id);
     }
 
     /// <inheritdoc />
-    public string? GetSubtitleFolderPath(string mediaSourceId)
+    public string GetSubtitleFolderPath(string mediaSourceId)
     {
-        if (!Guid.TryParse(mediaSourceId, out var parsed))
-        {
-            _logger.LogDebug("MediaSource Id '{MediaSourceId}' is not a GUID; no on-disk subtitle folder.", mediaSourceId);
-            return null;
-        }
+        var id = Guid.Parse(mediaSourceId).ToString("D", CultureInfo.InvariantCulture).AsSpan();
 
-        var id = parsed.ToString("D", CultureInfo.InvariantCulture).AsSpan();
         return Path.Join(SubtitleCachePath, id[..2], id);
     }
 
     /// <inheritdoc />
-    public string? GetSubtitlePath(string mediaSourceId, int streamIndex, string extension)
+    public string GetSubtitlePath(string mediaSourceId, int streamIndex, string extension)
     {
-        var folder = GetSubtitleFolderPath(mediaSourceId);
-        return folder is null ? null : Path.Combine(folder, streamIndex.ToString(CultureInfo.InvariantCulture) + extension);
+        return Path.Combine(GetSubtitleFolderPath(mediaSourceId), streamIndex.ToString(CultureInfo.InvariantCulture) + extension);
     }
 
     /// <inheritdoc />
@@ -120,27 +103,12 @@ public class PathManager : IPathManager
     public IReadOnlyList<string> GetExtractedDataPaths(BaseItem item)
     {
         var mediaSourceId = item.Id.ToString("N", CultureInfo.InvariantCulture);
-        List<string> paths = [];
-        var attachmentFolder = GetAttachmentFolderPath(mediaSourceId);
-        if (attachmentFolder is not null)
-        {
-            paths.Add(attachmentFolder);
-        }
-
-        var subtitleFolder = GetSubtitleFolderPath(mediaSourceId);
-        if (subtitleFolder is not null)
-        {
-            paths.Add(subtitleFolder);
-        }
-
-        paths.Add(GetTrickplayDirectory(item, false));
-        if (!string.IsNullOrEmpty(item.Path))
-        {
-            paths.Add(GetTrickplayDirectory(item, true));
-        }
-
-        paths.Add(GetChapterImageFolderPath(item));
-
-        return paths;
+        return [
+            GetAttachmentFolderPath(mediaSourceId),
+            GetSubtitleFolderPath(mediaSourceId),
+            GetTrickplayDirectory(item, false),
+            GetTrickplayDirectory(item, true),
+            GetChapterImageFolderPath(item)
+        ];
     }
 }

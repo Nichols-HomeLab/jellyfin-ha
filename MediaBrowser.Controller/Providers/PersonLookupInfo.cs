@@ -1,8 +1,7 @@
+#pragma warning disable CS1591
+
 namespace MediaBrowser.Controller.Providers
 {
-    /// <summary>
-    /// The lookup info for persons.
-    /// </summary>
     public class PersonLookupInfo : ItemLookupInfo
     {
     }

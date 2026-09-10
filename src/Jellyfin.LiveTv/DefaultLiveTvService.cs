@@ -774,10 +774,7 @@ namespace Jellyfin.LiveTv
                 }
             }
 
-            if (seriesTimer.SkipEpisodesInLibrary)
-            {
-                SearchForDuplicateShowIds(enabledTimersForSeries);
-            }
+            SearchForDuplicateShowIds(enabledTimersForSeries);
 
             if (deleteInvalidTimers)
             {

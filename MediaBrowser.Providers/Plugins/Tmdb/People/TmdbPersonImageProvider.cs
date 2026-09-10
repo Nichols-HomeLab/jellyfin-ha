@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -53,14 +54,14 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.People
         {
             var person = (Person)item;
 
-            if (!person.TryGetTmdbId(out var personTmdbId))
+            if (!person.TryGetProviderId(MetadataProvider.Tmdb, out var personTmdbId))
             {
                 return Enumerable.Empty<RemoteImageInfo>();
             }
 
             var language = item.GetPreferredMetadataLanguage();
             var countryCode = item.GetPreferredMetadataCountryCode();
-            var personResult = await _tmdbClientManager.GetPersonAsync(personTmdbId, language, countryCode, cancellationToken).ConfigureAwait(false);
+            var personResult = await _tmdbClientManager.GetPersonAsync(int.Parse(personTmdbId, CultureInfo.InvariantCulture), language, countryCode, cancellationToken).ConfigureAwait(false);
             if (personResult?.Images?.Profiles is null)
             {
                 return Enumerable.Empty<RemoteImageInfo>();

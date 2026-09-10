@@ -1,5 +1,3 @@
-#pragma warning disable SER007 // Redis 3 requires an explicit error kind for simulated server faults.
-
 using System;
 using System.Threading.Tasks;
 using Emby.Server.Implementations.MediaEncoding;
@@ -33,7 +31,7 @@ public sealed class RedisConnectionManagerTests
         {
             if (ReferenceEquals(connection, first.Object))
             {
-                throw new RedisServerException(RedisErrorKind.ReadOnly, CommandFlags.None, "READONLY You can't write against a read only replica.");
+                throw new RedisServerException("READONLY You can't write against a read only replica.");
             }
 
             return Task.FromResult(42);
@@ -87,7 +85,7 @@ public sealed class RedisConnectionManagerTests
             {
                 throw new InvalidOperationException(
                     "Redis operation failed.",
-                    new RedisServerException(RedisErrorKind.ReadOnly, CommandFlags.None, "READONLY You can't write against a read only replica."));
+                    new RedisServerException("READONLY You can't write against a read only replica."));
             }
 
             return Task.FromResult(84);

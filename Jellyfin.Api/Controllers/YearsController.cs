@@ -26,7 +26,6 @@ namespace Jellyfin.Api.Controllers;
 /// Years controller.
 /// </summary>
 [Authorize]
-[Tags("Year")]
 public class YearsController : BaseJellyfinApiController
 {
     private readonly ILibraryManager _libraryManager;
@@ -90,6 +89,7 @@ public class YearsController : BaseJellyfinApiController
     {
         userId = RequestHelpers.GetUserId(User, userId);
         var dtoOptions = new DtoOptions { Fields = fields }
+            .AddClientFields(User)
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);
 
         User? user = userId.IsNullOrEmpty()
@@ -182,7 +182,8 @@ public class YearsController : BaseJellyfinApiController
             return NotFound();
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions()
+            .AddClientFields(User);
 
         if (!userId.IsNullOrEmpty())
         {

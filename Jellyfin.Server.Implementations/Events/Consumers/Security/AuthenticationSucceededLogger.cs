@@ -33,14 +33,14 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Security
             await _activityManager.CreateAsync(new ActivityLog(
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("AuthenticationSucceededWithUserName"),
+                    _localizationManager.GetLocalizedString("AuthenticationSucceededWithUserName"),
                     eventArgs.User.Name),
                 "AuthenticationSucceeded",
                 eventArgs.User.Id)
             {
                 ShortOverview = string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("LabelIpAddressValue"),
+                    _localizationManager.GetLocalizedString("LabelIpAddressValue"),
                     eventArgs.SessionInfo?.RemoteEndPoint),
             }).ConfigureAwait(false);
         }

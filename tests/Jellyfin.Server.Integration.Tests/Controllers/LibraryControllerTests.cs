@@ -23,7 +23,6 @@ public sealed class LibraryControllerTests : IClassFixture<JellyfinApplicationFa
     [InlineData("Items/{0}/ThemeMedia")]
     [InlineData("Items/{0}/Ancestors")]
     [InlineData("Items/{0}/Download")]
-    [InlineData("Items/{0}/Collections")]
     [InlineData("Artists/{0}/Similar")]
     [InlineData("Items/{0}/Similar")]
     [InlineData("Albums/{0}/Similar")]
@@ -35,7 +34,7 @@ public sealed class LibraryControllerTests : IClassFixture<JellyfinApplicationFa
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-        var response = await client.GetAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()), TestContext.Current.CancellationToken);
+        var response = await client.GetAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -46,7 +45,7 @@ public sealed class LibraryControllerTests : IClassFixture<JellyfinApplicationFa
     {
         var client = _factory.CreateClient();
 
-        var response = await client.DeleteAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()), TestContext.Current.CancellationToken);
+        var response = await client.DeleteAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
@@ -58,7 +57,7 @@ public sealed class LibraryControllerTests : IClassFixture<JellyfinApplicationFa
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-        var response = await client.DeleteAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()), TestContext.Current.CancellationToken);
+        var response = await client.DeleteAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

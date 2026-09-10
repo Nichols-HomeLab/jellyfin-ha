@@ -141,8 +141,7 @@ namespace MediaBrowser.Controller.SyncPlay.GroupStates
                 _logger.LogError("Unable to set playing queue in group {GroupId}.", context.GroupId.ToString());
 
                 // Ignore request and return to previous state.
-                IGroupState newState = prevState switch
-                {
+                IGroupState newState = prevState switch {
                     GroupStateType.Playing => new PlayingGroupState(LoggerFactory),
                     GroupStateType.Paused => new PausedGroupState(LoggerFactory),
                     _ => new IdleGroupState(LoggerFactory)
@@ -501,7 +500,7 @@ namespace MediaBrowser.Controller.SyncPlay.GroupStates
                     {
                         // Client, that was buffering, resumed playback but did not update others in time.
                         delayTicks = context.GetHighestPing() * 2 * TimeSpan.TicksPerMillisecond;
-                        delayTicks = Math.Max(delayTicks, TimeSpan.FromMilliseconds(context.DefaultPing).Ticks);
+                        delayTicks = Math.Max(delayTicks, context.DefaultPing);
 
                         context.LastActivity = currentTime.AddTicks(delayTicks);
 

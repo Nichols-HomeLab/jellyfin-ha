@@ -83,7 +83,6 @@ namespace Jellyfin.LiveTv.IO
                 CreateNoWindow = true,
                 UseShellExecute = false,
 
-                StandardErrorEncoding = Encoding.UTF8,
                 RedirectStandardError = true,
                 RedirectStandardInput = true,
 
@@ -188,8 +187,8 @@ namespace Jellyfin.LiveTv.IO
             var commandLineArgs = string.Format(
                 CultureInfo.InvariantCulture,
                 "-i \"{0}\" {2} -map_metadata -1 -threads {6} {3}{4}{5} -y \"{1}\"",
-                inputTempFile.EscapeProcessArgument(),
-                targetFile.EscapeProcessArgument(),
+                inputTempFile,
+                targetFile.Replace("\"", "\\\"", StringComparison.Ordinal), // Escape quotes in filename
                 videoArgs,
                 GetAudioArgs(mediaSource),
                 subtitleArgs,

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -7,6 +6,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
+using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
@@ -277,7 +277,7 @@ namespace MediaBrowser.LocalMetadata.Savers
                 await writer.WriteElementStringAsync(null, "Rating", null, item.CommunityRating.Value.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
             }
 
-            if (item.ProductionYear is not null && item is not Person)
+            if (item.ProductionYear.HasValue && item is not Person)
             {
                 await writer.WriteElementStringAsync(null, "ProductionYear", null, item.ProductionYear.Value.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
             }
@@ -467,62 +467,41 @@ namespace MediaBrowser.LocalMetadata.Savers
         }
 
         /// <summary>
-        /// Add linked children.
+        /// ADd linked children.
         /// </summary>
         /// <param name="item">The item.</param>
         /// <param name="writer">The xml writer.</param>
         /// <param name="pluralNodeName">The plural node name.</param>
         /// <param name="singularNodeName">The singular node name.</param>
         /// <returns>The task object representing the asynchronous operation.</returns>
-        private async Task AddLinkedChildren(Folder item, XmlWriter writer, string pluralNodeName, string singularNodeName)
+        private static async Task AddLinkedChildren(Folder item, XmlWriter writer, string pluralNodeName, string singularNodeName)
         {
-            var linkedChildren = item.LinkedChildren
+            var items = item.LinkedChildren
                 .Where(i => i.Type == LinkedChildType.Manual)
                 .ToList();
 
-            if (linkedChildren.Count == 0)
+            if (items.Count == 0)
             {
                 return;
             }
 
-            // Batch-resolve all ItemIds to paths in a single query to avoid an N+1 round-trip per linked child
-            var idsToResolve = new HashSet<Guid>();
-            foreach (var link in linkedChildren)
-            {
-                if (link.ItemId.HasValue && !link.ItemId.Value.Equals(Guid.Empty))
-                {
-                    idsToResolve.Add(link.ItemId.Value);
-                }
-            }
-
-            Dictionary<Guid, string?>? pathById = null;
-            if (idsToResolve.Count > 0)
-            {
-                var batched = LibraryManager.GetItemList(new InternalItemsQuery
-                {
-                    ItemIds = [.. idsToResolve]
-                });
-                pathById = new Dictionary<Guid, string?>(batched.Count);
-                foreach (var batchedItem in batched)
-                {
-                    pathById[batchedItem.Id] = batchedItem.Path;
-                }
-            }
-
             await writer.WriteStartElementAsync(null, pluralNodeName, null).ConfigureAwait(false);
 
-            foreach (var link in linkedChildren)
+            foreach (var link in items)
             {
-                string? path = null;
-                if (pathById is not null && link.ItemId.HasValue && pathById.TryGetValue(link.ItemId.Value, out var resolvedPath))
-                {
-                    path = resolvedPath;
-                }
-
-                if (!string.IsNullOrWhiteSpace(path))
+                if (!string.IsNullOrWhiteSpace(link.Path) || !string.IsNullOrWhiteSpace(link.LibraryItemId))
                 {
                     await writer.WriteStartElementAsync(null, singularNodeName, null).ConfigureAwait(false);
-                    await writer.WriteElementStringAsync(null, "Path", null, path).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(link.Path))
+                    {
+                        await writer.WriteElementStringAsync(null, "Path", null, link.Path).ConfigureAwait(false);
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(link.LibraryItemId))
+                    {
+                        await writer.WriteElementStringAsync(null, "ItemId", null, link.LibraryItemId).ConfigureAwait(false);
+                    }
+
                     await writer.WriteEndElementAsync().ConfigureAwait(false);
                 }
             }

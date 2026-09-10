@@ -44,9 +44,7 @@ namespace MediaBrowser.Providers.Plugins.Omdb
             var result = new MetadataResult<Episode>
             {
                 Item = new Episode(),
-                QueriedById = true,
-                // OMDb is not localized, everything it returns is English
-                ResultLanguage = "en"
+                QueriedById = true
             };
 
             // Allowing this will dramatically increase scan times

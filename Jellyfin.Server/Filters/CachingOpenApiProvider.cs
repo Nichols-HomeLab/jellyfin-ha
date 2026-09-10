@@ -1,10 +1,9 @@
 using System;
-using AsyncKeyedLock;
+using System.Threading;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.Swagger;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
@@ -18,13 +17,12 @@ internal sealed class CachingOpenApiProvider : ISwaggerProvider
     private const string CacheKey = "openapi.json";
 
     private static readonly MemoryCacheEntryOptions _cacheOptions = new() { SlidingExpiration = TimeSpan.FromMinutes(5) };
-    private static readonly AsyncNonKeyedLocker _lock = new(1);
+    private static readonly SemaphoreSlim _lock = new(1, 1);
     private static readonly TimeSpan _lockTimeout = TimeSpan.FromSeconds(1);
 
     private readonly IMemoryCache _memoryCache;
     private readonly SwaggerGenerator _swaggerGenerator;
     private readonly SwaggerGeneratorOptions _swaggerGeneratorOptions;
-    private readonly ILogger<CachingOpenApiProvider> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CachingOpenApiProvider"/> class.
@@ -33,51 +31,49 @@ internal sealed class CachingOpenApiProvider : ISwaggerProvider
     /// <param name="apiDescriptionsProvider">The api descriptions provider.</param>
     /// <param name="schemaGenerator">The schema generator.</param>
     /// <param name="memoryCache">The memory cache.</param>
-    /// <param name="logger">The logger.</param>
     public CachingOpenApiProvider(
         IOptions<SwaggerGeneratorOptions> optionsAccessor,
         IApiDescriptionGroupCollectionProvider apiDescriptionsProvider,
         ISchemaGenerator schemaGenerator,
-        IMemoryCache memoryCache,
-        ILogger<CachingOpenApiProvider> logger)
+        IMemoryCache memoryCache)
     {
         _swaggerGeneratorOptions = optionsAccessor.Value;
         _swaggerGenerator = new SwaggerGenerator(_swaggerGeneratorOptions, apiDescriptionsProvider, schemaGenerator);
         _memoryCache = memoryCache;
-        _logger = logger;
     }
 
     /// <inheritdoc />
-    public OpenApiDocument GetSwagger(string documentName, string host, string basePath)
+    public OpenApiDocument GetSwagger(string documentName, string? host = null, string? basePath = null)
     {
         if (_memoryCache.TryGetValue(CacheKey, out OpenApiDocument? openApiDocument) && openApiDocument is not null)
         {
             return AdjustDocument(openApiDocument, host, basePath);
         }
 
-        using var acquired = _lock.LockOrNull(_lockTimeout);
-        if (_memoryCache.TryGetValue(CacheKey, out openApiDocument) && openApiDocument is not null)
-        {
-            return AdjustDocument(openApiDocument, host, basePath);
-        }
-
-        if (acquired is null)
-        {
-            throw new InvalidOperationException("OpenApi document is generating");
-        }
-
+        var acquired = _lock.Wait(_lockTimeout);
         try
         {
-            openApiDocument = _swaggerGenerator.GetSwagger(documentName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "OpenAPI generation error");
-            throw;
-        }
+            if (_memoryCache.TryGetValue(CacheKey, out openApiDocument) && openApiDocument is not null)
+            {
+                return AdjustDocument(openApiDocument, host, basePath);
+            }
 
-        _memoryCache.Set(CacheKey, openApiDocument, _cacheOptions);
-        return AdjustDocument(openApiDocument, host, basePath);
+            if (!acquired)
+            {
+                throw new InvalidOperationException("OpenApi document is generating");
+            }
+
+            openApiDocument = _swaggerGenerator.GetSwagger(documentName);
+            _memoryCache.Set(CacheKey, openApiDocument, _cacheOptions);
+            return AdjustDocument(openApiDocument, host, basePath);
+        }
+        finally
+        {
+            if (acquired)
+            {
+                _lock.Release();
+            }
+        }
     }
 
     private OpenApiDocument AdjustDocument(OpenApiDocument document, string? host, string? basePath)

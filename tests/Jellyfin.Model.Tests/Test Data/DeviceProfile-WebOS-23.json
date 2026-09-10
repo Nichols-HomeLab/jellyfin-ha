@@ -135,6 +135,7 @@
             "Protocol": "hls",
             "MaxAudioChannels": "6",
             "MinSegments": "1",
+            "BreakOnNonKeyFrames": false,
             "EnableAudioVbrEncoding": true
         },
         {
@@ -209,7 +210,8 @@
             "Context": "Streaming",
             "Protocol": "hls",
             "MaxAudioChannels": "6",
-            "MinSegments": "1"
+            "MinSegments": "1",
+            "BreakOnNonKeyFrames": false
         }
     ],
     "ContainerProfiles": [],

@@ -288,9 +288,9 @@ public class RecordingsMetadataManager
                     null,
                     "dateadded",
                     null,
-                    DateTime.UtcNow.ToString(DateAddedFormat, CultureInfo.InvariantCulture)).ConfigureAwait(false);
+                    DateTime.Now.ToString(DateAddedFormat, CultureInfo.InvariantCulture)).ConfigureAwait(false);
 
-                if (item.ProductionYear is not null)
+                if (item.ProductionYear.HasValue)
                 {
                     await writer.WriteElementStringAsync(null, "year", null, item.ProductionYear.Value.ToString(CultureInfo.InvariantCulture)).ConfigureAwait(false);
                 }

@@ -134,6 +134,8 @@ public class LegacyStreamInfo : StreamInfo
             {
                 list.Add(new NameValuePair("MinSegments", item.MinSegments.Value.ToString(CultureInfo.InvariantCulture)));
             }
+
+            list.Add(new NameValuePair("BreakOnNonKeyFrames", item.BreakOnNonKeyFrames.ToString(CultureInfo.InvariantCulture)));
         }
         else
         {

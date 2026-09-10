@@ -304,13 +304,11 @@ namespace MediaBrowser.Model.Configuration
 
         public TypeOptions()
         {
-            MetadataFetchers = [];
-            MetadataFetcherOrder = [];
-            ImageFetchers = [];
-            ImageFetcherOrder = [];
-            ImageOptions = [];
-            SimilarItemProviders = [];
-            SimilarItemProviderOrder = [];
+            MetadataFetchers = Array.Empty<string>();
+            MetadataFetcherOrder = Array.Empty<string>();
+            ImageFetchers = Array.Empty<string>();
+            ImageFetcherOrder = Array.Empty<string>();
+            ImageOptions = Array.Empty<ImageOption>();
         }
 
         public string Type { get; set; }
@@ -324,10 +322,6 @@ namespace MediaBrowser.Model.Configuration
         public string[] ImageFetcherOrder { get; set; }
 
         public ImageOption[] ImageOptions { get; set; }
-
-        public string[] SimilarItemProviders { get; set; }
-
-        public string[] SimilarItemProviderOrder { get; set; }
 
         public ImageOption GetImageOptions(ImageType type)
         {

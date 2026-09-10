@@ -40,10 +40,10 @@ namespace Jellyfin.LiveTv.Channels
         }
 
         /// <inheritdoc />
-        public string Name => _localization.GetLocalizedString("TaskRefreshChannels");
+        public string Name => _localization.GetLocalizedString("TasksRefreshChannels");
 
         /// <inheritdoc />
-        public string Description => _localization.GetLocalizedString("TaskRefreshChannelsDescription");
+        public string Description => _localization.GetLocalizedString("TasksRefreshChannelsDescription");
 
         /// <inheritdoc />
         public string Category => _localization.GetLocalizedString("TasksChannelsCategory");

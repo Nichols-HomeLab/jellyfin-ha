@@ -229,9 +229,6 @@ namespace Jellyfin.Server.Implementations.Migrations
                     b.Property<int?>("IndexNumber")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("InheritedParentalRatingSubValue")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int?>("InheritedParentalRatingValue")
                         .HasColumnType("INTEGER");
 
@@ -751,24 +748,6 @@ namespace Jellyfin.Server.Implementations.Migrations
                     b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
                 });
 
-            modelBuilder.Entity("Jellyfin.Database.Implementations.Entities.KeyframeData", b =>
-                {
-                    b.Property<Guid>("ItemId")
-                        .HasColumnType("TEXT");
-
-                    b.PrimitiveCollection<string>("KeyframeTicks")
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("TotalDuration")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("ItemId");
-
-                    b.ToTable("KeyframeData");
-
-                    b.HasAnnotation("Sqlite:UseSqlReturningClause", false);
-                });
-
             modelBuilder.Entity("Jellyfin.Database.Implementations.Entities.MediaSegment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1281,10 +1260,7 @@ namespace Jellyfin.Server.Implementations.Migrations
                     b.Property<int>("MaxActiveSessions")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("MaxParentalRatingScore")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("MaxParentalRatingSubScore")
+                    b.Property<int?>("MaxParentalAgeRating")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("MustUpdatePassword")
@@ -1541,17 +1517,6 @@ namespace Jellyfin.Server.Implementations.Migrations
                     b.Navigation("Item");
 
                     b.Navigation("ItemValue");
-                });
-
-            modelBuilder.Entity("Jellyfin.Database.Implementations.Entities.KeyframeData", b =>
-                {
-                    b.HasOne("Jellyfin.Database.Implementations.Entities.BaseItemEntity", "Item")
-                        .WithMany()
-                        .HasForeignKey("ItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Item");
                 });
 
             modelBuilder.Entity("Jellyfin.Database.Implementations.Entities.MediaStreamInfo", b =>

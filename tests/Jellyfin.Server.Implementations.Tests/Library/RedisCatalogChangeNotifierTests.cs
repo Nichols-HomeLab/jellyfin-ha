@@ -33,7 +33,7 @@ public sealed class RedisCatalogChangeNotifierTests
                 subscriptionAttempts++;
                 if (subscriptionAttempts == 1)
                 {
-                    throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, CommandFlags.None, "test subscription failure", null, CommandStatus.Unknown);
+                    throw new RedisConnectionException(ConnectionFailureType.UnableToConnect, "test subscription failure");
                 }
 
                 synchronized.TrySetResult();

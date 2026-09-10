@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json.Serialization;
 using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Database.Implementations.Interfaces;
@@ -325,6 +326,7 @@ namespace Jellyfin.Database.Implementations.Entities
         /// <summary>
         /// Gets the list of permissions this user has.
         /// </summary>
+        [ForeignKey("Permission_Permissions_Guid")]
         public virtual ICollection<Permission> Permissions { get; private set; }
 
         /*
@@ -337,6 +339,7 @@ namespace Jellyfin.Database.Implementations.Entities
         /// <summary>
         /// Gets the list of preferences this user has.
         /// </summary>
+        [ForeignKey("Preference_Preferences_Guid")]
         public virtual ICollection<Preference> Preferences { get; private set; }
 
         /// <inheritdoc/>

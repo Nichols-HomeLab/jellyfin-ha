@@ -79,7 +79,6 @@ public class TrickplayImagesTask : IScheduledTask
             IsVirtualItem = false,
             IsFolder = false,
             Recursive = true,
-            IncludeOwnedItems = true,
             Limit = QueryPageLimit
         };
 

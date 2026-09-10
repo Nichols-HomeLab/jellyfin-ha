@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Threading;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -9,8 +8,6 @@ namespace Jellyfin.Server.ServerSetupApp;
 /// <inheritdoc/>
 public class StartupLogger : IStartupLogger
 {
-    private static readonly AsyncLocal<StartupLogTopic?> _ambientTopic = new();
-
     private readonly StartupLogTopic? _topic;
 
     /// <summary>
@@ -20,7 +17,6 @@ public class StartupLogger : IStartupLogger
     public StartupLogger(ILogger logger)
     {
         BaseLogger = logger;
-        _topic = _ambientTopic.Value;
     }
 
     /// <summary>
@@ -42,18 +38,6 @@ public class StartupLogger : IStartupLogger
     /// Gets or Sets the underlying base logger.
     /// </summary>
     protected ILogger BaseLogger { get; set; }
-
-    /// <summary>
-    /// Makes <paramref name="topic"/> the topic that loggers created on this execution context attach to.
-    /// </summary>
-    /// <param name="topic">The topic to nest newly created loggers under.</param>
-    /// <returns>A scope that restores the previously ambient topic when disposed.</returns>
-    internal static IDisposable BeginAmbientTopic(StartupLogTopic? topic)
-    {
-        var scope = new AmbientTopicScope(_ambientTopic.Value);
-        _ambientTopic.Value = topic;
-        return scope;
-    }
 
     /// <inheritdoc/>
     public IStartupLogger BeginGroup(FormattableString logEntry)
@@ -135,21 +119,6 @@ public class StartupLogger : IStartupLogger
         else
         {
             Topic.Children.Add(startupEntry);
-        }
-    }
-
-    private sealed class AmbientTopicScope : IDisposable
-    {
-        private readonly StartupLogTopic? _previous;
-
-        public AmbientTopicScope(StartupLogTopic? previous)
-        {
-            _previous = previous;
-        }
-
-        public void Dispose()
-        {
-            _ambientTopic.Value = _previous;
         }
     }
 }

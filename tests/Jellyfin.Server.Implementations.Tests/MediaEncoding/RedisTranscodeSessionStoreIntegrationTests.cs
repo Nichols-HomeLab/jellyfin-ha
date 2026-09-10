@@ -17,12 +17,12 @@ public sealed class RedisTranscodeSessionStoreIntegrationTests
     /// <summary>
     /// Verifies create, owner fencing, retained recovery state, takeover, and cleanup.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     [Trait("Category", "IntegrationTest")]
     public async Task LeaseLifecycle_EnforcesSingleOwnerAndRetainsRecoveryCheckpoint()
     {
         var connectionString = Environment.GetEnvironmentVariable("JELLYFIN_TEST_REDIS");
-        Assert.SkipWhen(string.IsNullOrWhiteSpace(connectionString), "Set JELLYFIN_TEST_REDIS to run Redis integration tests.");
+        Skip.If(string.IsNullOrWhiteSpace(connectionString), "Set JELLYFIN_TEST_REDIS to run Redis integration tests.");
 
         using var redisManager = new RedisConnectionManager(
             () => ConnectionMultiplexer.Connect(connectionString),
@@ -46,31 +46,31 @@ public sealed class RedisTranscodeSessionStoreIntegrationTests
             SegmentPathPrefix = "/cache/stream"
         };
 
-        Assert.True(await store.TryCreateAsync(initial).ConfigureAwait(true));
-        Assert.False(await store.TryCreateAsync(initial).ConfigureAwait(true));
-        Assert.False(await store.RenewLeaseAsync(playSessionId, "node-b").ConfigureAwait(true));
-        Assert.False(await store.UpdateProgressAsync(playSessionId, "node-b", "/bad", "/bad", 99, 99).ConfigureAwait(true));
-        Assert.True(await store.UpdateProgressAsync(playSessionId, "node-a", initial.ManifestPath, initial.SegmentPathPrefix, 7, 1234).ConfigureAwait(true));
+        Assert.True(await store.TryCreateAsync(initial).ConfigureAwait(false));
+        Assert.False(await store.TryCreateAsync(initial).ConfigureAwait(false));
+        Assert.False(await store.RenewLeaseAsync(playSessionId, "node-b").ConfigureAwait(false));
+        Assert.False(await store.UpdateProgressAsync(playSessionId, "node-b", "/bad", "/bad", 99, 99).ConfigureAwait(false));
+        Assert.True(await store.UpdateProgressAsync(playSessionId, "node-a", initial.ManifestPath, initial.SegmentPathPrefix, 7, 1234).ConfigureAwait(false));
 
-        await Task.Delay(TimeSpan.FromMilliseconds(1200)).ConfigureAwait(true);
+        await Task.Delay(TimeSpan.FromMilliseconds(1200)).ConfigureAwait(false);
 
-        var expired = await store.TryGetAsync(playSessionId).ConfigureAwait(true);
+        var expired = await store.TryGetAsync(playSessionId).ConfigureAwait(false);
         Assert.NotNull(expired);
         Assert.Equal(7, expired.LastCompletedSegmentIndex);
         Assert.Equal(1234, expired.LastDurablePlaybackOffset);
         Assert.True(expired.LeaseExpiresUtc <= DateTime.UtcNow);
 
-        Assert.True(await store.TryTakeoverAsync(playSessionId, "node-b").ConfigureAwait(true));
-        Assert.False(await store.TryTakeoverAsync(playSessionId, "node-c").ConfigureAwait(true));
-        Assert.False(await store.RenewLeaseAsync(playSessionId, "node-a").ConfigureAwait(true));
-        Assert.False(await store.DeleteAsync(playSessionId, "node-a").ConfigureAwait(true));
+        Assert.True(await store.TryTakeoverAsync(playSessionId, "node-b").ConfigureAwait(false));
+        Assert.False(await store.TryTakeoverAsync(playSessionId, "node-c").ConfigureAwait(false));
+        Assert.False(await store.RenewLeaseAsync(playSessionId, "node-a").ConfigureAwait(false));
+        Assert.False(await store.DeleteAsync(playSessionId, "node-a").ConfigureAwait(false));
 
-        var recovered = await store.TryGetAsync(playSessionId).ConfigureAwait(true);
+        var recovered = await store.TryGetAsync(playSessionId).ConfigureAwait(false);
         Assert.NotNull(recovered);
         Assert.Equal("node-b", recovered.OwnerPod);
         Assert.Equal(7, recovered.LastCompletedSegmentIndex);
 
-        Assert.True(await store.DeleteAsync(playSessionId, "node-b").ConfigureAwait(true));
-        Assert.Null(await store.TryGetAsync(playSessionId).ConfigureAwait(true));
+        Assert.True(await store.DeleteAsync(playSessionId, "node-b").ConfigureAwait(false));
+        Assert.Null(await store.TryGetAsync(playSessionId).ConfigureAwait(false));
     }
 }

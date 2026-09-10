@@ -33,7 +33,7 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Users
             await _activityManager.CreateAsync(new ActivityLog(
                     string.Format(
                         CultureInfo.InvariantCulture,
-                        _localizationManager.GetServerLocalizedString("UserCreatedWithName"),
+                        _localizationManager.GetLocalizedString("UserCreatedWithName"),
                         eventArgs.Argument.Username),
                     "UserCreated",
                     eventArgs.Argument.Id))

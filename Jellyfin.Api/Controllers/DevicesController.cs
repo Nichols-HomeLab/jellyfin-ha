@@ -1,11 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
-using System.Linq;
 using System.Threading.Tasks;
-using Jellyfin.Api.Attributes;
 using Jellyfin.Api.Helpers;
-using Jellyfin.Api.ModelBinders;
 using Jellyfin.Data.Dtos;
 using Jellyfin.Data.Queries;
 using MediaBrowser.Common.Api;
@@ -23,7 +19,6 @@ namespace Jellyfin.Api.Controllers;
 /// Devices Controller.
 /// </summary>
 [Authorize(Policy = Policies.RequiresElevation)]
-[Tags("Device")]
 public class DevicesController : BaseJellyfinApiController
 {
     private readonly IDeviceManager _deviceManager;
@@ -116,31 +111,28 @@ public class DevicesController : BaseJellyfinApiController
     }
 
     /// <summary>
-    /// Deletes devices.
+    /// Deletes a device.
     /// </summary>
-    /// <param name="id">Device Ids.</param>
+    /// <param name="id">Device Id.</param>
     /// <response code="204">Device deleted.</response>
-    /// <response code="400">A requested device is invalid.</response>
-    /// <returns>A <see cref="NoContentResult"/> on success, or a <see cref="BadRequestResult"/> if a requested device is invalid.</returns>
+    /// <response code="404">Device not found.</response>
+    /// <returns>A <see cref="NoContentResult"/> on success, or a <see cref="NotFoundResult"/> if the device could not be found.</returns>
     [HttpDelete]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult> DeleteDevice([FromQuery] string[] id)
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult> DeleteDevice([FromQuery, Required] string id)
     {
-        var devices = id.Select(_deviceManager.GetDevice).ToArray();
-        if (devices.Any(f => f is null))
+        var existingDevice = _deviceManager.GetDevice(id);
+        if (existingDevice is null)
         {
-            return BadRequest();
+            return NotFound();
         }
 
-        foreach (var device in devices)
-        {
-            var sessions = _deviceManager.GetDevices(new DeviceQuery { DeviceId = device!.Id });
+        var sessions = _deviceManager.GetDevices(new DeviceQuery { DeviceId = id });
 
-            foreach (var session in sessions.Items)
-            {
-                await _sessionManager.Logout(session).ConfigureAwait(false);
-            }
+        foreach (var session in sessions.Items)
+        {
+            await _sessionManager.Logout(session).ConfigureAwait(false);
         }
 
         return NoContent();

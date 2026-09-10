@@ -515,13 +515,19 @@ namespace MediaBrowser.Controller.MediaEncoding
 
         public int HlsListSize => 0;
 
-        /// <summary>
-        /// Adds the specified reason(s) to <see cref="TranscodeReasons"/>.
-        /// </summary>
-        /// <param name="reason">The transcode reason(s) to add.</param>
-        public void AddTranscodeReason(TranscodeReason reason)
+        public bool EnableBreakOnNonKeyFrames(string videoCodec)
         {
-            _transcodeReasons = TranscodeReasons | reason;
+            if (TranscodingType != TranscodingJobType.Progressive)
+            {
+                if (IsSegmentedLiveStream)
+                {
+                    return false;
+                }
+
+                return BaseRequest.BreakOnNonKeyFrames && EncodingHelper.IsCopyCodec(videoCodec);
+            }
+
+            return false;
         }
 
         private int? GetMediaStreamCount(MediaStreamType type, int limit)
@@ -580,50 +586,62 @@ namespace MediaBrowser.Controller.MediaEncoding
 
         public string[] GetRequestedProfiles(string codec)
         {
-            var profile = BaseRequest.Profile;
-
-            if (string.IsNullOrEmpty(profile) && !string.IsNullOrEmpty(codec))
+            if (!string.IsNullOrEmpty(BaseRequest.Profile))
             {
-                profile = BaseRequest.GetOption(codec, "profile");
+                return BaseRequest.Profile.Split(_separators, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            return (profile ?? string.Empty).Split(_separators, StringSplitOptions.RemoveEmptyEntries);
+            if (!string.IsNullOrEmpty(codec))
+            {
+                var profile = BaseRequest.GetOption(codec, "profile");
+
+                if (!string.IsNullOrEmpty(profile))
+                {
+                    return profile.Split(_separators, StringSplitOptions.RemoveEmptyEntries);
+                }
+            }
+
+            return Array.Empty<string>();
         }
 
         public string[] GetRequestedRangeTypes(string codec)
         {
-            var rangetype = BaseRequest.VideoRangeType;
-
-            if (string.IsNullOrEmpty(rangetype) && !string.IsNullOrEmpty(codec))
+            if (!string.IsNullOrEmpty(BaseRequest.VideoRangeType))
             {
-                rangetype = BaseRequest.GetOption(codec, "rangetype");
+                return BaseRequest.VideoRangeType.Split(_separators, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            return (rangetype ?? string.Empty).Split(_separators, StringSplitOptions.RemoveEmptyEntries);
+            if (!string.IsNullOrEmpty(codec))
+            {
+                var rangetype = BaseRequest.GetOption(codec, "rangetype");
+
+                if (!string.IsNullOrEmpty(rangetype))
+                {
+                    return rangetype.Split(_separators, StringSplitOptions.RemoveEmptyEntries);
+                }
+            }
+
+            return Array.Empty<string>();
         }
 
         public string[] GetRequestedCodecTags(string codec)
         {
-            var codectag = BaseRequest.CodecTag;
-
-            if (string.IsNullOrEmpty(codectag) && !string.IsNullOrEmpty(codec))
+            if (!string.IsNullOrEmpty(BaseRequest.CodecTag))
             {
-                codectag = BaseRequest.GetOption(codec, "codectag");
+                return BaseRequest.CodecTag.Split(_separators, StringSplitOptions.RemoveEmptyEntries);
             }
 
-            return (codectag ?? string.Empty).Split(_separators, StringSplitOptions.RemoveEmptyEntries);
-        }
-
-        public string[] GetRequestedRotations(string codec)
-        {
-            var rotation = BaseRequest.Rotation;
-
-            if (string.IsNullOrEmpty(rotation) && !string.IsNullOrEmpty(codec))
+            if (!string.IsNullOrEmpty(codec))
             {
-                rotation = BaseRequest.GetOption(codec, "rotation");
+                var codectag = BaseRequest.GetOption(codec, "codectag");
+
+                if (!string.IsNullOrEmpty(codectag))
+                {
+                    return codectag.Split(_separators, StringSplitOptions.RemoveEmptyEntries);
+                }
             }
 
-            return (rotation ?? string.Empty).Split(_separators, StringSplitOptions.RemoveEmptyEntries);
+            return Array.Empty<string>();
         }
 
         public string GetRequestedLevel(string codec)

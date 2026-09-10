@@ -6,6 +6,7 @@ using Jellyfin.Api.Extensions;
 using Jellyfin.Api.Helpers;
 using Jellyfin.Api.ModelBinders;
 using Jellyfin.Database.Implementations.Entities;
+using Jellyfin.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.MediaEncoding;
@@ -24,7 +25,6 @@ namespace Jellyfin.Api.Controllers;
 /// </summary>
 [Route("")]
 [Authorize]
-[Tags("Session")]
 public class PlaystateController : BaseJellyfinApiController
 {
     private readonly IUserManager _userManager;
@@ -72,7 +72,6 @@ public class PlaystateController : BaseJellyfinApiController
     [HttpPost("UserPlayedItems/{itemId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [Tags("UserData")]
     public async Task<ActionResult<UserItemDataDto?>> MarkPlayedItem(
         [FromQuery] Guid? userId,
         [FromRoute, Required] Guid itemId,
@@ -139,7 +138,6 @@ public class PlaystateController : BaseJellyfinApiController
     [HttpDelete("UserPlayedItems/{itemId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [Tags("UserData")]
     public async Task<ActionResult<UserItemDataDto?>> MarkUnplayedItem(
         [FromQuery] Guid? userId,
         [FromRoute, Required] Guid itemId)
@@ -275,7 +273,6 @@ public class PlaystateController : BaseJellyfinApiController
     [HttpPost("PlayingItems/{itemId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [Obsolete("This endpoint is obsolete. Use ReportPlaybackStart instead")]
-    [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<ActionResult> OnPlaybackStart(
         [FromRoute, Required] Guid itemId,
         [FromQuery] string? mediaSourceId,
@@ -355,7 +352,6 @@ public class PlaystateController : BaseJellyfinApiController
     [HttpPost("PlayingItems/{itemId}/Progress")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [Obsolete("This endpoint is obsolete. Use ReportPlaybackProgress instead")]
-    [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<ActionResult> OnPlaybackProgress(
         [FromRoute, Required] Guid itemId,
         [FromQuery] string? mediaSourceId,
@@ -445,7 +441,6 @@ public class PlaystateController : BaseJellyfinApiController
     [HttpDelete("PlayingItems/{itemId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [Obsolete("This endpoint is obsolete. Use ReportPlaybackStop instead")]
-    [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<ActionResult> OnPlaybackStopped(
         [FromRoute, Required] Guid itemId,
         [FromQuery] string? mediaSourceId,

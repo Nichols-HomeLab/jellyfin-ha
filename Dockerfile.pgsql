@@ -1,93 +1,61 @@
-# syntax=docker/dockerfile:1
-# Compatibility build entry point; the PostgreSQL provider is now built into the server.
+ARG JELLYFIN_VERSION=10.11.11
 
-# ── Build stage ──────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/sdk:10.0 AS build
-
+FROM mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim AS build
 WORKDIR /src
 
-# Restore dependencies first (layer-cache friendly)
-COPY ["Jellyfin.sln", "global.json", "nuget.config", "Directory.Build.props", "Directory.Packages.props", "./"]
-COPY ["SharedVersion.cs", "BannedSymbols.txt", "stylecop.json", "./"]
-
-# Copy all project files so dotnet restore can resolve the full dependency graph
-COPY Emby.Naming/                                   Emby.Naming/
-COPY Emby.Photos/                                   Emby.Photos/
-COPY Emby.Server.Implementations/                  Emby.Server.Implementations/
-COPY Jellyfin.Api/                                  Jellyfin.Api/
-COPY Jellyfin.Data/                                 Jellyfin.Data/
-COPY Jellyfin.Server/                               Jellyfin.Server/
-COPY Jellyfin.Server.Implementations/              Jellyfin.Server.Implementations/
-COPY MediaBrowser.Common/                           MediaBrowser.Common/
-COPY MediaBrowser.Controller/                       MediaBrowser.Controller/
-COPY MediaBrowser.LocalMetadata/                    MediaBrowser.LocalMetadata/
-COPY MediaBrowser.MediaEncoding/                    MediaBrowser.MediaEncoding/
-COPY MediaBrowser.Model/                            MediaBrowser.Model/
-COPY MediaBrowser.Providers/                        MediaBrowser.Providers/
-COPY MediaBrowser.XbmcMetadata/                    MediaBrowser.XbmcMetadata/
-COPY src/                                           src/
+COPY . .
 
 RUN dotnet restore Jellyfin.Server/Jellyfin.Server.csproj \
-      --runtime linux-x64
+        --runtime linux-x64 \
+    && dotnet publish Jellyfin.Server/Jellyfin.Server.csproj \
+        --configuration Release \
+        --runtime linux-x64 \
+        --self-contained true \
+        --no-restore \
+        --output /out/server
 
-# Publish the server (and all transitive dependencies, including the
-# PostgreSQL provider assembly added by this fork).
-# Note: TreatWarningsAsErrors is disabled for the Docker build — StyleCop
-# analyzer violations in upstream src/ projects would otherwise block the
-# image build. StyleCop is enforced in the CI pipeline, not the Dockerfile.
-RUN dotnet publish Jellyfin.Server/Jellyfin.Server.csproj \
-      --configuration Release \
-      --runtime linux-x64 \
-      --self-contained false \
-      --no-restore \
-      -p:TreatWarningsAsErrors=false \
-      --output /app
+RUN dotnet restore Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
+    && dotnet publish Jellyfin.HotCache.Worker/Jellyfin.HotCache.Worker.csproj \
+        --configuration Release \
+        --no-restore \
+        --output /out/hot-cache-worker
 
-# Build the matching Jellyfin Web v12.0 release from an immutable source revision.
-FROM --platform=linux/amd64 node:24-bookworm-slim AS webclient
-ARG JELLYFIN_WEB_REVISION=0e83c6a724b31f3e9b5a499244331a288c060a4a
-WORKDIR /web
+WORKDIR /plugin
+COPY plugins/Jellyfin.Pgsql/ .
+
+# Build the plugin outside the Jellyfin source root so it does not inherit
+# Jellyfin's central NuGet and analyzer configuration.
+RUN dotnet restore Jellyfin.Plugin.Pgsql/Jellyfin.Plugin.Pgsql.csproj \
+    && dotnet publish Jellyfin.Plugin.Pgsql/Jellyfin.Plugin.Pgsql.csproj \
+        --configuration Release \
+        --no-restore \
+        --output /out/plugin
+
+FROM jellyfin/jellyfin:${JELLYFIN_VERSION}
+
+# The PostgreSQL provider uses pg_dump/psql for Jellyfin backup and restore.
+# Keep the client on the current PostgreSQL major version so it can connect to
+# current or older servers. xmlstarlet safely updates database.xml at startup.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates git \
- && git init . \
- && git remote add origin https://github.com/jellyfin/jellyfin-web.git \
- && git fetch --depth=1 origin "${JELLYFIN_WEB_REVISION}" \
- && git checkout --detach FETCH_HEAD \
- && rm -rf /var/lib/apt/lists/* \
- && npm ci --no-audit --no-fund \
- && npm run build:production
+    && apt-get install --yes --no-install-recommends ca-certificates curl gnupg util-linux xmlstarlet \
+    && install -d -m 0755 /usr/share/postgresql-common/pgdg \
+    && curl --fail --silent --show-error https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg \
+    && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt/ $(. /etc/os-release && echo \"${VERSION_CODENAME}\")-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends postgresql-client-18 \
+    && rm -rf /var/lib/apt/lists/*
 
-# ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
+# Publish the complete HA server. Replacing only one assembly is unsafe because
+# the HA hooks span Jellyfin.Api, MediaBrowser.Controller, and both server
+# implementation assemblies.
+COPY --from=build /out/server/ /jellyfin/
+COPY --from=build /out/hot-cache-worker/ /jellyfin/hot-cache-worker/
+COPY --from=build /out/plugin/ /jellyfin-pgsql/plugin/
+COPY plugins/Jellyfin.Pgsql/docker/database.xml /jellyfin-pgsql/database.xml
+COPY plugins/Jellyfin.Pgsql/docker/entrypoint.sh /entrypoint-pgsql.sh
 
-# Install FFmpeg and native dependencies required by SkiaSharp and fontconfig.
-# libicu, libssl, and liblttng-ust are already present in the dotnet/aspnet base image.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-      ffmpeg \
-      fontconfig \
-      libfontconfig1 \
-      libfreetype6 \
- && rm -rf /var/lib/apt/lists/*
+RUN chmod 0755 /entrypoint-pgsql.sh
 
-WORKDIR /jellyfin
-
-COPY --from=build /app .
-COPY --from=webclient /web/dist ./jellyfin-web/
-
-# Jellyfin default ports
-EXPOSE 8096
-EXPOSE 8920
-
-# Data / config volumes
-VOLUME ["/config", "/cache", "/media"]
-
-ENV JELLYFIN_DATA_DIR=/config \
-    JELLYFIN_CACHE_DIR=/cache \
-    JELLYFIN_LOG_DIR=/config/log \
-    JELLYFIN_CONFIG_DIR=/config
-
-ENTRYPOINT ["./jellyfin", \
-            "--datadir", "/config", \
-            "--cachedir", "/cache", \
-            "--webdir", "/jellyfin/jellyfin-web"]
+ENTRYPOINT ["/entrypoint-pgsql.sh"]

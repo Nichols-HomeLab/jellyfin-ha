@@ -117,6 +117,8 @@ namespace Jellyfin.Server.Implementations.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("UserId");
+
                     b.HasIndex("UserId", "ItemId", "Client", "Key")
                         .IsUnique();
 
@@ -173,6 +175,8 @@ namespace Jellyfin.Server.Implementations.Migrations
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.HasIndex("UserId", "ItemId", "Client")
                         .IsUnique();
@@ -287,17 +291,12 @@ namespace Jellyfin.Server.Implementations.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("TEXT");
-
                     b.Property<bool>("Value")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Kind")
-                        .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL");
+                    b.HasIndex("Permission_Permissions_Guid");
 
                     b.ToTable("Permissions");
                 });
@@ -318,9 +317,6 @@ namespace Jellyfin.Server.Implementations.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("INTEGER");
 
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Value")
                         .IsRequired()
                         .HasMaxLength(65535)
@@ -328,9 +324,7 @@ namespace Jellyfin.Server.Implementations.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId", "Kind")
-                        .IsUnique()
-                        .HasFilter("[UserId] IS NOT NULL");
+                    b.HasIndex("Preference_Preferences_Guid");
 
                     b.ToTable("Preferences");
                 });
@@ -437,13 +431,9 @@ namespace Jellyfin.Server.Implementations.Migrations
                     b.Property<string>("Username")
                         .IsRequired()
                         .HasMaxLength(255)
-                        .HasColumnType("TEXT")
-                        .UseCollation("NOCASE");
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("Username")
-                        .IsUnique();
 
                     b.ToTable("Users");
                 });
@@ -479,8 +469,7 @@ namespace Jellyfin.Server.Implementations.Migrations
                 {
                     b.HasOne("Jellyfin.Data.Entities.User", null)
                         .WithOne("ProfileImage")
-                        .HasForeignKey("Jellyfin.Data.Entities.ImageInfo", "UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("Jellyfin.Data.Entities.ImageInfo", "UserId");
                 });
 
             modelBuilder.Entity("Jellyfin.Data.Entities.ItemDisplayPreferences", b =>
@@ -496,16 +485,14 @@ namespace Jellyfin.Server.Implementations.Migrations
                 {
                     b.HasOne("Jellyfin.Data.Entities.User", null)
                         .WithMany("Permissions")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("Permission_Permissions_Guid");
                 });
 
             modelBuilder.Entity("Jellyfin.Data.Entities.Preference", b =>
                 {
                     b.HasOne("Jellyfin.Data.Entities.User", null)
                         .WithMany("Preferences")
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade);
+                        .HasForeignKey("Preference_Preferences_Guid");
                 });
 
             modelBuilder.Entity("Jellyfin.Data.Entities.DisplayPreferences", b =>

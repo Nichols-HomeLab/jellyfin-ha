@@ -1,7 +1,7 @@
 #pragma warning disable CS1591
 
 using System.IO;
-using Nikse.SubtitleEdit.Core.Common;
+using MediaBrowser.Model.MediaInfo;
 
 namespace MediaBrowser.MediaEncoding.Subtitles
 {
@@ -12,8 +12,8 @@ namespace MediaBrowser.MediaEncoding.Subtitles
         /// </summary>
         /// <param name="stream">The stream.</param>
         /// <param name="fileExtension">The file extension.</param>
-        /// <returns>The parsed subtitle.</returns>
-        Subtitle Parse(Stream stream, string fileExtension);
+        /// <returns>SubtitleTrackInfo.</returns>
+        SubtitleTrackInfo Parse(Stream stream, string fileExtension);
 
         /// <summary>
         /// Determines whether the file extension is supported by the parser.

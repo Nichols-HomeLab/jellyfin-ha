@@ -128,12 +128,6 @@ namespace MediaBrowser.Controller.Entities.TV
             return result;
         }
 
-        /// <inheritdoc />
-        public override string GetInheritedOriginalLanguage()
-        {
-            return OriginalLanguage ?? Series?.GetInheritedOriginalLanguage();
-        }
-
         public override string CreatePresentationUniqueKey()
         {
             if (IndexNumber.HasValue)
@@ -181,7 +175,9 @@ namespace MediaBrowser.Controller.Entities.TV
 
             var user = query.User;
 
-            var items = UserViewBuilder.Filter(GetEpisodes(user, query.DtoOptions, true), user, query, UserDataManager, LibraryManager);
+            Func<BaseItem, bool> filter = i => UserViewBuilder.Filter(i, user, query, UserDataManager, LibraryManager);
+
+            var items = GetEpisodes(user, query.DtoOptions, true).Where(filter);
 
             return PostFilterAndSort(items, query);
         }

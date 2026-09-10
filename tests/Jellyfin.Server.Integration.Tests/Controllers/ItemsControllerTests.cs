@@ -28,7 +28,7 @@ public sealed class ItemsControllerTests : IClassFixture<JellyfinApplicationFact
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-        var response = await client.GetAsync("Items", TestContext.Current.CancellationToken);
+        var response = await client.GetAsync("Items");
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
@@ -40,7 +40,7 @@ public sealed class ItemsControllerTests : IClassFixture<JellyfinApplicationFact
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-        var response = await client.GetAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()), TestContext.Current.CancellationToken);
+        var response = await client.GetAsync(string.Format(CultureInfo.InvariantCulture, format, Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 
@@ -55,9 +55,9 @@ public sealed class ItemsControllerTests : IClassFixture<JellyfinApplicationFact
 
         var userDto = await AuthHelper.GetUserDtoAsync(client);
 
-        var response = await client.GetAsync(string.Format(CultureInfo.InvariantCulture, format, userDto.Id), TestContext.Current.CancellationToken);
+        var response = await client.GetAsync(string.Format(CultureInfo.InvariantCulture, format, userDto.Id));
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        var items = await response.Content.ReadFromJsonAsync<QueryResult<BaseItemDto>>(_jsonOptions, TestContext.Current.CancellationToken);
+        var items = await response.Content.ReadFromJsonAsync<QueryResult<BaseItemDto>>(_jsonOptions);
         Assert.NotNull(items);
     }
 }

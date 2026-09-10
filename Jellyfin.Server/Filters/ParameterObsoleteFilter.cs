@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using Jellyfin.Api.Attributes;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Jellyfin.Server.Filters
@@ -21,17 +21,11 @@ namespace Jellyfin.Server.Filters
                     .OfType<ParameterObsoleteAttribute>()
                     .Any())
                 {
-                    if (operation.Parameters is null)
-                    {
-                        continue;
-                    }
-
                     foreach (var parameter in operation.Parameters)
                     {
-                        if (parameter is OpenApiParameter concreteParam
-                            && string.Equals(concreteParam.Name, parameterDescription.Name, StringComparison.Ordinal))
+                        if (parameter.Name.Equals(parameterDescription.Name, StringComparison.Ordinal))
                         {
-                            concreteParam.Deprecated = true;
+                            parameter.Deprecated = true;
                             break;
                         }
                     }

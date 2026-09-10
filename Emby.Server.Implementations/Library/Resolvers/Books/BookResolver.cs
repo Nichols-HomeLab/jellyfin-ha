@@ -1,14 +1,16 @@
+#nullable disable
+
 #pragma warning disable CS1591
 
 using System;
 using System.IO;
 using System.Linq;
-using Emby.Naming.Book;
 using Jellyfin.Data.Enums;
 using Jellyfin.Extensions;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Resolvers;
+using MediaBrowser.Model.Entities;
 
 namespace Emby.Server.Implementations.Library.Resolvers.Books
 {
@@ -16,7 +18,7 @@ namespace Emby.Server.Implementations.Library.Resolvers.Books
     {
         private readonly string[] _validExtensions = { ".azw", ".azw3", ".cb7", ".cbr", ".cbt", ".cbz", ".epub", ".mobi", ".pdf" };
 
-        protected override Book? Resolve(ItemResolveArgs args)
+        protected override Book Resolve(ItemResolveArgs args)
         {
             var collectionType = args.GetCollectionType();
 
@@ -33,26 +35,20 @@ namespace Emby.Server.Implementations.Library.Resolvers.Books
 
             var extension = Path.GetExtension(args.Path.AsSpan());
 
-            if (!_validExtensions.Contains(extension, StringComparison.OrdinalIgnoreCase))
+            if (_validExtensions.Contains(extension, StringComparison.OrdinalIgnoreCase))
             {
-                return null;
+                // It's a book
+                return new Book
+                {
+                    Path = args.Path,
+                    IsInMixedFolder = true
+                };
             }
 
-            var result = BookFileNameParser.Parse(Path.GetFileNameWithoutExtension(args.Path));
-
-            return new Book
-            {
-                Path = args.Path,
-                Name = result.Name ?? string.Empty,
-                IndexNumber = result.Index,
-                ParentIndexNumber = result.ParentIndex,
-                ProductionYear = result.Year,
-                SeriesName = result.SeriesName ?? Path.GetFileName(Path.GetDirectoryName(args.Path)),
-                IsInMixedFolder = true,
-            };
+            return null;
         }
 
-        private Book? GetBook(ItemResolveArgs args)
+        private Book GetBook(ItemResolveArgs args)
         {
             var bookFiles = args.FileSystemChildren.Where(f =>
             {
@@ -63,23 +59,15 @@ namespace Emby.Server.Implementations.Library.Resolvers.Books
                     StringComparison.OrdinalIgnoreCase);
             }).ToList();
 
-            // directory is only considered a book when it contains exactly one supported file
-            // other library structures with multiple books to a directory will get picked up as individual files
+            // Don't return a Book if there is more (or less) than one document in the directory
             if (bookFiles.Count != 1)
             {
                 return null;
             }
 
-            var result = BookFileNameParser.Parse(Path.GetFileName(args.Path));
-
             return new Book
             {
-                Path = bookFiles[0].FullName,
-                Name = result.Name ?? string.Empty,
-                IndexNumber = result.Index,
-                ParentIndexNumber = result.ParentIndex,
-                ProductionYear = result.Year,
-                SeriesName = result.SeriesName ?? string.Empty,
+                Path = bookFiles[0].FullName
             };
         }
     }

@@ -43,9 +43,8 @@ namespace Emby.Server.Implementations.Playlists
             }
 
             query.Recursive = true;
-            query.IncludeItemTypes = [BaseItemKind.Playlist];
-
-            return QueryWithPostFiltering(query);
+            query.IncludeItemTypes = new[] { BaseItemKind.Playlist };
+            return QueryWithPostFiltering2(query);
         }
 
         public override string GetClientTypeName()

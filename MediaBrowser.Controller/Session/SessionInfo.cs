@@ -28,7 +28,6 @@ namespace MediaBrowser.Controller.Session
         private readonly Lock _progressLock = new();
         private Timer _progressTimer;
         private PlaybackProgressInfo _lastProgressInfo;
-        private long? _lastPlaybackCheckInPositionTicks;
 
         private bool _disposed;
 
@@ -46,6 +45,7 @@ namespace MediaBrowser.Controller.Session
             PlayState = new PlayerStateInfo();
             SessionControllers = [];
             NowPlayingQueue = [];
+            NowPlayingQueueFullItems = [];
         }
 
         /// <summary>
@@ -124,22 +124,6 @@ namespace MediaBrowser.Controller.Session
         /// </summary>
         /// <value>The last playback check in.</value>
         public DateTime LastPlaybackCheckIn { get; set; }
-
-        /// <summary>
-        /// Gets the position reported by the client at the last playback check-in.
-        /// </summary>
-        /// <value>The position ticks, or <see langword="null"/> if the client did not report a position.</value>
-        [JsonIgnore]
-        public long? LastPlaybackCheckInPositionTicks
-        {
-            get
-            {
-                lock (_progressLock)
-                {
-                    return _lastPlaybackCheckInPositionTicks;
-                }
-            }
-        }
 
         /// <summary>
         /// Gets or sets the last paused date.
@@ -288,9 +272,15 @@ namespace MediaBrowser.Controller.Session
         public IReadOnlyList<QueueItem> NowPlayingQueue { get; set; }
 
         /// <summary>
+        /// Gets or sets the now playing queue full items.
+        /// </summary>
+        /// <value>The now playing queue full items.</value>
+        public IReadOnlyList<BaseItemDto> NowPlayingQueueFullItems { get; set; }
+
+        /// <summary>
         /// Gets or sets a value indicating whether the session has a custom device name.
         /// </summary>
-        /// <value><c>true</c> if the session has a custom device name; otherwise, <c>false</c>.</value>
+        /// <value><c>true</c> if this session has a custom device name; otherwise, <c>false</c>.</value>
         public bool HasCustomDeviceName { get; set; }
 
         /// <summary>
@@ -389,7 +379,6 @@ namespace MediaBrowser.Controller.Session
 
             lock (_progressLock)
             {
-                _lastPlaybackCheckInPositionTicks = progressInfo.PositionTicks;
                 _lastProgressInfo = progressInfo;
 
                 if (_progressTimer is null)

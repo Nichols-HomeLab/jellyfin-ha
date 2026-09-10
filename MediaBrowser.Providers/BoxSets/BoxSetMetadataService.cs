@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using MediaBrowser.Controller.Configuration;
@@ -70,18 +69,8 @@ public class BoxSetMetadataService : MetadataService<BoxSet, BoxSetInfo>
 
         if (mergeMetadataSettings)
         {
-            // Only merge LinkedChildren from metadata for external collections (not managed by Jellyfin).
-            // For internal collections, the database LinkedChildren table is the source of truth.
-            var targetPath = targetItem.Path;
-            if (!string.IsNullOrEmpty(targetPath)
-                && !FileSystem.ContainsSubPath(ServerConfigurationManager.ApplicationPaths.DataPath, targetPath))
-            {
-#pragma warning disable CS0618 // Type or member is obsolete - fallback for legacy path-based dedup
-                targetItem.LinkedChildren = sourceItem.LinkedChildren.Concat(targetItem.LinkedChildren)
-                    .DistinctBy(i => i.ItemId.HasValue && !i.ItemId.Value.Equals(Guid.Empty) ? i.ItemId.Value.ToString() : i.Path ?? string.Empty)
-                    .ToArray();
-#pragma warning restore CS0618
-            }
+            // TODO: Change to only replace when currently empty or requested. This is currently not done because the metadata service is not handling attaching collection items based on the provider responses
+            targetItem.LinkedChildren = sourceItem.LinkedChildren.Concat(targetItem.LinkedChildren).DistinctBy(i => i.Path).ToArray();
         }
     }
 

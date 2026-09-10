@@ -35,14 +35,14 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Updates
             await _activityManager.CreateAsync(new ActivityLog(
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("NameInstallFailed"),
+                    _localizationManager.GetLocalizedString("NameInstallFailed"),
                     eventArgs.InstallationInfo.Name),
                 NotificationType.InstallationFailed.ToString(),
                 Guid.Empty)
             {
                 ShortOverview = string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("VersionNumber"),
+                    _localizationManager.GetLocalizedString("VersionNumber"),
                     eventArgs.InstallationInfo.Version),
                 Overview = eventArgs.Exception.Message
             }).ConfigureAwait(false);

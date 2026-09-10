@@ -60,17 +60,11 @@ public sealed class SqliteDatabaseProvider : IJellyfinDatabaseProvider
 
         var customOptions = databaseConfiguration.CustomProviderOptions?.Options;
 
-        var sqliteConnectionBuilder = new SqliteConnectionStringBuilder
-        {
-            DataSource = GetOption(customOptions, "path", e => e, () => Path.Combine(_applicationPaths.DataPath, "jellyfin.db")),
-            // Private, not Default: sqlite3_enable_shared_cache is process-global, so a plugin
-            // enabling it makes these connections share a cache too. Contention then surfaces as
-            // SQLITE_LOCKED ("database table is locked"), which the busy handler does not cover,
-            // so busy_timeout is skipped and the command fails at CommandTimeout instead.
-            Cache = GetOption(customOptions, "cache", Enum.Parse<SqliteCacheMode>, () => SqliteCacheMode.Private),
-            Pooling = GetOption(customOptions, "pooling", e => e.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase), () => true),
-            DefaultTimeout = GetOption(customOptions, "command-timeout", int.Parse, () => 60)
-        };
+        var sqliteConnectionBuilder = new SqliteConnectionStringBuilder();
+        sqliteConnectionBuilder.DataSource = Path.Combine(_applicationPaths.DataPath, "jellyfin.db");
+        sqliteConnectionBuilder.Cache = GetOption(customOptions, "cache", Enum.Parse<SqliteCacheMode>, () => SqliteCacheMode.Default);
+        sqliteConnectionBuilder.Pooling = GetOption(customOptions, "pooling", e => e.Equals(bool.TrueString, StringComparison.OrdinalIgnoreCase), () => true);
+        sqliteConnectionBuilder.DefaultTimeout = GetOption(customOptions, "command-timeout", int.Parse, () => 30);
 
         var connectionString = sqliteConnectionBuilder.ToString();
 
@@ -83,8 +77,7 @@ public sealed class SqliteDatabaseProvider : IJellyfinDatabaseProvider
                 sqLiteOptions => sqLiteOptions.MigrationsAssembly(GetType().Assembly))
             // TODO: Remove when https://github.com/dotnet/efcore/pull/35873 is merged & released
             .ConfigureWarnings(warnings =>
-                warnings.Ignore(RelationalEventId.NonTransactionalMigrationOperationWarning)
-                    .Ignore(RelationalEventId.MultipleCollectionIncludeWarning))
+                warnings.Ignore(RelationalEventId.NonTransactionalMigrationOperationWarning))
             .AddInterceptors(new PragmaConnectionInterceptor(
                 _logger,
                 GetOption<int?>(customOptions, "cacheSize", e => int.Parse(e, CultureInfo.InvariantCulture)),
@@ -103,9 +96,17 @@ public sealed class SqliteDatabaseProvider : IJellyfinDatabaseProvider
     }
 
     /// <inheritdoc/>
-    public Task RunScheduledOptimisation(CancellationToken cancellationToken)
+    public async Task RunScheduledOptimisation(CancellationToken cancellationToken)
     {
-        return OptimizeAsync(cancellationToken);
+        var context = await DbContextFactory!.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
+        await using (context.ConfigureAwait(false))
+        {
+            await context.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE)", cancellationToken).ConfigureAwait(false);
+            await context.Database.ExecuteSqlRawAsync("PRAGMA optimize", cancellationToken).ConfigureAwait(false);
+            await context.Database.ExecuteSqlRawAsync("VACUUM", cancellationToken).ConfigureAwait(false);
+            await context.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE)", cancellationToken).ConfigureAwait(false);
+            _logger.LogInformation("jellyfin.db optimized successfully!");
+        }
     }
 
     /// <inheritdoc/>
@@ -117,37 +118,19 @@ public sealed class SqliteDatabaseProvider : IJellyfinDatabaseProvider
     /// <inheritdoc/>
     public async Task RunShutdownTask(CancellationToken cancellationToken)
     {
-        // Run before disposing the application
-        try
-        {
-            await OptimizeAsync(cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception ex)
-        {
-            // A missed optimization only costs performance, so never fail the shutdown over this.
-            _logger.LogError(ex, "Error while optimizing jellyfin.db");
-        }
-
-        SqliteConnection.ClearAllPools();
-    }
-
-    private async Task OptimizeAsync(CancellationToken cancellationToken)
-    {
         if (DbContextFactory is null)
         {
             return;
         }
 
+        // Run before disposing the application
         var context = await DbContextFactory.CreateDbContextAsync(cancellationToken).ConfigureAwait(false);
         await using (context.ConfigureAwait(false))
         {
-            await context.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE)", cancellationToken).ConfigureAwait(false);
-            await context.Database.ExecuteSqlRawAsync("VACUUM", cancellationToken).ConfigureAwait(false);
-            await context.Database.ExecuteSqlRawAsync("PRAGMA analysis_limit=0", cancellationToken).ConfigureAwait(false);
-            await context.Database.ExecuteSqlRawAsync("ANALYZE", cancellationToken).ConfigureAwait(false);
-            await context.Database.ExecuteSqlRawAsync("PRAGMA wal_checkpoint(TRUNCATE)", cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("jellyfin.db optimized successfully!");
+            await context.Database.ExecuteSqlRawAsync("PRAGMA optimize", cancellationToken).ConfigureAwait(false);
         }
+
+        SqliteConnection.ClearAllPools();
     }
 
     /// <inheritdoc/>
@@ -172,7 +155,7 @@ public sealed class SqliteDatabaseProvider : IJellyfinDatabaseProvider
     /// <inheritdoc />
     public Task RestoreBackupFast(string key, CancellationToken cancellationToken)
     {
-        // ensure there are absolutely no dangling Sqlite connections.
+        // ensure there are absolutly no dangling Sqlite connections.
         SqliteConnection.ClearAllPools();
         var path = Path.Combine(_applicationPaths.DataPath, "jellyfin.db");
         var backupFile = Path.Combine(_applicationPaths.DataPath, BackupFolderName, $"{key}_jellyfin.db");

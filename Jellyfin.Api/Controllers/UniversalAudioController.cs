@@ -29,7 +29,6 @@ namespace Jellyfin.Api.Controllers;
 /// The universal audio controller.
 /// </summary>
 [Route("")]
-[Tags("Audio")]
 public class UniversalAudioController : BaseJellyfinApiController
 {
     private readonly ILibraryManager _libraryManager;
@@ -84,6 +83,7 @@ public class UniversalAudioController : BaseJellyfinApiController
     /// <param name="maxAudioBitDepth">Optional. The maximum audio bit depth.</param>
     /// <param name="enableRemoteMedia">Optional. Whether to enable remote media.</param>
     /// <param name="enableAudioVbrEncoding">Optional. Whether to enable Audio Encoding.</param>
+    /// <param name="breakOnNonKeyFrames">Optional. Whether to break on non key frames.</param>
     /// <param name="enableRedirection">Whether to enable redirection. Defaults to true.</param>
     /// <response code="200">Audio stream returned.</response>
     /// <response code="302">Redirected to remote audio stream.</response>
@@ -102,18 +102,19 @@ public class UniversalAudioController : BaseJellyfinApiController
         [FromQuery] string? mediaSourceId,
         [FromQuery] string? deviceId,
         [FromQuery] Guid? userId,
-        [FromQuery][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? audioCodec,
+        [FromQuery] [RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? audioCodec,
         [FromQuery] int? maxAudioChannels,
         [FromQuery] int? transcodingAudioChannels,
         [FromQuery] int? maxStreamingBitrate,
         [FromQuery] int? audioBitRate,
         [FromQuery] long? startTimeTicks,
-        [FromQuery][RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? transcodingContainer,
+        [FromQuery] [RegularExpression(EncodingHelper.ContainerValidationRegexStr)] string? transcodingContainer,
         [FromQuery] MediaStreamProtocol? transcodingProtocol,
         [FromQuery] int? maxAudioSampleRate,
         [FromQuery] int? maxAudioBitDepth,
         [FromQuery] bool? enableRemoteMedia,
         [FromQuery] bool enableAudioVbrEncoding = true,
+        [FromQuery] bool breakOnNonKeyFrames = false,
         [FromQuery] bool enableRedirection = true)
     {
         userId = RequestHelpers.GetUserId(User, userId);
@@ -126,14 +127,13 @@ public class UniversalAudioController : BaseJellyfinApiController
             return NotFound();
         }
 
-        var deviceProfile = GetDeviceProfile(container, transcodingContainer, audioCodec, transcodingProtocol, transcodingAudioChannels, maxAudioSampleRate, maxAudioBitDepth, maxAudioChannels);
+        var deviceProfile = GetDeviceProfile(container, transcodingContainer, audioCodec, transcodingProtocol, breakOnNonKeyFrames, transcodingAudioChannels, maxAudioSampleRate, maxAudioBitDepth, maxAudioChannels);
 
         _logger.LogInformation("GetPostedPlaybackInfo profile: {@Profile}", deviceProfile);
 
         var info = await _mediaInfoHelper.GetPlaybackInfo(
                 item,
                 user,
-                Request,
                 mediaSourceId)
             .ConfigureAwait(false);
 
@@ -164,7 +164,7 @@ public class UniversalAudioController : BaseJellyfinApiController
                 Request.HttpContext.GetNormalizedRemoteIP());
         }
 
-        _mediaInfoHelper.SortMediaSources(info, maxStreamingBitrate, item.Id);
+        _mediaInfoHelper.SortMediaSources(info, maxStreamingBitrate);
 
         foreach (var source in info.MediaSources)
         {
@@ -208,6 +208,7 @@ public class UniversalAudioController : BaseJellyfinApiController
                 EnableAutoStreamCopy = true,
                 AllowAudioStreamCopy = true,
                 AllowVideoStreamCopy = true,
+                BreakOnNonKeyFrames = breakOnNonKeyFrames,
                 AudioSampleRate = maxAudioSampleRate,
                 MaxAudioChannels = maxAudioChannels,
                 MaxAudioBitDepth = maxAudioBitDepth,
@@ -241,6 +242,7 @@ public class UniversalAudioController : BaseJellyfinApiController
             EnableAutoStreamCopy = true,
             AllowAudioStreamCopy = true,
             AllowVideoStreamCopy = true,
+            BreakOnNonKeyFrames = breakOnNonKeyFrames,
             AudioSampleRate = maxAudioSampleRate,
             MaxAudioChannels = maxAudioChannels,
             AudioBitRate = isStatic ? null : (audioBitRate ?? maxStreamingBitrate),
@@ -261,6 +263,7 @@ public class UniversalAudioController : BaseJellyfinApiController
         string? transcodingContainer,
         string? audioCodec,
         MediaStreamProtocol? transcodingProtocol,
+        bool? breakOnNonKeyFrames,
         int? transcodingAudioChannels,
         int? maxAudioSampleRate,
         int? maxAudioBitDepth,
@@ -295,6 +298,7 @@ public class UniversalAudioController : BaseJellyfinApiController
                 Container = transcodingContainer ?? "mp3",
                 AudioCodec = audioCodec ?? "mp3",
                 Protocol = transcodingProtocol ?? MediaStreamProtocol.http,
+                BreakOnNonKeyFrames = breakOnNonKeyFrames ?? false,
                 MaxAudioChannels = transcodingAudioChannels?.ToString(CultureInfo.InvariantCulture)
             }
         };

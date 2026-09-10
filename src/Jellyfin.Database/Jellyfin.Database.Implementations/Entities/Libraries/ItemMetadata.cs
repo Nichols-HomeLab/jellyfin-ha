@@ -63,16 +63,6 @@ namespace Jellyfin.Database.Implementations.Entities.Libraries
         public string? OriginalTitle { get; set; }
 
         /// <summary>
-        /// Gets or sets the original language.
-        /// </summary>
-        /// <remarks>
-        /// Max length = 1024.
-        /// </remarks>
-        [MaxLength(1024)]
-        [StringLength(1024)]
-        public string? OriginalLanguage { get; set; }
-
-        /// <summary>
         /// Gets or sets the sort title.
         /// </summary>
         /// <remarks>

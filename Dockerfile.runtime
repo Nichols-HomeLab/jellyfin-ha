@@ -2,19 +2,22 @@
 # Runtime-only image — the .NET publish step runs on the CI host (runner),
 # not inside this Dockerfile.
 
-# Build the matching Jellyfin Web v12.0 release from an immutable source revision.
-FROM --platform=linux/amd64 node:24-bookworm-slim AS webclient
-ARG JELLYFIN_WEB_REVISION=0e83c6a724b31f3e9b5a499244331a288c060a4a
-WORKDIR /web
+# ── Web client stage ──────────────────────────────────────────────────────────
+# Install jellyfin-web via the official Jellyfin apt repo.
+# Package suffix in the bookworm repo is +deb12 (e.g. 10.11.6+deb12).
+# Web assets land at /usr/share/jellyfin/web/ — stable, prebuilt, no npm required.
+# 10.11.6 is the latest stable web client; API-compatible with the 10.12.0 server.
+FROM --platform=linux/amd64 debian:bookworm-slim AS webclient
+
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates git \
- && git init . \
- && git remote add origin https://github.com/jellyfin/jellyfin-web.git \
- && git fetch --depth=1 origin "${JELLYFIN_WEB_REVISION}" \
- && git checkout --detach FETCH_HEAD \
- && rm -rf /var/lib/apt/lists/* \
- && npm ci --no-audit --no-fund \
- && npm run build:production
+ && apt-get install -y --no-install-recommends curl gnupg ca-certificates \
+ && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key \
+    | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \
+ && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/jellyfin.gpg] https://repo.jellyfin.org/debian bookworm main" \
+    > /etc/apt/sources.list.d/jellyfin.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends "jellyfin-web=10.11.6+deb12" \
+ && rm -rf /var/lib/apt/lists/*
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
@@ -60,7 +63,7 @@ WORKDIR /jellyfin
 # Copy the pre-built publish output produced by `dotnet publish` on the CI host.
 COPY publish-output/ .
 # Copy the jellyfin-web client assets from the webclient stage.
-COPY --from=webclient /web/dist ./jellyfin-web/
+COPY --from=webclient /usr/share/jellyfin/web ./jellyfin-web/
 
 # Jellyfin default ports
 EXPOSE 8096

@@ -14,6 +14,7 @@ using Jellyfin.Server.Extensions;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Net;
 using MediaBrowser.Controller;
+using MediaBrowser.Model.IO;
 using MediaBrowser.Model.System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -24,6 +25,9 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
+using Morestachio;
+using Morestachio.Framework.IO.SingleStream;
+using Morestachio.Rendering;
 using Serilog;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
@@ -40,8 +44,7 @@ public sealed class SetupServer : IDisposable
     private readonly ILoggerFactory _loggerFactory;
     private readonly IConfiguration _startupConfiguration;
     private readonly ServerConfigurationManager _configurationManager;
-    private static volatile string _currentActivity = StartupActivity.Starting;
-    private StartupUiRenderer? _startupUiRenderer;
+    private IRenderer? _startupUiRenderer;
     private IHost? _startupServer;
     private bool _disposed;
     private bool _isUnhealthy;
@@ -74,12 +77,6 @@ public sealed class SetupServer : IDisposable
     internal static ConcurrentQueue<StartupLogTopic>? LogQueue { get; set; } = new();
 
     /// <summary>
-    /// Gets a generic, non-identifying summary of what startup is currently doing. This is shown in the
-    /// always-visible header of the startup UI to unauthenticated clients, so it never contains server specific details.
-    /// </summary>
-    internal static string CurrentActivity => _currentActivity;
-
-    /// <summary>
     /// Gets a value indicating whether Startup server is currently running.
     /// </summary>
     public bool IsAlive { get; internal set; }
@@ -90,14 +87,61 @@ public sealed class SetupServer : IDisposable
     /// <returns>A Task.</returns>
     public async Task RunAsync()
     {
-        ReportActivity(StartupActivity.Starting);
-        _startupUiRenderer = await StartupUiRenderer.CreateAsync(
-            Path.Combine(AppContext.BaseDirectory, "ServerSetupApp", "index.mstemplate.html")).ConfigureAwait(false);
+        var fileTemplate = await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "ServerSetupApp", "index.mstemplate.html")).ConfigureAwait(false);
+        _startupUiRenderer = (await ParserOptionsBuilder.New()
+            .WithTemplate(fileTemplate)
+            .WithFormatter(
+                (StartupLogTopic logEntry, IEnumerable<StartupLogTopic> children) =>
+                {
+                    if (children.Any())
+                    {
+                        var maxLevel = logEntry.LogLevel;
+                        var stack = new Stack<StartupLogTopic>(children);
+
+                        while (maxLevel != LogLevel.Error && stack.Count > 0 && (logEntry = stack.Pop()) is not null) // error is the highest inherted error level.
+                        {
+                            maxLevel = maxLevel < logEntry.LogLevel ? logEntry.LogLevel : maxLevel;
+                            foreach (var child in logEntry.Children)
+                            {
+                                stack.Push(child);
+                            }
+                        }
+
+                        return maxLevel;
+                    }
+
+                    return logEntry.LogLevel;
+                },
+                "FormatLogLevel")
+            .WithFormatter(
+                (LogLevel logLevel) =>
+                {
+                    switch (logLevel)
+                    {
+                        case LogLevel.Trace:
+                        case LogLevel.Debug:
+                        case LogLevel.None:
+                            return "success";
+                        case LogLevel.Information:
+                            return "info";
+                        case LogLevel.Warning:
+                            return "warn";
+                        case LogLevel.Error:
+                            return "danger";
+                        case LogLevel.Critical:
+                            return "danger-strong";
+                    }
+
+                    return string.Empty;
+                },
+                "ToString")
+            .BuildAndParseAsync()
+            .ConfigureAwait(false))
+            .CreateCompiledRenderer();
 
         ThrowIfDisposed();
         var retryAfterValue = TimeSpan.FromSeconds(5);
         var config = _configurationManager.GetNetworkConfiguration()!;
-        _startupServer?.Dispose();
         _startupServer = Host.CreateDefaultBuilder(["hostBuilder:reloadConfigOnChange=false"])
             .UseConsoleLifetime()
             .UseSerilog()
@@ -118,7 +162,7 @@ public sealed class SetupServer : IDisposable
                                 {
                                     var knownBindInterfaces = NetworkManager.GetInterfacesCore(_loggerFactory.CreateLogger<SetupServer>(), config.EnableIPv4, config.EnableIPv6);
                                     knownBindInterfaces = NetworkManager.FilterBindSettings(config, knownBindInterfaces.ToList(), config.EnableIPv4, config.EnableIPv6);
-                                    var bindInterfaces = NetworkManager.GetAllBindInterfaces(_loggerFactory.CreateLogger<NetworkManager>(), false, _configurationManager, knownBindInterfaces, config.EnableIPv4, config.EnableIPv6);
+                                    var bindInterfaces = NetworkManager.GetAllBindInterfaces(false, _configurationManager, knownBindInterfaces, config.EnableIPv4, config.EnableIPv6);
                                     Extensions.WebHostBuilderExtensions.SetupJellyfinWebServer(
                                         bindInterfaces,
                                         config.InternalHttpPort,
@@ -192,7 +236,6 @@ public sealed class SetupServer : IDisposable
                                         });
                                     });
 
-                                    var version = typeof(Emby.Server.Implementations.ApplicationHost).Assembly.GetName().Version!;
                                     app.Run(async (context) =>
                                     {
                                         context.Response.StatusCode = (int)HttpStatusCode.ServiceUnavailable;
@@ -205,14 +248,12 @@ public sealed class SetupServer : IDisposable
                                             new Dictionary<string, object>()
                                             {
                                                 { "isInReportingMode", _isUnhealthy },
-                                                { "currentActivity", CurrentActivity },
                                                 { "retryValue", retryAfterValue },
-                                                { "version", version },
                                                 { "logs", startupLogEntries },
                                                 { "networkManagerReady", networkManager is not null },
                                                 { "localNetworkRequest", networkManager is not null && context.Connection.RemoteIpAddress is not null && networkManager.IsInLocalNetwork(context.Connection.RemoteIpAddress) }
                                             },
-                                            context.Response.BodyWriter.AsStream())
+                                            new ByteCounterStream(context.Response.BodyWriter.AsStream(), IODefaults.FileStreamBufferSize, true, _startupUiRenderer.ParserOptions))
                                             .ConfigureAwait(false);
                                     });
                                 });
@@ -256,16 +297,6 @@ public sealed class SetupServer : IDisposable
     private void ThrowIfDisposed()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-    }
-
-    /// <summary>
-    /// Reports the current startup activity shown to all clients in the startup UI header.
-    /// Only pass generic, non-identifying text from <see cref="StartupActivity"/>.
-    /// </summary>
-    /// <param name="activity">A generic description such as <see cref="StartupActivity.PreparingMigrations"/>.</param>
-    internal static void ReportActivity(string activity)
-    {
-        _currentActivity = activity;
     }
 
     internal void SoftStop()

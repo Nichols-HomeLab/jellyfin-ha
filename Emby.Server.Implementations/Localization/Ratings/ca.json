@@ -3,7 +3,7 @@
     "supportsSubScores": true,
     "ratings": [
         {
-            "ratingStrings": ["C", "E", "G", "TV-Y", "TV-G"],
+            "ratingStrings": ["E", "G", "TV-Y", "TV-G"],
             "ratingScore": {
                 "score": 0,
                 "subScore": 0
@@ -24,17 +24,10 @@
             }
         },
         {
-            "ratingStrings": ["C8"],
-            "ratingScore": {
-                "score": 8,
-                "subScore": 0
-            }
-        },
-        {
             "ratingStrings": ["PG", "TV-PG"],
             "ratingScore": {
-                "score": 8,
-                "subScore": 1
+                "score": 9,
+                "subScore": 0
             }
         },
         {
@@ -45,7 +38,7 @@
             }
         },
         {
-            "ratingStrings": ["14+", "TV-14"],
+            "ratingStrings": ["TV-14"],
             "ratingScore": {
                 "score": 14,
                 "subScore": 1

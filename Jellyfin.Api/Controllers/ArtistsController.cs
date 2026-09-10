@@ -25,7 +25,6 @@ namespace Jellyfin.Api.Controllers;
 /// </summary>
 [Route("Artists")]
 [Authorize]
-[Tags("Artist")]
 public class ArtistsController : BaseJellyfinApiController
 {
     private readonly ILibraryManager _libraryManager;
@@ -87,7 +86,6 @@ public class ArtistsController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the artists.</returns>
     [HttpGet]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Obsolete("Use GetPersons")]
     public ActionResult<QueryResult<BaseItemDto>> GetArtists(
         [FromQuery] double? minCommunityRating,
         [FromQuery] int? startIndex,
@@ -124,13 +122,8 @@ public class ArtistsController : BaseJellyfinApiController
     {
         userId = RequestHelpers.GetUserId(User, userId);
         var dtoOptions = new DtoOptions { Fields = fields }
+            .AddClientFields(User)
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);
-
-        // Asking for a type filter has always implied wanting that type's counts back.
-        if (includeItemTypes.Length != 0 && !dtoOptions.ContainsField(ItemFields.ItemCounts))
-        {
-            dtoOptions.Fields = [.. dtoOptions.Fields, ItemFields.ItemCounts];
-        }
 
         User? user = null;
         BaseItem parentItem = _libraryManager.GetParentItem(parentId, userId);
@@ -195,11 +188,67 @@ public class ArtistsController : BaseJellyfinApiController
             }).Where(i => i is not null).Select(i => i!.Id).ToArray();
         }
 
-        query.ApplyFilters(filters);
+        foreach (var filter in filters)
+        {
+            switch (filter)
+            {
+                case ItemFilter.Dislikes:
+                    query.IsLiked = false;
+                    break;
+                case ItemFilter.IsFavorite:
+                    query.IsFavorite = true;
+                    break;
+                case ItemFilter.IsFavoriteOrLikes:
+                    query.IsFavoriteOrLiked = true;
+                    break;
+                case ItemFilter.IsFolder:
+                    query.IsFolder = true;
+                    break;
+                case ItemFilter.IsNotFolder:
+                    query.IsFolder = false;
+                    break;
+                case ItemFilter.IsPlayed:
+                    query.IsPlayed = true;
+                    break;
+                case ItemFilter.IsResumable:
+                    query.IsResumable = true;
+                    break;
+                case ItemFilter.IsUnplayed:
+                    query.IsPlayed = false;
+                    break;
+                case ItemFilter.Likes:
+                    query.IsLiked = true;
+                    break;
+            }
+        }
 
         var result = _libraryManager.GetArtists(query);
 
-        return RequestHelpers.CreateQueryResult(result, dtoOptions, _dtoService, user);
+        var dtos = result.Items.Select(i =>
+        {
+            var (baseItem, itemCounts) = i;
+            var dto = _dtoService.GetItemByNameDto(baseItem, dtoOptions, null, user);
+
+            if (includeItemTypes.Length != 0)
+            {
+                dto.ChildCount = itemCounts.ItemCount;
+                dto.ProgramCount = itemCounts.ProgramCount;
+                dto.SeriesCount = itemCounts.SeriesCount;
+                dto.EpisodeCount = itemCounts.EpisodeCount;
+                dto.MovieCount = itemCounts.MovieCount;
+                dto.TrailerCount = itemCounts.TrailerCount;
+                dto.AlbumCount = itemCounts.AlbumCount;
+                dto.SongCount = itemCounts.SongCount;
+                dto.ArtistCount = itemCounts.ArtistCount;
+            }
+
+            return dto;
+        });
+
+        return new QueryResult<BaseItemDto>(
+            query.StartIndex,
+            result.TotalRecordCount,
+            dtos.ToArray());
     }
 
     /// <summary>
@@ -241,7 +290,6 @@ public class ArtistsController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the album artists.</returns>
     [HttpGet("AlbumArtists")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Obsolete("Use GetPersons")]
     public ActionResult<QueryResult<BaseItemDto>> GetAlbumArtists(
         [FromQuery] double? minCommunityRating,
         [FromQuery] int? startIndex,
@@ -278,13 +326,8 @@ public class ArtistsController : BaseJellyfinApiController
     {
         userId = RequestHelpers.GetUserId(User, userId);
         var dtoOptions = new DtoOptions { Fields = fields }
+            .AddClientFields(User)
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);
-
-        // Asking for a type filter has always implied wanting that type's counts back.
-        if (includeItemTypes.Length != 0 && !dtoOptions.ContainsField(ItemFields.ItemCounts))
-        {
-            dtoOptions.Fields = [.. dtoOptions.Fields, ItemFields.ItemCounts];
-        }
 
         User? user = null;
         BaseItem parentItem = _libraryManager.GetParentItem(parentId, userId);
@@ -349,11 +392,67 @@ public class ArtistsController : BaseJellyfinApiController
             }).Where(i => i is not null).Select(i => i!.Id).ToArray();
         }
 
-        query.ApplyFilters(filters);
+        foreach (var filter in filters)
+        {
+            switch (filter)
+            {
+                case ItemFilter.Dislikes:
+                    query.IsLiked = false;
+                    break;
+                case ItemFilter.IsFavorite:
+                    query.IsFavorite = true;
+                    break;
+                case ItemFilter.IsFavoriteOrLikes:
+                    query.IsFavoriteOrLiked = true;
+                    break;
+                case ItemFilter.IsFolder:
+                    query.IsFolder = true;
+                    break;
+                case ItemFilter.IsNotFolder:
+                    query.IsFolder = false;
+                    break;
+                case ItemFilter.IsPlayed:
+                    query.IsPlayed = true;
+                    break;
+                case ItemFilter.IsResumable:
+                    query.IsResumable = true;
+                    break;
+                case ItemFilter.IsUnplayed:
+                    query.IsPlayed = false;
+                    break;
+                case ItemFilter.Likes:
+                    query.IsLiked = true;
+                    break;
+            }
+        }
 
         var result = _libraryManager.GetAlbumArtists(query);
 
-        return RequestHelpers.CreateQueryResult(result, dtoOptions, _dtoService, user);
+        var dtos = result.Items.Select(i =>
+        {
+            var (baseItem, itemCounts) = i;
+            var dto = _dtoService.GetItemByNameDto(baseItem, dtoOptions, null, user);
+
+            if (includeItemTypes.Length != 0)
+            {
+                dto.ChildCount = itemCounts.ItemCount;
+                dto.ProgramCount = itemCounts.ProgramCount;
+                dto.SeriesCount = itemCounts.SeriesCount;
+                dto.EpisodeCount = itemCounts.EpisodeCount;
+                dto.MovieCount = itemCounts.MovieCount;
+                dto.TrailerCount = itemCounts.TrailerCount;
+                dto.AlbumCount = itemCounts.AlbumCount;
+                dto.SongCount = itemCounts.SongCount;
+                dto.ArtistCount = itemCounts.ArtistCount;
+            }
+
+            return dto;
+        });
+
+        return new QueryResult<BaseItemDto>(
+            query.StartIndex,
+            result.TotalRecordCount,
+            dtos.ToArray());
     }
 
     /// <summary>
@@ -365,11 +464,10 @@ public class ArtistsController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the artist.</returns>
     [HttpGet("{name}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Obsolete("Use GetPerson")]
     public ActionResult<BaseItemDto> GetArtistByName([FromRoute, Required] string name, [FromQuery] Guid? userId)
     {
         userId = RequestHelpers.GetUserId(User, userId);
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
 
         var item = _libraryManager.GetArtist(name, dtoOptions);
 

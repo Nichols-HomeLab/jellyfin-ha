@@ -37,7 +37,7 @@ public class LyricDownloadFailureLogger : IEventConsumer<LyricDownloadFailureEve
         await _activityManager.CreateAsync(new ActivityLog(
             string.Format(
                 CultureInfo.InvariantCulture,
-                _localizationManager.GetServerLocalizedString("LyricDownloadFailureFromForItem"),
+                _localizationManager.GetLocalizedString("LyricDownloadFailureFromForItem"),
                 eventArgs.Provider,
                 GetItemName(eventArgs.Item)),
             "LyricDownloadFailure",

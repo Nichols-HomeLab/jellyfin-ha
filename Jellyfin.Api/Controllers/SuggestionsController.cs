@@ -23,7 +23,6 @@ namespace Jellyfin.Api.Controllers;
 /// </summary>
 [Route("")]
 [Authorize]
-[Tags("Suggestion")]
 public class SuggestionsController : BaseJellyfinApiController
 {
     private readonly IDtoService _dtoService;
@@ -78,7 +77,7 @@ public class SuggestionsController : BaseJellyfinApiController
             user = _userManager.GetUserById(requestUserId);
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         var result = _libraryManager.GetItemsResult(new InternalItemsQuery(user)
         {
             OrderBy = new[] { (ItemSortBy.Random, SortOrder.Descending) },

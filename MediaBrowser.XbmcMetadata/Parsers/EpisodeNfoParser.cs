@@ -1,7 +1,5 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Xml;
@@ -46,60 +44,41 @@ namespace MediaBrowser.XbmcMetadata.Parsers
 
             var xmlFile = File.ReadAllText(metadataFile);
 
-            // Split the nfo into its episodedetails blocks.
-            // This is needed because XBMC metadata uses multiple episodedetails blocks instead of an episodenumberend tag.
-            const string Srch = "</episodedetails>";
-            var blocks = new List<string>();
-            int index;
-            while ((index = xmlFile.IndexOf(Srch, StringComparison.OrdinalIgnoreCase)) != -1)
-            {
-                blocks.Add(xmlFile.Substring(0, index + Srch.Length));
-                xmlFile = xmlFile.Substring(index + Srch.Length);
-            }
+            var srch = "</episodedetails>";
+            var index = xmlFile.IndexOf(srch, StringComparison.OrdinalIgnoreCase);
 
-            if (blocks.Count == 0)
+            var xml = xmlFile;
+
+            if (index != -1)
             {
-                // No closing tag, let the xml reader deal with whatever is in the file
-                blocks.Add(xmlFile);
+                xml = xmlFile.Substring(0, index + srch.Length);
+                xmlFile = xmlFile.Substring(index + srch.Length);
             }
 
             // These are not going to be valid xml so no sense in causing the provider to fail and spamming the log with exceptions
             try
             {
-                if (blocks.Count == 1)
-                {
-                    ReadEpisodeDetailsFromXml(item, blocks[0], settings, cancellationToken);
-                    return;
-                }
+                // Extract episode details from the first episodedetails block
+                ReadEpisodeDetailsFromXml(item, xml, settings, cancellationToken);
 
-                // The blocks are not guaranteed to be written in ascending episode order, so parse them all
-                // and sort them before merging.
-                var episodes = blocks
-                    .Select(block =>
-                    {
-                        var episode = new MetadataResult<Episode>()
-                        {
-                            Item = new Episode()
-                        };
-
-                        ReadEpisodeDetailsFromXml(episode, block, settings, cancellationToken);
-
-                        return (Xml: block, Result: episode);
-                    })
-                    .OrderBy(episode => episode.Result.Item.IndexNumber ?? int.MaxValue)
-                    .ToList();
-
-                // Extract the details of the lowest numbered episode into the item that is returned to the caller
-                ReadEpisodeDetailsFromXml(item, episodes[0].Xml, settings, cancellationToken);
-
-                // Concatenate the name, originalTitle and overview tags of the remaining episodes with the first one
-                // and take the highest episode number as the last episode of the file
+                // Extract the last episode number from nfo
+                // Retrieves all additional episodedetails blocks from the rest of the nfo and concatenates the name, originalTitle and overview tags with the first episode
+                // This is needed because XBMC metadata uses multiple episodedetails blocks instead of episodenumberend tag
                 var name = new StringBuilder(item.Item.Name);
                 var originalTitle = new StringBuilder(item.Item.OriginalTitle);
                 var overview = new StringBuilder(item.Item.Overview);
-                for (var i = 1; i < episodes.Count; i++)
+                while ((index = xmlFile.IndexOf(srch, StringComparison.OrdinalIgnoreCase)) != -1)
                 {
-                    var additionalEpisode = episodes[i].Result;
+                    xml = xmlFile.Substring(0, index + srch.Length);
+                    xmlFile = xmlFile.Substring(index + srch.Length);
+
+                    var additionalEpisode = new MetadataResult<Episode>()
+                    {
+                        Item = new Episode()
+                    };
+
+                    // Extract episode details from additional episodedetails block
+                    ReadEpisodeDetailsFromXml(additionalEpisode, xml, settings, cancellationToken);
 
                     if (!string.IsNullOrEmpty(additionalEpisode.Item.Name))
                     {

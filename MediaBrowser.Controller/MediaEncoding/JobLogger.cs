@@ -27,9 +27,10 @@ namespace MediaBrowser.Controller.MediaEncoding
                 using (target)
                 using (reader)
                 {
-                    string line = await reader.ReadLineAsync().ConfigureAwait(false);
-                    while (line is not null && reader.BaseStream.CanRead)
+                    while (!reader.EndOfStream && reader.BaseStream.CanRead)
                     {
+                        var line = await reader.ReadLineAsync().ConfigureAwait(false);
+
                         ParseLogLine(line, state);
 
                         var bytes = Encoding.UTF8.GetBytes(Environment.NewLine + line);
@@ -49,7 +50,6 @@ namespace MediaBrowser.Controller.MediaEncoding
                         }
 
                         await target.FlushAsync().ConfigureAwait(false);
-                        line = await reader.ReadLineAsync().ConfigureAwait(false);
                     }
                 }
             }

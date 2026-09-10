@@ -39,7 +39,7 @@ namespace Emby.Server.Implementations.Sorting
                 return 0;
             }
 
-            if (x.ProductionYear is not null)
+            if (x.ProductionYear.HasValue)
             {
                 return x.ProductionYear.Value;
             }

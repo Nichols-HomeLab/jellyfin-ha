@@ -15,7 +15,6 @@ namespace MediaBrowser.Controller.Entities
                 throw new ArgumentNullException(nameof(name));
             }
 
-            name = name.Trim();
             var current = item.Tags;
 
             if (!current.Contains(name, StringComparison.OrdinalIgnoreCase))
@@ -26,7 +25,7 @@ namespace MediaBrowser.Controller.Entities
                 }
                 else
                 {
-                    item.Tags = [.. current, name];
+                    item.Tags = [..current, name];
                 }
             }
         }

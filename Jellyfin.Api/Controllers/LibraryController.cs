@@ -17,7 +17,6 @@ using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Extensions;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Common.Extensions;
-using MediaBrowser.Controller.Collections;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
@@ -48,10 +47,8 @@ namespace Jellyfin.Api.Controllers;
 public class LibraryController : BaseJellyfinApiController
 {
     private readonly IProviderManager _providerManager;
-    private readonly ISimilarItemsManager _similarItemsManager;
     private readonly ILibraryManager _libraryManager;
     private readonly IUserManager _userManager;
-    private readonly ICollectionManager _collectionManager;
     private readonly IDtoService _dtoService;
     private readonly IActivityManager _activityManager;
     private readonly ILocalizationManager _localization;
@@ -64,10 +61,8 @@ public class LibraryController : BaseJellyfinApiController
     /// Initializes a new instance of the <see cref="LibraryController"/> class.
     /// </summary>
     /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
-    /// <param name="similarItemsManager">Instance of the <see cref="ISimilarItemsManager"/> interface.</param>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
-    /// <param name="collectionManager">Instance of the <see cref="ICollectionManager"/> interface.</param>
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="activityManager">Instance of the <see cref="IActivityManager"/> interface.</param>
     /// <param name="localization">Instance of the <see cref="ILocalizationManager"/> interface.</param>
@@ -77,10 +72,8 @@ public class LibraryController : BaseJellyfinApiController
     /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     public LibraryController(
         IProviderManager providerManager,
-        ISimilarItemsManager similarItemsManager,
         ILibraryManager libraryManager,
         IUserManager userManager,
-        ICollectionManager collectionManager,
         IDtoService dtoService,
         IActivityManager activityManager,
         ILocalizationManager localization,
@@ -90,10 +83,8 @@ public class LibraryController : BaseJellyfinApiController
         IServerConfigurationManager serverConfigurationManager)
     {
         _providerManager = providerManager;
-        _similarItemsManager = similarItemsManager;
         _libraryManager = libraryManager;
         _userManager = userManager;
-        _collectionManager = collectionManager;
         _dtoService = dtoService;
         _activityManager = activityManager;
         _localization = localization;
@@ -123,18 +114,21 @@ public class LibraryController : BaseJellyfinApiController
             return NotFound();
         }
 
-        var filePath = item.Path;
-        if (item.IsFileProtocol)
-        {
-            // PhysicalFile does not work well with symlinks at the moment.
-            var resolved = FileSystemHelper.ResolveLinkTarget(filePath, returnFinalTarget: true);
-            if (resolved is not null && resolved.Exists)
-            {
-                filePath = resolved.FullName;
-            }
-        }
+        return PhysicalFile(item.Path, MimeTypes.GetMimeType(item.Path), true);
+    }
 
-        return PhysicalFile(filePath, MimeTypes.GetMimeType(filePath), true);
+    /// <summary>
+    /// Gets critic review for an item.
+    /// </summary>
+    /// <response code="200">Critic reviews returned.</response>
+    /// <returns>The list of critic reviews.</returns>
+    [HttpGet("Items/{itemId}/CriticReviews")]
+    [Authorize]
+    [Obsolete("This endpoint is obsolete.")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public ActionResult<QueryResult<BaseItemDto>> GetCriticReviews()
+    {
+        return new QueryResult<BaseItemDto>();
     }
 
     /// <summary>
@@ -198,7 +192,7 @@ public class LibraryController : BaseJellyfinApiController
             item = parent;
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         var items = themeItems
             .Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user, item))
             .ToArray();
@@ -271,7 +265,7 @@ public class LibraryController : BaseJellyfinApiController
             item = parent;
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         var items = themeItems
             .Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user, item))
             .ToArray();
@@ -466,18 +460,19 @@ public class LibraryController : BaseJellyfinApiController
             ? null
             : _userManager.GetUserById(userId.Value);
 
-        var query = new InternalItemsQuery(user)
+        var counts = new ItemCounts
         {
-            Recursive = true,
-            IsVirtualItem = false,
-            IsFavorite = isFavorite,
-            DtoOptions = new DtoOptions(false)
-            {
-                EnableImages = false
-            }
+            AlbumCount = GetCount(BaseItemKind.MusicAlbum, user, isFavorite),
+            EpisodeCount = GetCount(BaseItemKind.Episode, user, isFavorite),
+            MovieCount = GetCount(BaseItemKind.Movie, user, isFavorite),
+            SeriesCount = GetCount(BaseItemKind.Series, user, isFavorite),
+            SongCount = GetCount(BaseItemKind.Audio, user, isFavorite),
+            MusicVideoCount = GetCount(BaseItemKind.MusicVideo, user, isFavorite),
+            BoxSetCount = GetCount(BaseItemKind.BoxSet, user, isFavorite),
+            BookCount = GetCount(BaseItemKind.Book, user, isFavorite)
         };
 
-        return _libraryManager.GetItemCounts(query);
+        return counts;
     }
 
     /// <summary>
@@ -506,7 +501,7 @@ public class LibraryController : BaseJellyfinApiController
 
         var baseItemDtos = new List<BaseItemDto>();
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         BaseItem? parent = item.GetParent();
 
         while (parent is not null)
@@ -566,7 +561,7 @@ public class LibraryController : BaseJellyfinApiController
             items = items.Where(i => i.IsHidden == val).ToList();
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         var resultArray = _dtoService.GetBaseItemDtos(items, dtoOptions);
         return new QueryResult<BaseItemDto>(resultArray);
     }
@@ -733,72 +728,6 @@ public class LibraryController : BaseJellyfinApiController
     }
 
     /// <summary>
-    /// Gets the collections that include the specified item.
-    /// </summary>
-    /// <param name="itemId">The item id.</param>
-    /// <param name="userId">Optional. Filter by user id, and attach user data.</param>
-    /// <param name="startIndex">Optional. The index of the first record in the output.</param>
-    /// <param name="limit">Optional. The maximum number of records to return.</param>
-    /// <param name="fields">Optional. Specify additional fields of information to return in the output.</param>
-    /// <response code="200">Collections returned.</response>
-    /// <response code="401">User context missing.</response>
-    /// <response code="404">Item not found.</response>
-    /// <returns>The collections that contain the requested item.</returns>
-    [HttpGet("Items/{itemId}/Collections")]
-    [Authorize]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public ActionResult<QueryResult<BaseItemDto>> GetItemCollections(
-        [FromRoute, Required] Guid itemId,
-        [FromQuery] Guid? userId,
-        [FromQuery] int? startIndex,
-        [FromQuery] int? limit,
-        [FromQuery, ModelBinder(typeof(CommaDelimitedCollectionModelBinder))] ItemFields[] fields)
-    {
-        userId = RequestHelpers.GetUserId(User, userId);
-        var user = userId.IsNullOrEmpty()
-            ? null
-            : _userManager.GetUserById(userId.Value);
-
-        if (user is null)
-        {
-            return Unauthorized();
-        }
-
-        var item = _libraryManager.GetItemById<BaseItem>(itemId, user);
-        if (item is null)
-        {
-            return NotFound();
-        }
-
-        var dtoOptions = new DtoOptions { Fields = fields };
-
-        var visibleCollections = _collectionManager
-            .GetCollectionsContainingItem(user, item.Id)
-            .OrderBy(i => i.SortName, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        IEnumerable<BaseItem> pagedCollections = visibleCollections;
-        if (startIndex.HasValue)
-        {
-            pagedCollections = pagedCollections.Skip(startIndex.Value);
-        }
-
-        if (limit.HasValue)
-        {
-            pagedCollections = pagedCollections.Take(limit.Value);
-        }
-
-        var dtos = _dtoService.GetBaseItemDtos(pagedCollections.ToList(), dtoOptions, user);
-
-        return new QueryResult<BaseItemDto>(
-            startIndex,
-            visibleCollections.Count,
-            dtos);
-    }
-
-    /// <summary>
     /// Gets similar items.
     /// </summary>
     /// <param name="itemId">The item id.</param>
@@ -806,7 +735,6 @@ public class LibraryController : BaseJellyfinApiController
     /// <param name="userId">Optional. Filter by user id, and attach user data.</param>
     /// <param name="limit">Optional. The maximum number of records to return.</param>
     /// <param name="fields">Optional. Specify additional fields of information to return in the output. This allows multiple, comma delimited. Options: Budget, Chapters, DateCreated, Genres, HomePageUrl, IndexOptions, MediaStreams, Overview, ParentId, Path, People, ProviderIds, PrimaryImageAspectRatio, Revenue, SortName, Studios, Taglines, TrailerUrls.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
     /// <response code="200">Similar items returned.</response>
     /// <returns>A <see cref="QueryResult{BaseItemDto}"/> containing the similar items.</returns>
     [HttpGet("Artists/{itemId}/Similar", Name = "GetSimilarArtists")]
@@ -817,13 +745,12 @@ public class LibraryController : BaseJellyfinApiController
     [HttpGet("Trailers/{itemId}/Similar", Name = "GetSimilarTrailers")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult<QueryResult<BaseItemDto>>> GetSimilarItems(
+    public ActionResult<QueryResult<BaseItemDto>> GetSimilarItems(
         [FromRoute, Required] Guid itemId,
         [FromQuery, ModelBinder(typeof(CommaDelimitedCollectionModelBinder))] Guid[] excludeArtistIds,
         [FromQuery] Guid? userId,
         [FromQuery] int? limit,
-        [FromQuery, ModelBinder(typeof(CommaDelimitedCollectionModelBinder))] ItemFields[] fields,
-        CancellationToken cancellationToken)
+        [FromQuery, ModelBinder(typeof(CommaDelimitedCollectionModelBinder))] ItemFields[] fields)
     {
         userId = RequestHelpers.GetUserId(User, userId);
         var user = userId.IsNullOrEmpty()
@@ -844,24 +771,60 @@ public class LibraryController : BaseJellyfinApiController
             return new QueryResult<BaseItemDto>();
         }
 
-        var dtoOptions = new DtoOptions { Fields = fields };
+        var dtoOptions = new DtoOptions { Fields = fields }
+            .AddClientFields(User);
 
-        // Get library options for provider configuration
-        var libraryOptions = _libraryManager.GetLibraryOptions(item);
+        var program = item as IHasProgramAttributes;
+        bool? isMovie = item is Movie || (program is not null && program.IsMovie) || item is Trailer;
+        bool? isSeries = item is Series || (program is not null && program.IsSeries);
 
-        var itemsResult = await _similarItemsManager.GetSimilarItemsAsync(
-            item,
-            excludeArtistIds,
-            user,
-            dtoOptions,
-            limit,
-            libraryOptions,
-            cancellationToken).ConfigureAwait(false);
+        var includeItemTypes = new List<BaseItemKind>();
+        if (isMovie.Value)
+        {
+            includeItemTypes.Add(BaseItemKind.Movie);
+            if (_serverConfigurationManager.Configuration.EnableExternalContentInSuggestions)
+            {
+                includeItemTypes.Add(BaseItemKind.Trailer);
+                includeItemTypes.Add(BaseItemKind.LiveTvProgram);
+            }
+        }
+        else if (isSeries.Value)
+        {
+            includeItemTypes.Add(BaseItemKind.Series);
+        }
+        else
+        {
+            // For non series and movie types these columns are typically null
+            // isSeries = null;
+            isMovie = null;
+            includeItemTypes.Add(item.GetBaseItemKind());
+        }
+
+        var query = new InternalItemsQuery(user)
+        {
+            Genres = item.Genres,
+            Tags = item.Tags,
+            Limit = limit,
+            IncludeItemTypes = includeItemTypes.ToArray(),
+            DtoOptions = dtoOptions,
+            EnableTotalRecordCount = !isMovie ?? true,
+            EnableGroupByMetadataKey = isMovie ?? false,
+            ExcludeItemIds = [itemId],
+            OrderBy = [(ItemSortBy.Random, SortOrder.Ascending)]
+        };
+
+        // ExcludeArtistIds
+        if (excludeArtistIds.Length != 0)
+        {
+            query.ExcludeArtistIds = excludeArtistIds;
+        }
+
+        var itemsResult = _libraryManager.GetItemList(query);
 
         var returnList = _dtoService.GetBaseItemDtos(itemsResult, dtoOptions, user);
 
         return new QueryResult<BaseItemDto>(
-            0,
+            query.StartIndex,
             itemsResult.Count,
             returnList);
     }
@@ -972,17 +935,6 @@ public class LibraryController : BaseJellyfinApiController
                     .DistinctBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
                     .ToArray(),
 
-                SimilarItemProviders = plugins
-                    .Where(i => string.Equals(i.ItemType, type, StringComparison.OrdinalIgnoreCase))
-                    .SelectMany(i => i.Plugins.Where(p => p.Type == MetadataPluginType.LocalSimilarityProvider || p.Type == MetadataPluginType.SimilarityProvider))
-                    .Select(i => new LibraryOptionInfoDto
-                    {
-                        Name = i.Name,
-                        DefaultEnabled = i.Type == MetadataPluginType.LocalSimilarityProvider
-                    })
-                    .DistinctBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToArray(),
-
                 SupportedImageTypes = plugins
                     .Where(i => string.Equals(i.ItemType, type, StringComparison.OrdinalIgnoreCase))
                     .SelectMany(i => i.SupportedImageTypes ?? Array.Empty<ImageType>())
@@ -998,6 +950,24 @@ public class LibraryController : BaseJellyfinApiController
         return result;
     }
 
+    private int GetCount(BaseItemKind itemKind, User? user, bool? isFavorite)
+    {
+        var query = new InternalItemsQuery(user)
+        {
+            IncludeItemTypes = new[] { itemKind },
+            Limit = 0,
+            Recursive = true,
+            IsVirtualItem = false,
+            IsFavorite = isFavorite,
+            DtoOptions = new DtoOptions(false)
+            {
+                EnableImages = false
+            }
+        };
+
+        return _libraryManager.GetItemsResult(query).TotalRecordCount;
+    }
+
     private BaseItem? TranslateParentItem(BaseItem item, User user)
     {
         return item.GetParent() is AggregateFolder
@@ -1011,11 +981,11 @@ public class LibraryController : BaseJellyfinApiController
         try
         {
             await _activityManager.CreateAsync(new ActivityLog(
-                string.Format(CultureInfo.InvariantCulture, _localization.GetServerLocalizedString("UserDownloadingItemWithValues"), user.Username, item.Name),
+                string.Format(CultureInfo.InvariantCulture, _localization.GetLocalizedString("UserDownloadingItemWithValues"), user.Username, item.Name),
                 "UserDownloadingContent",
                 User.GetUserId())
             {
-                ShortOverview = string.Format(CultureInfo.InvariantCulture, _localization.GetServerLocalizedString("AppDeviceValues"), User.GetClient(), User.GetDevice()),
+                ShortOverview = string.Format(CultureInfo.InvariantCulture, _localization.GetLocalizedString("AppDeviceValues"), User.GetClient(), User.GetDevice()),
                 ItemId = item.Id.ToString("N", CultureInfo.InvariantCulture)
             }).ConfigureAwait(false);
         }
@@ -1033,7 +1003,7 @@ public class LibraryController : BaseJellyfinApiController
             CollectionType.playlists => new[] { "Playlist" },
             CollectionType.movies => new[] { "Movie" },
             CollectionType.tvshows => new[] { "Series", "Season", "Episode" },
-            CollectionType.books => new[] { "Book", "AudioBook" },
+            CollectionType.books => new[] { "Book" },
             CollectionType.music => new[] { "MusicArtist", "MusicAlbum", "Audio", "MusicVideo" },
             CollectionType.homevideos => new[] { "Video", "Photo" },
             CollectionType.photos => new[] { "Video", "Photo" },

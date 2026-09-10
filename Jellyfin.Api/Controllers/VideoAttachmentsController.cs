@@ -19,7 +19,6 @@ namespace Jellyfin.Api.Controllers;
 /// Attachments controller.
 /// </summary>
 [Route("Videos")]
-[Tags("Video")]
 public class VideoAttachmentsController : BaseJellyfinApiController
 {
     private readonly ILibraryManager _libraryManager;

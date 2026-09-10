@@ -25,7 +25,6 @@ namespace Jellyfin.Api.Controllers;
 /// Channels Controller.
 /// </summary>
 [Authorize]
-[Tags("Channel")]
 public class ChannelsController : BaseJellyfinApiController
 {
     private readonly IChannelManager _channelManager;
@@ -137,13 +136,45 @@ public class ChannelsController : BaseJellyfinApiController
         {
             Limit = limit,
             StartIndex = startIndex,
-            ChannelIds = [channelId],
+            ChannelIds = new[] { channelId },
             ParentId = folderId ?? Guid.Empty,
             OrderBy = RequestHelpers.GetOrderBy(sortBy, sortOrder),
             DtoOptions = new DtoOptions { Fields = fields }
         };
 
-        query.ApplyFilters(filters);
+        foreach (var filter in filters)
+        {
+            switch (filter)
+            {
+                case ItemFilter.IsFolder:
+                    query.IsFolder = true;
+                    break;
+                case ItemFilter.IsNotFolder:
+                    query.IsFolder = false;
+                    break;
+                case ItemFilter.IsUnplayed:
+                    query.IsPlayed = false;
+                    break;
+                case ItemFilter.IsPlayed:
+                    query.IsPlayed = true;
+                    break;
+                case ItemFilter.IsFavorite:
+                    query.IsFavorite = true;
+                    break;
+                case ItemFilter.IsResumable:
+                    query.IsResumable = true;
+                    break;
+                case ItemFilter.Likes:
+                    query.IsLiked = true;
+                    break;
+                case ItemFilter.Dislikes:
+                    query.IsLiked = false;
+                    break;
+                case ItemFilter.IsFavoriteOrLikes:
+                    query.IsFavoriteOrLiked = true;
+                    break;
+            }
+        }
 
         return await _channelManager.GetChannelItems(query, CancellationToken.None).ConfigureAwait(false);
     }
@@ -184,7 +215,39 @@ public class ChannelsController : BaseJellyfinApiController
             DtoOptions = new DtoOptions { Fields = fields }
         };
 
-        query.ApplyFilters(filters);
+        foreach (var filter in filters)
+        {
+            switch (filter)
+            {
+                case ItemFilter.IsFolder:
+                    query.IsFolder = true;
+                    break;
+                case ItemFilter.IsNotFolder:
+                    query.IsFolder = false;
+                    break;
+                case ItemFilter.IsUnplayed:
+                    query.IsPlayed = false;
+                    break;
+                case ItemFilter.IsPlayed:
+                    query.IsPlayed = true;
+                    break;
+                case ItemFilter.IsFavorite:
+                    query.IsFavorite = true;
+                    break;
+                case ItemFilter.IsResumable:
+                    query.IsResumable = true;
+                    break;
+                case ItemFilter.Likes:
+                    query.IsLiked = true;
+                    break;
+                case ItemFilter.Dislikes:
+                    query.IsLiked = false;
+                    break;
+                case ItemFilter.IsFavoriteOrLikes:
+                    query.IsFavoriteOrLiked = true;
+                    break;
+            }
+        }
 
         return await _channelManager.GetLatestChannelItems(query, CancellationToken.None).ConfigureAwait(false);
     }

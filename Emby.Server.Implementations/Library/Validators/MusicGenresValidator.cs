@@ -1,9 +1,6 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Jellyfin.Data.Enums;
-using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Persistence;
 using Microsoft.Extensions.Logging;
@@ -48,25 +45,17 @@ public class MusicGenresValidator
     public async Task Run(IProgress<double> progress, CancellationToken cancellationToken)
     {
         var names = _itemRepo.GetMusicGenreNames();
-        var existingMusicGenreIds = _libraryManager.GetItemIds(new InternalItemsQuery
-        {
-            IncludeItemTypes = [BaseItemKind.MusicGenre]
-        }).ToHashSet();
 
         var numComplete = 0;
         var count = names.Count;
-        var refreshed = 0;
 
         foreach (var name in names)
         {
             try
             {
                 var item = _libraryManager.GetMusicGenre(name);
-                if (!existingMusicGenreIds.Contains(item.Id))
-                {
-                    await item.RefreshMetadata(cancellationToken).ConfigureAwait(false);
-                    refreshed++;
-                }
+
+                await item.RefreshMetadata(cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -85,8 +74,6 @@ public class MusicGenresValidator
 
             progress.Report(percent);
         }
-
-        _logger.LogInformation("Refreshed metadata for {RefreshedCount} new music genres out of {TotalCount} total", refreshed, count);
 
         progress.Report(100);
     }

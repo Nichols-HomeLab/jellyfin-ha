@@ -28,16 +28,15 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
     public partial class MovieResolver : BaseVideoResolver<Video>, IMultiItemResolver
     {
         private readonly IImageProcessor _imageProcessor;
-        private readonly VideoListResolver _videoListResolver;
 
-        private static readonly CollectionType[] _validCollectionTypes =
-        [
+        private static readonly CollectionType[] _validCollectionTypes = new[]
+        {
             CollectionType.movies,
             CollectionType.homevideos,
             CollectionType.musicvideos,
             CollectionType.tvshows,
             CollectionType.photos
-        ];
+        };
 
         /// <summary>
         /// Initializes a new instance of the <see cref="MovieResolver"/> class.
@@ -46,12 +45,10 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
         /// <param name="logger">The logger.</param>
         /// <param name="namingOptions">The naming options.</param>
         /// <param name="directoryService">The directory service.</param>
-        /// <param name="videoListResolver">The video list resolver.</param>
-        public MovieResolver(IImageProcessor imageProcessor, ILogger<MovieResolver> logger, NamingOptions namingOptions, IDirectoryService directoryService, VideoListResolver videoListResolver)
+        public MovieResolver(IImageProcessor imageProcessor, ILogger<MovieResolver> logger, NamingOptions namingOptions, IDirectoryService directoryService)
             : base(logger, namingOptions, directoryService)
         {
             _imageProcessor = imageProcessor;
-            _videoListResolver = videoListResolver;
         }
 
         /// <summary>
@@ -231,7 +228,7 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
 
             if (collectionType == CollectionType.tvshows)
             {
-                return ResolveVideos<Episode>(parent, files, true, collectionType, true);
+                return ResolveVideos<Episode>(parent, files, false, collectionType, true);
             }
 
             return null;
@@ -277,7 +274,7 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
                 .Where(f => f is not null)
                 .ToList();
 
-            var resolverResult = _videoListResolver.Resolve(videoInfos, supportMultiEditions, parseName, parent.ContainingFolderPath, collectionType);
+            var resolverResult = VideoListResolver.Resolve(videoInfos, NamingOptions, supportMultiEditions, parseName, parent.ContainingFolderPath);
 
             var result = new MultiItemResolverResult
             {
@@ -305,7 +302,7 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
                     ProductionYear = video.Year,
                     Name = parseName ? video.Name : firstVideo.Name,
                     AdditionalParts = additionalParts,
-                    LocalAlternateVersions = video.AlternateVersions.Select(av => av.Files[0].Path).ToArray()
+                    LocalAlternateVersions = video.AlternateVersions.Select(i => i.Path).ToArray()
                 };
 
                 SetVideoType(videoItem, firstVideo);
@@ -334,13 +331,9 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
 
                 for (var j = 0; j < current.AlternateVersions.Count; j++)
                 {
-                    var alternate = current.AlternateVersions[j];
-                    for (var k = 0; k < alternate.Files.Count; k++)
+                    if (ContainsFile(current.AlternateVersions[j], file))
                     {
-                        if (ContainsFile(alternate.Files[k], file))
-                        {
-                            return true;
-                        }
+                        return true;
                     }
                 }
             }
@@ -376,24 +369,15 @@ namespace Emby.Server.Implementations.Library.Resolvers.Movies
                 // We need to only look at the name of this actual item (not parents)
                 var justName = item.IsInMixedFolder ? Path.GetFileName(item.Path.AsSpan()) : Path.GetFileName(item.ContainingFolderPath.AsSpan());
 
-                // The fallback filename is only used when the item isn't in a mixed folder
-                var fileName = item.IsInMixedFolder ? ReadOnlySpan<char>.Empty : Path.GetFileName(item.Path.AsSpan());
+                var tmdbid = justName.GetAttributeValue("tmdbid");
 
-                item.TrySetProviderId(MetadataProvider.Tmdb, GetIdFromNameOrPath(justName, fileName, "tmdbid"));
-                item.TrySetProviderId(MetadataProvider.Tvdb, GetIdFromNameOrPath(justName, fileName, "tvdbid"));
-
-                string GetIdFromNameOrPath(ReadOnlySpan<char> name, ReadOnlySpan<char> fallbackName, string attribute)
+                // If not in a mixed folder and ID not found in folder path, check filename
+                if (string.IsNullOrEmpty(tmdbid) && !item.IsInMixedFolder)
                 {
-                    var id = name.GetAttributeValue(attribute);
-
-                    // If not in a mixed folder and ID not found in folder path, check filename
-                    if (string.IsNullOrEmpty(id) && !item.IsInMixedFolder)
-                    {
-                        id = fallbackName.GetAttributeValue(attribute);
-                    }
-
-                    return id;
+                    tmdbid = Path.GetFileName(item.Path.AsSpan()).GetAttributeValue("tmdbid");
                 }
+
+                item.TrySetProviderId(MetadataProvider.Tmdb, tmdbid);
 
                 if (!string.IsNullOrEmpty(item.Path))
                 {

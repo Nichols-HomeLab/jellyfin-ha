@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -54,7 +56,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.BoxSets
         /// <inheritdoc />
         public async Task<IEnumerable<RemoteImageInfo>> GetImages(BaseItem item, CancellationToken cancellationToken)
         {
-            item.TryGetTmdbId(out var tmdbId);
+            var tmdbId = Convert.ToInt32(item.GetProviderId(MetadataProvider.Tmdb), CultureInfo.InvariantCulture);
 
             if (tmdbId <= 0)
             {
@@ -71,19 +73,12 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.BoxSets
                 return Enumerable.Empty<RemoteImageInfo>();
             }
 
-            var posters = collection.Images.Posters;
-            var backdrops = collection.Images.Backdrops;
-            var remoteImages = new List<RemoteImageInfo>(posters?.Count ?? 0 + backdrops?.Count ?? 0);
+            var posters = collection.Images.Posters ?? [];
+            var backdrops = collection.Images.Backdrops ?? [];
+            var remoteImages = new List<RemoteImageInfo>(posters.Count + backdrops.Count);
 
-            if (posters is not null)
-            {
-                remoteImages.AddRange(_tmdbClientManager.ConvertPostersToRemoteImageInfo(posters, language));
-            }
-
-            if (backdrops is not null)
-            {
-                remoteImages.AddRange(_tmdbClientManager.ConvertBackdropsToRemoteImageInfo(backdrops, language));
-            }
+            remoteImages.AddRange(_tmdbClientManager.ConvertPostersToRemoteImageInfo(posters, language));
+            remoteImages.AddRange(_tmdbClientManager.ConvertBackdropsToRemoteImageInfo(backdrops, language));
 
             return remoteImages;
         }

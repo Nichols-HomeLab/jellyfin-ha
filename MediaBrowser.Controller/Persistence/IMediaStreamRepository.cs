@@ -22,13 +22,6 @@ public interface IMediaStreamRepository
     IReadOnlyList<MediaStream> GetMediaStreams(MediaStreamQuery filter);
 
     /// <summary>
-    /// Gets all language codes of the provided stream type.
-    /// </summary>
-    /// <param name="mediaStreamType">The type of the media stream.</param>
-    /// <returns>IEnumerable{string}.</returns>
-    IReadOnlyList<string> GetMediaStreamLanguages(MediaStreamType mediaStreamType);
-
-    /// <summary>
     /// Saves the media streams.
     /// </summary>
     /// <param name="id">The identifier.</param>

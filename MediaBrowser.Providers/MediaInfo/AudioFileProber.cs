@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using ATL;
 using Jellyfin.Data.Enums;
 using Jellyfin.Extensions;
-using MediaBrowser.Controller.Chapters;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
 using MediaBrowser.Controller.Library;
@@ -39,7 +38,6 @@ namespace MediaBrowser.Providers.MediaInfo
         private readonly LyricResolver _lyricResolver;
         private readonly ILyricManager _lyricManager;
         private readonly IMediaStreamRepository _mediaStreamRepository;
-        private readonly IChapterManager _chapterManager;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AudioFileProber"/> class.
@@ -51,7 +49,6 @@ namespace MediaBrowser.Providers.MediaInfo
         /// <param name="lyricResolver">Instance of the <see cref="LyricResolver"/> interface.</param>
         /// <param name="lyricManager">Instance of the <see cref="ILyricManager"/> interface.</param>
         /// <param name="mediaStreamRepository">Instance of the <see cref="IMediaStreamRepository"/>.</param>
-        /// <param name="chapterManager">Instance of the <see cref="IChapterManager"/> interface.</param>
         public AudioFileProber(
             ILogger<AudioFileProber> logger,
             IMediaSourceManager mediaSourceManager,
@@ -59,8 +56,7 @@ namespace MediaBrowser.Providers.MediaInfo
             ILibraryManager libraryManager,
             LyricResolver lyricResolver,
             ILyricManager lyricManager,
-            IMediaStreamRepository mediaStreamRepository,
-            IChapterManager chapterManager)
+            IMediaStreamRepository mediaStreamRepository)
         {
             _mediaEncoder = mediaEncoder;
             _libraryManager = libraryManager;
@@ -69,7 +65,6 @@ namespace MediaBrowser.Providers.MediaInfo
             _lyricResolver = lyricResolver;
             _lyricManager = lyricManager;
             _mediaStreamRepository = mediaStreamRepository;
-            _chapterManager = chapterManager;
             ATL.Settings.DisplayValueSeparator = InternalValueSeparator;
             ATL.Settings.UseFileNameWhenNoTitle = false;
             ATL.Settings.ID3v2_separatev2v3Values = false;
@@ -104,7 +99,6 @@ namespace MediaBrowser.Providers.MediaInfo
                     new MediaInfoRequest
                     {
                         MediaType = DlnaProfileType.Audio,
-                        ExtractChapters = item is AudioBook,
                         MediaSource = new MediaSourceInfo
                         {
                             Path = path,
@@ -157,11 +151,6 @@ namespace MediaBrowser.Providers.MediaInfo
             audio.HasLyrics = mediaStreams.Any(s => s.Type == MediaStreamType.Lyric);
 
             _mediaStreamRepository.SaveMediaStreams(audio.Id, mediaStreams, cancellationToken);
-
-            if (audio is AudioBook && mediaInfo.Chapters is { Length: > 0 })
-            {
-                _chapterManager.SaveChapters(audio, mediaInfo.Chapters);
-            }
         }
 
         /// <summary>
@@ -223,6 +212,18 @@ namespace MediaBrowser.Providers.MediaInfo
                     albumArtists = albumArtists.SelectMany(a => SplitWithCustomDelimiter(a, libraryOptions.GetCustomTagDelimiters(), libraryOptions.DelimiterWhitelist)).ToArray();
                 }
 
+                foreach (var albumArtist in albumArtists)
+                {
+                    if (!string.IsNullOrWhiteSpace(albumArtist))
+                    {
+                        PeopleHelper.AddPerson(people, new PersonInfo
+                        {
+                            Name = albumArtist,
+                            Type = PersonKind.AlbumArtist
+                        });
+                    }
+                }
+
                 string[]? performers = null;
                 if (libraryOptions.PreferNonstandardArtistsTag)
                 {
@@ -243,97 +244,29 @@ namespace MediaBrowser.Providers.MediaInfo
                     performers = performers.SelectMany(p => SplitWithCustomDelimiter(p, libraryOptions.GetCustomTagDelimiters(), libraryOptions.DelimiterWhitelist)).ToArray();
                 }
 
-                var isAudioBook = audio is AudioBook;
-
-                if (isAudioBook)
+                foreach (var performer in performers)
                 {
-                    // For audiobooks: AlbumArtists/Performers = Author, NARRATOR tag = Narrator,
-                    // ILLUSTRATOR tag = Illustrator, Composer = fallback Narrator, other performers = Cast.
-                    // If album_artist is missing, fall back to artist/performers for the author role.
-                    var authorSource = albumArtists.Length > 0 ? albumArtists : performers;
-                    var authorNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var author in authorSource)
+                    if (!string.IsNullOrWhiteSpace(performer))
                     {
-                        if (!string.IsNullOrWhiteSpace(author))
+                        PeopleHelper.AddPerson(people, new PersonInfo
                         {
-                            authorNames.Add(author.Trim());
-                            PeopleHelper.AddPerson(people, new PersonInfo
-                            {
-                                Name = author.Trim(),
-                                Type = PersonKind.Author
-                            });
-                        }
-                    }
-
-                    // Composer tag = Narrator (Audiobookshelf and other tools use Composer for narrator)
-                    if (!string.IsNullOrWhiteSpace(trackComposer))
-                    {
-                        foreach (var composer in trackComposer.Split(InternalValueSeparator))
-                        {
-                            if (!string.IsNullOrWhiteSpace(composer))
-                            {
-                                PeopleHelper.AddPerson(people, new PersonInfo
-                                {
-                                    Name = composer.Trim(),
-                                    Type = PersonKind.Narrator
-                                });
-                            }
-                        }
-                    }
-
-                    // Any performers not already listed as authors get added as cast
-                    foreach (var performer in performers)
-                    {
-                        if (!string.IsNullOrWhiteSpace(performer) && !authorNames.Contains(performer.Trim()))
-                        {
-                            PeopleHelper.AddPerson(people, new PersonInfo
-                            {
-                                Name = performer.Trim(),
-                                Type = PersonKind.Actor
-                            });
-                        }
+                            Name = performer,
+                            Type = PersonKind.Artist
+                        });
                     }
                 }
-                else
+
+                if (!string.IsNullOrWhiteSpace(trackComposer))
                 {
-                    // Standard music track handling
-                    foreach (var albumArtist in albumArtists)
+                    foreach (var composer in trackComposer.Split(InternalValueSeparator))
                     {
-                        if (!string.IsNullOrWhiteSpace(albumArtist))
+                        if (!string.IsNullOrWhiteSpace(composer))
                         {
                             PeopleHelper.AddPerson(people, new PersonInfo
                             {
-                                Name = albumArtist,
-                                Type = PersonKind.AlbumArtist
+                                Name = composer,
+                                Type = PersonKind.Composer
                             });
-                        }
-                    }
-
-                    foreach (var performer in performers)
-                    {
-                        if (!string.IsNullOrWhiteSpace(performer))
-                        {
-                            PeopleHelper.AddPerson(people, new PersonInfo
-                            {
-                                Name = performer,
-                                Type = PersonKind.Artist
-                            });
-                        }
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(trackComposer))
-                    {
-                        foreach (var composer in trackComposer.Split(InternalValueSeparator))
-                        {
-                            if (!string.IsNullOrWhiteSpace(composer))
-                            {
-                                PeopleHelper.AddPerson(people, new PersonInfo
-                                {
-                                    Name = composer,
-                                    Type = PersonKind.Composer
-                                });
-                            }
                         }
                     }
                 }
@@ -426,33 +359,6 @@ namespace MediaBrowser.Providers.MediaInfo
                 }
             }
 
-            // Audiobook-specific metadata: Overview, Publisher, Series
-            if (audio is AudioBook audioBook)
-            {
-                if (!audio.LockedFields.Contains(MetadataField.Overview))
-                {
-                    var trackDescription = GetSanitizedStringTag(track.Description, audio.Path);
-                    var trackComment = GetSanitizedStringTag(track.Comment, audio.Path);
-                    var overview = !string.IsNullOrWhiteSpace(trackDescription) ? trackDescription : trackComment;
-
-                    if (!string.IsNullOrWhiteSpace(overview))
-                    {
-                        if (options.ReplaceAllMetadata || string.IsNullOrEmpty(audio.Overview))
-                        {
-                            audio.Overview = overview;
-                        }
-                    }
-                }
-
-                // Publisher → Studio
-                var trackPublisher = GetSanitizedStringTag(track.Publisher, audio.Path);
-                if (!string.IsNullOrWhiteSpace(trackPublisher)
-                    && (options.ReplaceAllMetadata || audio.Studios is null || audio.Studios.Length == 0))
-                {
-                    audio.SetStudios(new[] { trackPublisher! });
-                }
-            }
-
             TryGetSanitizedAdditionalFields(track, "REPLAYGAIN_TRACK_GAIN", out var trackGainTag);
 
             if (trackGainTag is not null)
@@ -465,24 +371,6 @@ namespace MediaBrowser.Providers.MediaInfo
                 if (float.TryParse(trackGainTag, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && float.IsFinite(value))
                 {
                     audio.NormalizationGain = value;
-                }
-            }
-
-            if (audio.AlbumEntity is not null && !audio.AlbumEntity.NormalizationGain.HasValue)
-            {
-                TryGetSanitizedAdditionalFields(track, "REPLAYGAIN_ALBUM_GAIN", out var trackAlbumGainTag);
-
-                if (trackAlbumGainTag is not null)
-                {
-                    if (trackAlbumGainTag.EndsWith("db", StringComparison.OrdinalIgnoreCase))
-                    {
-                        trackAlbumGainTag = trackAlbumGainTag[..^2].Trim();
-                    }
-
-                    if (float.TryParse(trackAlbumGainTag, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && float.IsFinite(value))
-                    {
-                        audio.AlbumEntity.NormalizationGain = value;
-                    }
                 }
             }
 
@@ -567,7 +455,7 @@ namespace MediaBrowser.Providers.MediaInfo
             var candidateUnsynchronizedLyric = supportedLyrics.FirstOrDefault(l => l.Format is LyricsInfo.LyricsFormat.UNSYNCHRONIZED or LyricsInfo.LyricsFormat.OTHER && l.UnsynchronizedLyrics is not null);
             var lyrics = candidateSynchronizedLyric is not null ? candidateSynchronizedLyric.FormatSynch() : candidateUnsynchronizedLyric?.UnsynchronizedLyrics;
             if (!string.IsNullOrWhiteSpace(lyrics)
-                && (tryExtractEmbeddedLyrics || options.ReplaceAllMetadata))
+                && tryExtractEmbeddedLyrics)
             {
                 await _lyricManager.SaveLyricAsync(audio, "lrc", lyrics).ConfigureAwait(false);
             }

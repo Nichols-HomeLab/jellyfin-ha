@@ -20,7 +20,6 @@ namespace Jellyfin.Api.Controllers;
 /// </summary>
 [Route("Items")]
 [Authorize(Policy = Policies.RequiresElevation)]
-[Tags("Library")]
 public class ItemRefreshController : BaseJellyfinApiController
 {
     private readonly ILibraryManager _libraryManager;

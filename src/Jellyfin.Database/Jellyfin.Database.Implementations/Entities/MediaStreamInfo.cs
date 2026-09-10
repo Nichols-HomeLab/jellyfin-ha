@@ -40,8 +40,6 @@ public class MediaStreamInfo
 
     public bool IsExternal { get; set; }
 
-    public bool IsOriginal { get; set; }
-
     public int? Height { get; set; }
 
     public int? Width { get; set; }

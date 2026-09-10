@@ -40,7 +40,7 @@ namespace MediaBrowser.Controller.Entities
         {
             var hasChanges = base.BeforeMetadataRefresh(replaceAllMetadata);
 
-            if (ProductionYear is null)
+            if (!ProductionYear.HasValue)
             {
                 var info = LibraryManager.ParseName(Name);
 

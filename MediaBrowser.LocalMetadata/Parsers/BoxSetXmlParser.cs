@@ -64,32 +64,32 @@ namespace MediaBrowser.LocalMetadata.Parsers
                     switch (reader.Name)
                     {
                         case "CollectionItem":
+                        {
+                            if (!reader.IsEmptyElement)
                             {
-                                if (!reader.IsEmptyElement)
+                                using (var subReader = reader.ReadSubtree())
                                 {
-                                    using (var subReader = reader.ReadSubtree())
-                                    {
-                                        var child = GetLinkedChild(subReader);
+                                    var child = GetLinkedChild(subReader);
 
-                                        if (child is not null)
-                                        {
-                                            list.Add(child);
-                                        }
+                                    if (child is not null)
+                                    {
+                                        list.Add(child);
                                     }
                                 }
-                                else
-                                {
-                                    reader.Read();
-                                }
-
-                                break;
                             }
+                            else
+                            {
+                                reader.Read();
+                            }
+
+                            break;
+                        }
 
                         default:
-                            {
-                                reader.Skip();
-                                break;
-                            }
+                        {
+                            reader.Skip();
+                            break;
+                        }
                     }
                 }
                 else

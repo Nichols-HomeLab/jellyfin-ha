@@ -25,13 +25,13 @@ namespace Jellyfin.Server.Integration.Tests
             var client = _factory.CreateClient();
 
             // Act
-            var response = await client.GetAsync("/Branding/Configuration", TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("/Branding/Configuration");
 
             // Assert
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal(MediaTypeNames.Application.Json, response.Content.Headers.ContentType?.MediaType);
             Assert.Equal(Encoding.UTF8.BodyName, response.Content.Headers.ContentType?.CharSet);
-            await response.Content.ReadFromJsonAsync<BrandingOptions>(TestContext.Current.CancellationToken);
+            await response.Content.ReadFromJsonAsync<BrandingOptions>();
         }
 
         [Theory]
@@ -43,7 +43,7 @@ namespace Jellyfin.Server.Integration.Tests
             var client = _factory.CreateClient();
 
             // Act
-            var response = await client.GetAsync(url, TestContext.Current.CancellationToken);
+            var response = await client.GetAsync(url);
 
             // Assert
             Assert.True(response.IsSuccessStatusCode);

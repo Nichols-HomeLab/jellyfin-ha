@@ -24,7 +24,7 @@ public sealed class PluginsControllerTests : IClassFixture<JellyfinApplicationFa
     {
         var client = _factory.CreateClient();
 
-        var response = await client.GetAsync("/Plugins", TestContext.Current.CancellationToken);
+        var response = await client.GetAsync("/Plugins");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -35,11 +35,11 @@ public sealed class PluginsControllerTests : IClassFixture<JellyfinApplicationFa
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-        var response = await client.GetAsync("/Plugins", TestContext.Current.CancellationToken);
+        var response = await client.GetAsync("/Plugins");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(MediaTypeNames.Application.Json, response.Content.Headers.ContentType?.MediaType);
         Assert.Equal(Encoding.UTF8.BodyName, response.Content.Headers.ContentType?.CharSet);
-        _ = await response.Content.ReadFromJsonAsync<PluginInfo[]>(JsonDefaults.Options, TestContext.Current.CancellationToken);
+        _ = await response.Content.ReadFromJsonAsync<PluginInfo[]>(JsonDefaults.Options);
     }
 }

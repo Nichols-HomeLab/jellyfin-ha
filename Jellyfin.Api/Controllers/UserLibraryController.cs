@@ -13,7 +13,6 @@ using Jellyfin.Extensions;
 using MediaBrowser.Controller.Dto;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Audio;
-using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Model.Dto;
@@ -31,18 +30,14 @@ namespace Jellyfin.Api.Controllers;
 /// </summary>
 [Route("")]
 [Authorize]
-[Tags("Library")]
 public class UserLibraryController : BaseJellyfinApiController
 {
-    private static readonly TimeSpan RefreshOnDemandTimeout = TimeSpan.FromSeconds(3);
-
     private readonly IUserManager _userManager;
     private readonly IUserDataManager _userDataRepository;
     private readonly ILibraryManager _libraryManager;
     private readonly IDtoService _dtoService;
     private readonly IUserViewManager _userViewManager;
     private readonly IFileSystem _fileSystem;
-    private readonly IProviderManager _providerManager;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UserLibraryController"/> class.
@@ -53,15 +48,13 @@ public class UserLibraryController : BaseJellyfinApiController
     /// <param name="dtoService">Instance of the <see cref="IDtoService"/> interface.</param>
     /// <param name="userViewManager">Instance of the <see cref="IUserViewManager"/> interface.</param>
     /// <param name="fileSystem">Instance of the <see cref="IFileSystem"/> interface.</param>
-    /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
     public UserLibraryController(
         IUserManager userManager,
         IUserDataManager userDataRepository,
         ILibraryManager libraryManager,
         IDtoService dtoService,
         IUserViewManager userViewManager,
-        IFileSystem fileSystem,
-        IProviderManager providerManager)
+        IFileSystem fileSystem)
     {
         _userManager = userManager;
         _userDataRepository = userDataRepository;
@@ -69,7 +62,6 @@ public class UserLibraryController : BaseJellyfinApiController
         _dtoService = dtoService;
         _userViewManager = userViewManager;
         _fileSystem = fileSystem;
-        _providerManager = providerManager;
     }
 
     /// <summary>
@@ -100,9 +92,9 @@ public class UserLibraryController : BaseJellyfinApiController
             return NotFound();
         }
 
-        await RefreshOnDemandIfNeeded(item).ConfigureAwait(false);
+        await RefreshItemOnDemandIfNeeded(item).ConfigureAwait(false);
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
 
         return _dtoService.GetBaseItemDto(item, dtoOptions, user);
     }
@@ -141,7 +133,7 @@ public class UserLibraryController : BaseJellyfinApiController
         }
 
         var item = _libraryManager.GetUserRootFolder();
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         return _dtoService.GetBaseItemDto(item, dtoOptions, user);
     }
 
@@ -188,7 +180,7 @@ public class UserLibraryController : BaseJellyfinApiController
         }
 
         var items = await _libraryManager.GetIntros(item, user).ConfigureAwait(false);
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
         var dtos = items.Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user)).ToArray();
 
         return new QueryResult<BaseItemDto>(dtos);
@@ -219,7 +211,6 @@ public class UserLibraryController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the <see cref="UserItemDataDto"/>.</returns>
     [HttpPost("UserFavoriteItems/{itemId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Tags("UserData")]
     public ActionResult<UserItemDataDto> MarkFavoriteItem(
         [FromQuery] Guid? userId,
         [FromRoute, Required] Guid itemId)
@@ -267,7 +258,6 @@ public class UserLibraryController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the <see cref="UserItemDataDto"/>.</returns>
     [HttpDelete("UserFavoriteItems/{itemId}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Tags("UserData")]
     public ActionResult<UserItemDataDto> UnmarkFavoriteItem(
         [FromQuery] Guid? userId,
         [FromRoute, Required] Guid itemId)
@@ -315,7 +305,6 @@ public class UserLibraryController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the <see cref="UserItemDataDto"/>.</returns>
     [HttpDelete("UserItems/{itemId}/Rating")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Tags("UserData")]
     public ActionResult<UserItemDataDto?> DeleteUserItemRating(
         [FromQuery] Guid? userId,
         [FromRoute, Required] Guid itemId)
@@ -364,7 +353,6 @@ public class UserLibraryController : BaseJellyfinApiController
     /// <returns>An <see cref="OkResult"/> containing the <see cref="UserItemDataDto"/>.</returns>
     [HttpPost("UserItems/{itemId}/Rating")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    [Tags("UserData")]
     public ActionResult<UserItemDataDto?> UpdateUserItemRating(
         [FromQuery] Guid? userId,
         [FromRoute, Required] Guid itemId,
@@ -434,9 +422,15 @@ public class UserLibraryController : BaseJellyfinApiController
             return NotFound();
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
+        if (item is IHasTrailers hasTrailers)
+        {
+            var trailers = hasTrailers.LocalTrailers;
+            return Ok(_dtoService.GetBaseItemDtos(trailers, dtoOptions, user, item).AsEnumerable());
+        }
 
-        return Ok(item.GetExtras([ExtraType.Trailer], user)
+        return Ok(item.GetExtras()
+            .Where(e => e.ExtraType == ExtraType.Trailer)
             .Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user, item)));
     }
 
@@ -484,10 +478,10 @@ public class UserLibraryController : BaseJellyfinApiController
             return NotFound();
         }
 
-        var dtoOptions = new DtoOptions();
+        var dtoOptions = new DtoOptions().AddClientFields(User);
 
         return Ok(item
-            .GetExtras(user)
+            .GetExtras()
             .Where(i => i.ExtraType.HasValue && BaseItem.DisplayExtraTypes.Contains(i.ExtraType.Value))
             .Select(i => _dtoService.GetBaseItemDto(i, dtoOptions, user, item)));
     }
@@ -555,6 +549,7 @@ public class UserLibraryController : BaseJellyfinApiController
         }
 
         var dtoOptions = new DtoOptions { Fields = fields }
+            .AddClientFields(User)
             .AddAdditionalDtoOptions(enableImages, enableUserData, imageTypeLimit, enableImageTypes);
 
         var list = _userViewManager.GetLatestItems(
@@ -569,35 +564,25 @@ public class UserLibraryController : BaseJellyfinApiController
             },
             dtoOptions);
 
-        var resolvedItems = new BaseItem[list.Count];
-        var childCounts = new int[list.Count];
-        for (int i = 0; i < list.Count; i++)
+        var dtos = list.Select(i =>
         {
-            var tuple = list[i];
-            var item = tuple.Item2[0];
+            var item = i.Item2[0];
             var childCount = 0;
 
-            if (tuple.Item1 is not null && (tuple.Item2.Count > 1 || tuple.Item1 is MusicAlbum))
+            if (i.Item1 is not null && (i.Item2.Count > 1 || i.Item1 is MusicAlbum))
             {
-                item = tuple.Item1;
-                childCount = tuple.Item2.Count;
+                item = i.Item1;
+                childCount = i.Item2.Count;
             }
 
-            resolvedItems[i] = item;
-            childCounts[i] = childCount;
-        }
+            var dto = _dtoService.GetBaseItemDto(item, dtoOptions, user);
 
-        // Fetch DTOs without visibility check since we've already done that in GetLatestItems and restore child counts afterwards
-        var dtos = _dtoService.GetBaseItemDtos(resolvedItems, dtoOptions, user, skipVisibilityCheck: true);
-        for (int i = 0; i < dtos.Count; i++)
-        {
-            if (childCounts[i] > 0)
-            {
-                dtos[i].ChildCount = childCounts[i];
-            }
-        }
+            dto.ChildCount = childCount;
 
-        return Ok(dtos.AsEnumerable());
+            return dto;
+        });
+
+        return Ok(dtos);
     }
 
     /// <summary>
@@ -645,36 +630,24 @@ public class UserLibraryController : BaseJellyfinApiController
             limit,
             groupItems);
 
-    private async Task RefreshOnDemandIfNeeded(BaseItem item)
+    private async Task RefreshItemOnDemandIfNeeded(BaseItem item)
     {
-        if (item is not Person)
+        if (item is Person)
         {
-            return;
-        }
+            var hasMetadata = !string.IsNullOrWhiteSpace(item.Overview) && item.HasImage(ImageType.Primary);
+            var performFullRefresh = !hasMetadata && (DateTime.UtcNow - item.DateLastRefreshed).TotalDays >= 3;
 
-        var hasMetadata = !string.IsNullOrWhiteSpace(item.Overview) && item.HasImage(ImageType.Primary);
-        if (hasMetadata || (DateTime.UtcNow - item.DateLastRefreshed).TotalDays < 3)
-        {
-            return;
-        }
+            if (!hasMetadata)
+            {
+                var options = new MetadataRefreshOptions(new DirectoryService(_fileSystem))
+                {
+                    MetadataRefreshMode = MetadataRefreshMode.FullRefresh,
+                    ImageRefreshMode = MetadataRefreshMode.FullRefresh,
+                    ForceSave = performFullRefresh
+                };
 
-        var options = new MetadataRefreshOptions(new DirectoryService(_fileSystem))
-        {
-            MetadataRefreshMode = MetadataRefreshMode.FullRefresh,
-            ImageRefreshMode = MetadataRefreshMode.FullRefresh,
-            ForceSave = true
-        };
-
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(HttpContext.RequestAborted);
-        timeout.CancelAfter(RefreshOnDemandTimeout);
-
-        try
-        {
-            await item.RefreshMetadata(options, timeout.Token).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!HttpContext.RequestAborted.IsCancellationRequested)
-        {
-            _providerManager.QueueRefresh(item.Id, options, RefreshPriority.High);
+                await item.RefreshMetadata(options, CancellationToken.None).ConfigureAwait(false);
+            }
         }
     }
 

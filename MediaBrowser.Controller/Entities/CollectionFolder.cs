@@ -45,11 +45,6 @@ namespace MediaBrowser.Controller.Entities
         }
 
         /// <summary>
-        /// Event raised when library options are updated for any collection folder.
-        /// </summary>
-        public static event EventHandler<LibraryOptionsUpdatedEventArgs> LibraryOptionsUpdated;
-
-        /// <summary>
         /// Gets the display preferences id.
         /// </summary>
         /// <remarks>
@@ -79,27 +74,14 @@ namespace MediaBrowser.Controller.Entities
         public CollectionType? CollectionType { get; set; }
 
         /// <summary>
-        /// Gets or sets the item's children.
+        /// Gets the item's children.
         /// </summary>
         /// <remarks>
         /// Our children are actually just references to the ones in the physical root...
-        /// Setting to null propagates invalidation to physical folders since the getter
-        /// always delegates to <see cref="GetActualChildren"/> and never reads the backing field.
         /// </remarks>
         /// <value>The actual children.</value>
         [JsonIgnore]
-        public override IEnumerable<BaseItem> Children
-        {
-            get => GetActualChildren();
-            set
-            {
-                // The getter delegates to physical folders, so invalidate their caches.
-                foreach (var folder in GetPhysicalFolders(true))
-                {
-                    folder.Children = null;
-                }
-            }
-        }
+        public override IEnumerable<BaseItem> Children => GetActualChildren();
 
         [JsonIgnore]
         public override bool SupportsPeople => false;
@@ -186,8 +168,6 @@ namespace MediaBrowser.Controller.Entities
             }
 
             XmlSerializer.SerializeToFile(clone, GetLibraryOptionsPath(path));
-
-            LibraryOptionsUpdated?.Invoke(null, new LibraryOptionsUpdatedEventArgs(path, options));
         }
 
         public static void OnCollectionFolderChange()

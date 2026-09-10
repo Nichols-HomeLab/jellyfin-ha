@@ -39,50 +39,27 @@ namespace Emby.Server.Implementations.Cryptography
         {
             if (string.Equals(hash.Id, "PBKDF2", StringComparison.Ordinal))
             {
-                var iterations = GetIterationsParameter(hash);
                 return hash.Hash.SequenceEqual(
                     Rfc2898DeriveBytes.Pbkdf2(
                         password,
                         hash.Salt,
-                        iterations,
+                        int.Parse(hash.Parameters["iterations"], CultureInfo.InvariantCulture),
                         HashAlgorithmName.SHA1,
                         32));
             }
 
             if (string.Equals(hash.Id, "PBKDF2-SHA512", StringComparison.Ordinal))
             {
-                var iterations = GetIterationsParameter(hash);
                 return hash.Hash.SequenceEqual(
                     Rfc2898DeriveBytes.Pbkdf2(
                         password,
                         hash.Salt,
-                        iterations,
+                        int.Parse(hash.Parameters["iterations"], CultureInfo.InvariantCulture),
                         HashAlgorithmName.SHA512,
                         DefaultOutputLength));
             }
 
             throw new NotSupportedException($"Can't verify hash with id: {hash.Id}");
-        }
-
-        /// <summary>
-        /// Extracts and validates the iterations parameter from a password hash.
-        /// </summary>
-        /// <param name="hash">The password hash containing parameters.</param>
-        /// <returns>The number of iterations.</returns>
-        /// <exception cref="FormatException">Thrown when iterations parameter is missing or invalid.</exception>
-        private static int GetIterationsParameter(PasswordHash hash)
-        {
-            if (!hash.Parameters.TryGetValue("iterations", out var iterationsStr))
-            {
-                throw new FormatException($"Password hash with id '{hash.Id}' is missing required 'iterations' parameter.");
-            }
-
-            if (!int.TryParse(iterationsStr, CultureInfo.InvariantCulture, out var iterations))
-            {
-                throw new FormatException($"Password hash with id '{hash.Id}' has invalid 'iterations' parameter: '{iterationsStr}'.");
-            }
-
-            return iterations;
         }
 
         /// <inheritdoc />

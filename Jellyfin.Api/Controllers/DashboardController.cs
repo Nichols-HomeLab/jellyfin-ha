@@ -20,7 +20,6 @@ namespace Jellyfin.Api.Controllers;
 /// The dashboard controller.
 /// </summary>
 [Route("")]
-[Tags("Plugin")]
 public class DashboardController : BaseJellyfinApiController
 {
     private readonly ILogger<DashboardController> _logger;

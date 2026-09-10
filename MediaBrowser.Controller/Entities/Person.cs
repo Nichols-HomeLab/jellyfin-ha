@@ -5,7 +5,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
-using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Extensions;
 using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging;
@@ -76,16 +75,6 @@ namespace MediaBrowser.Controller.Entities
             return false;
         }
 
-        /// <inheritdoc />
-        /// <remarks>
-        /// People don't carry the tags of the media they appear in, so the allowed tags check
-        /// is skipped for them; otherwise no person would be visible to users with allowed tags configured.
-        /// </remarks>
-        public override bool IsVisible(User user, bool skipAllowedTagsCheck = false)
-        {
-            return base.IsVisible(user, true);
-        }
-
         public override bool IsSaveLocalMetadataEnabled()
         {
             return true;
@@ -98,7 +87,10 @@ namespace MediaBrowser.Controller.Entities
 
         public static string GetPath(string name, bool normalizeName)
         {
-            var validFilename = normalizeName ? GetItemByNameFolderName(name) : name;
+            // Trim the period at the end because windows will have a hard time with that
+            var validFilename = normalizeName ?
+                FileSystem.GetValidFilename(name).Trim().TrimEnd('.') :
+                name;
 
             string subFolderPrefix = null;
 

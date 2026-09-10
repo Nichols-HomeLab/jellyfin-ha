@@ -14,6 +14,8 @@ namespace MediaBrowser.Controller.Authentication
 
         Task<ProviderAuthenticationResult> Authenticate(string username, string password);
 
+        bool HasPassword(User user);
+
         Task ChangePassword(User user, string newPassword);
     }
 

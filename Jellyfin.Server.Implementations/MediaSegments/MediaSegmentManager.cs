@@ -102,7 +102,7 @@ public class MediaSegmentManager : IMediaSegmentManager
         var catalogWriteToken = catalogWrite.Token;
         var changed = false;
         var providers = _segmentProviders
-            .Where(e => !libraryOptions.DisabledMediaSegmentProviders.Contains(e.Name, StringComparer.OrdinalIgnoreCase))
+            .Where(e => !libraryOptions.DisabledMediaSegmentProviders.Contains(GetProviderId(e.Name)))
             .OrderBy(i =>
                 {
                     var index = libraryOptions.MediaSegmentProviderOrder.IndexOf(i.Name);
@@ -129,8 +129,6 @@ public class MediaSegmentManager : IMediaSegmentManager
 
             foreach (var provider in providers)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
                 if (!await provider.Supports(baseItem).ConfigureAwait(false))
                 {
                     _logger.LogDebug("Media Segment provider {ProviderName} does not support item with path {MediaPath}", provider.Name, baseItem.Path);
@@ -200,11 +198,6 @@ public class MediaSegmentManager : IMediaSegmentManager
                 catch (OperationCanceledException) when (catalogWriteToken.IsCancellationRequested)
                 {
                     throw;
-                }
-                catch (Exception ex) when (catalogWriteToken.IsCancellationRequested)
-                {
-                    _logger.LogDebug(ex, "Provider {ProviderName} aborted segment extraction for {MediaPath} due to shutdown", provider.Name, baseItem.Path);
-                    break;
                 }
                 catch (Exception ex)
                 {
@@ -287,18 +280,6 @@ public class MediaSegmentManager : IMediaSegmentManager
     public async Task DeleteSegmentsAsync(Guid itemId, CancellationToken cancellationToken)
     {
         using var catalogWrite = _catalogOwnership.CreateCatalogWriteCancellationSource(cancellationToken);
-        foreach (var provider in _segmentProviders)
-        {
-            try
-            {
-                await provider.CleanupExtractedData(itemId, catalogWrite.Token).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Provider {ProviderName} failed to clean up extracted data for item {ItemId}", provider.Name, itemId);
-            }
-        }
-
         var db = await _dbProvider.CreateDbContextAsync(catalogWrite.Token).ConfigureAwait(false);
         await using (db.ConfigureAwait(false))
         {
@@ -333,7 +314,7 @@ public class MediaSegmentManager : IMediaSegmentManager
             if (filterByProvider)
             {
                 var providerIds = _segmentProviders
-                    .Where(e => !libraryOptions.DisabledMediaSegmentProviders.Contains(e.Name, StringComparer.OrdinalIgnoreCase))
+                    .Where(e => !libraryOptions.DisabledMediaSegmentProviders.Contains(GetProviderId(e.Name)))
                     .Select(f => GetProviderId(f.Name))
                     .ToArray();
                 if (providerIds.Length == 0)

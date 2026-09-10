@@ -1,9 +1,11 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using DotNet.Testcontainers.Builders;
 using Jellyfin.Server.Implementations.Catalog;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Testcontainers.PostgreSql;
 using Xunit;
 
 namespace Jellyfin.Database.Tests.PostgreSQL;
@@ -15,18 +17,43 @@ namespace Jellyfin.Database.Tests.PostgreSQL;
 public sealed class PostgreSqlCatalogOwnershipTests : IAsyncLifetime
 {
     private static readonly TimeSpan ProbeInterval = TimeSpan.FromMilliseconds(50);
-    private readonly PostgreSqlTestDatabase _container = new();
+    private readonly PostgreSqlContainer? _container;
     private string? _connectionString;
 
-    /// <inheritdoc />
-    public async ValueTask InitializeAsync()
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PostgreSqlCatalogOwnershipTests"/> class.
+    /// </summary>
+    public PostgreSqlCatalogOwnershipTests()
     {
-        await _container.StartAsync().ConfigureAwait(false);
-        _connectionString = _container.GetConnectionString();
+        _connectionString = Environment.GetEnvironmentVariable("JELLYFIN_CATALOG_TEST_POSTGRES");
+        if (!string.IsNullOrWhiteSpace(_connectionString))
+        {
+            return;
+        }
+
+        _container = new PostgreSqlBuilder("postgres:16-alpine")
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilCommandIsCompleted("pg_isready"))
+            .Build();
     }
 
     /// <inheritdoc />
-    public async ValueTask DisposeAsync() => await _container.DisposeAsync().ConfigureAwait(false);
+    public async Task InitializeAsync()
+    {
+        if (_container is not null)
+        {
+            await _container.StartAsync().ConfigureAwait(false);
+            _connectionString = _container.GetConnectionString();
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task DisposeAsync()
+    {
+        if (_container is not null)
+        {
+            await _container.DisposeAsync().ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Two server instances sharing PostgreSQL expose exactly one writer and hand ownership off after release.

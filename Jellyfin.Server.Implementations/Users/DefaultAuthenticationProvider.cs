@@ -59,7 +59,7 @@ namespace Jellyfin.Server.Implementations.Users
             }
 
             // As long as jellyfin supports password-less users, we need this little block here to accommodate
-            if (string.IsNullOrEmpty(resolvedUser.Password) && string.IsNullOrEmpty(password))
+            if (!HasPassword(resolvedUser) && string.IsNullOrEmpty(password))
             {
                 return Task.FromResult(new ProviderAuthenticationResult
                 {
@@ -92,6 +92,10 @@ namespace Jellyfin.Server.Implementations.Users
                 Username = username
             });
         }
+
+        /// <inheritdoc />
+        public bool HasPassword(User user)
+            => !string.IsNullOrEmpty(user?.Password);
 
         /// <inheritdoc />
         public Task ChangePassword(User user, string newPassword)

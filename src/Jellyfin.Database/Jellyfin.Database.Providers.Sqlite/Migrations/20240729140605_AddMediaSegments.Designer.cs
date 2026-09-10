@@ -285,9 +285,6 @@ namespace Jellyfin.Server.Implementations.Migrations
                     b.Property<Guid>("ItemId")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("SegmentProviderId")
-                        .HasColumnType("TEXT");
-
                     b.Property<long>("StartTicks")
                         .HasColumnType("INTEGER");
 

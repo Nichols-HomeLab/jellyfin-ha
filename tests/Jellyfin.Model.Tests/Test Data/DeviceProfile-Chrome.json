@@ -107,6 +107,7 @@
             "Protocol": "hls",
             "MaxAudioChannels": "2",
             "MinSegments": "2",
+            "BreakOnNonKeyFrames": true,
             "EnableAudioVbrEncoding": true
         },
         {
@@ -181,7 +182,8 @@
             "Context": "Streaming",
             "Protocol": "hls",
             "MaxAudioChannels": "2",
-            "MinSegments": "2"
+            "MinSegments": "2",
+            "BreakOnNonKeyFrames": true
         },
         {
             "Container": "ts",
@@ -191,7 +193,8 @@
             "Context": "Streaming",
             "Protocol": "hls",
             "MaxAudioChannels": "2",
-            "MinSegments": "2"
+            "MinSegments": "2",
+            "BreakOnNonKeyFrames": true
         }
     ],
     "ContainerProfiles": [],

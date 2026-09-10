@@ -129,10 +129,5 @@ public enum PersonKind
     /// <summary>
     /// A person who renders a text from one language into another.
     /// </summary>
-    Translator,
-
-    /// <summary>
-    /// A person who narrates a book or other work.
-    /// </summary>
-    Narrator
+    Translator
 }

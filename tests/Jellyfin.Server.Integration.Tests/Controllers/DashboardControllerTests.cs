@@ -23,20 +23,11 @@ namespace Jellyfin.Server.Integration.Tests.Controllers
         }
 
         [Fact]
-        public async Task GetDashboardConfigurationPage_Anonymous_Unauthorized()
-        {
-            var client = _factory.CreateClient();
-            var response = await client.GetAsync("/web/ConfigurationPage?name=HotCache", TestContext.Current.CancellationToken);
-            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-        }
-
-        [Fact]
         public async Task GetDashboardConfigurationPage_NonExistingPage_NotFound()
         {
             var client = _factory.CreateClient();
-            client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-            var response = await client.GetAsync("web/ConfigurationPage?name=ThisPageDoesntExists", TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("web/ConfigurationPage?name=ThisPageDoesntExists");
 
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
@@ -45,23 +36,21 @@ namespace Jellyfin.Server.Integration.Tests.Controllers
         public async Task GetDashboardConfigurationPage_ExistingPage_CorrectPage()
         {
             var client = _factory.CreateClient();
-            client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-            var response = await client.GetAsync("/web/ConfigurationPage?name=TestPlugin", TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("/web/ConfigurationPage?name=TestPlugin");
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal(MediaTypeNames.Text.Html, response.Content.Headers.ContentType?.MediaType);
             StreamReader reader = new StreamReader(typeof(TestPlugin).Assembly.GetManifestResourceStream("Jellyfin.Server.Integration.Tests.TestPage.html")!);
-            Assert.Equal(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), await reader.ReadToEndAsync(TestContext.Current.CancellationToken));
+            Assert.Equal(await response.Content.ReadAsStringAsync(), await reader.ReadToEndAsync());
         }
 
         [Fact]
         public async Task GetDashboardConfigurationPage_BrokenPage_NotFound()
         {
             var client = _factory.CreateClient();
-            client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-            var response = await client.GetAsync("/web/ConfigurationPage?name=BrokenPage", TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("/web/ConfigurationPage?name=BrokenPage");
 
             Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         }
@@ -72,11 +61,11 @@ namespace Jellyfin.Server.Integration.Tests.Controllers
             var client = _factory.CreateClient();
             client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-            var response = await client.GetAsync("/web/ConfigurationPages", TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("/web/ConfigurationPages");
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-            _ = await response.Content.ReadFromJsonAsync<ConfigurationPageInfo[]>(_jsonOptions, TestContext.Current.CancellationToken);
+            _ = await response.Content.ReadFromJsonAsync<ConfigurationPageInfo[]>(_jsonOptions);
             // TODO: check content
         }
 
@@ -86,17 +75,15 @@ namespace Jellyfin.Server.Integration.Tests.Controllers
             var client = _factory.CreateClient();
             client.DefaultRequestHeaders.AddAuthHeader(_accessToken ??= await AuthHelper.CompleteStartupAsync(client));
 
-            var response = await client.GetAsync("/web/ConfigurationPages?enableInMainMenu=true", TestContext.Current.CancellationToken);
+            var response = await client.GetAsync("/web/ConfigurationPages?enableInMainMenu=true");
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal(MediaTypeNames.Application.Json, response.Content.Headers.ContentType?.MediaType);
             Assert.Equal(Encoding.UTF8.BodyName, response.Content.Headers.ContentType?.CharSet);
 
-            var data = await response.Content.ReadFromJsonAsync<ConfigurationPageInfo[]>(_jsonOptions, TestContext.Current.CancellationToken);
+            var data = await response.Content.ReadFromJsonAsync<ConfigurationPageInfo[]>(_jsonOptions);
             Assert.NotNull(data);
-            var page = Assert.Single(data);
-            Assert.Equal("HotCache", page.Name);
-            Assert.True(page.EnableInMainMenu);
+            Assert.Empty(data);
         }
     }
 }

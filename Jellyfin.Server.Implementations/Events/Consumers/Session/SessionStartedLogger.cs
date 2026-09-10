@@ -38,7 +38,7 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Session
             await _activityManager.CreateAsync(new ActivityLog(
                 string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("UserOnlineFromDevice"),
+                    _localizationManager.GetLocalizedString("UserOnlineFromDevice"),
                     eventArgs.Argument.UserName,
                     eventArgs.Argument.DeviceName),
                 "SessionStarted",
@@ -46,7 +46,7 @@ namespace Jellyfin.Server.Implementations.Events.Consumers.Session
             {
                 ShortOverview = string.Format(
                     CultureInfo.InvariantCulture,
-                    _localizationManager.GetServerLocalizedString("LabelIpAddressValue"),
+                    _localizationManager.GetLocalizedString("LabelIpAddressValue"),
                     eventArgs.Argument.RemoteEndPoint)
             }).ConfigureAwait(false);
         }

@@ -85,7 +85,10 @@ namespace MediaBrowser.Controller.Entities
 
         public static string GetPath(string name, bool normalizeName)
         {
-            var validName = normalizeName ? GetItemByNameFolderName(name) : name;
+            // Trim the period at the end because windows will have a hard time with that
+            var validName = normalizeName ?
+                FileSystem.GetValidFilename(name).Trim().TrimEnd('.') :
+                name;
 
             return System.IO.Path.Combine(ConfigurationManager.ApplicationPaths.YearPath, validName);
         }

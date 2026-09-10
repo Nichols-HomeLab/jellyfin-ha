@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -7,7 +6,6 @@ using System.Net.Http.Headers;
 using System.Net.Mime;
 using System.Text;
 using Emby.Server.Implementations.EntryPoints;
-using Emby.Server.Implementations.Localization;
 using Jellyfin.Api.Middleware;
 using Jellyfin.Database.Implementations;
 using Jellyfin.LiveTv.Extensions;
@@ -24,7 +22,6 @@ using MediaBrowser.Controller.Extensions;
 using MediaBrowser.XbmcMetadata;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Localization;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -130,25 +127,6 @@ namespace Jellyfin.Server
             services.AddHlsPlaylistGenerator();
             services.AddLiveTvServices();
 
-            var serverUICulture = _serverConfigurationManager.Configuration.UICulture;
-            if (string.IsNullOrEmpty(serverUICulture))
-            {
-                serverUICulture = "en-US";
-            }
-
-            CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo(serverUICulture);
-
-            services.Configure<RequestLocalizationOptions>(options =>
-            {
-                var supportedUICultures = LocalizationManager.GetSupportedUICultures();
-                options.SupportedCultures = supportedUICultures;
-                options.SupportedUICultures = supportedUICultures;
-                options.DefaultRequestCulture = new RequestCulture(serverUICulture);
-                options.ApplyCurrentCultureToResponseHeaders = true;
-                options.FallBackToParentCultures = true;
-                options.FallBackToParentUICultures = true;
-            });
-
             services.AddHostedService<RecordingsHost>();
             services.AddHostedService<AutoDiscoveryHost>();
             services.AddHostedService<NfoUserDataSaver>();
@@ -190,12 +168,13 @@ namespace Jellyfin.Server
 
                 mainApp.UseCors();
 
-                mainApp.UseRequestLocalization();
-
                 if (config.RequireHttps && _serverApplicationHost.ListenWithHttps)
                 {
                     mainApp.UseHttpsRedirection();
                 }
+
+                // This must be injected before any path related middleware.
+                mainApp.UsePathTrim();
 
                 if (appConfig.HostWebClient())
                 {

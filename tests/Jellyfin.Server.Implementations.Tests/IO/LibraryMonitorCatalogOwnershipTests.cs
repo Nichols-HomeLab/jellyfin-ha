@@ -70,10 +70,8 @@ public sealed class LibraryMonitorCatalogOwnershipTests
             Mock.Of<ILibraryManager>(),
             configuration.Object,
             fileSystem,
-            Mock.Of<MediaBrowser.Controller.Providers.IDirectoryService>(),
-            lifetime.Object,
-            new Emby.Server.Implementations.Library.DotIgnoreIgnoreRule(),
-            ownership);
+            ownership,
+            lifetime.Object);
     }
 
     private sealed class MutableCatalogOwnership : ICatalogOwnership

@@ -16,6 +16,11 @@ namespace MediaBrowser.Controller.Providers
         private List<(string Url, ImageType Type)> _remoteImages;
         private List<PersonInfo> _people;
 
+        public MetadataResult()
+        {
+            ResultLanguage = "en";
+        }
+
         public List<LocalImageInfo> Images
         {
             get => _images ??= [];
@@ -38,9 +43,6 @@ namespace MediaBrowser.Controller.Providers
 
         public T Item { get; set; }
 
-        /// <summary>
-        /// Gets or sets the language the fetched metadata is in.
-        /// </summary>
         public string ResultLanguage { get; set; }
 
         public string Provider { get; set; }

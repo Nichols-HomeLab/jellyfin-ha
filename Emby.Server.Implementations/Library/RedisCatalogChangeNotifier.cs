@@ -71,11 +71,6 @@ public sealed class RedisCatalogChangeNotifier : ICatalogChangeNotifier, IDispos
     /// <inheritdoc />
     public event Action<CatalogChange>? Changed;
 
-    /// <summary>
-    /// Gets a value indicating whether the initial subscription and sequence baseline are ready.
-    /// </summary>
-    internal bool IsSynchronized => !_disposed && _subscription is not null && Volatile.Read(ref _subscriptionWorkerRunning) == 0;
-
     /// <inheritdoc />
     public void Publish(CatalogChange change)
     {

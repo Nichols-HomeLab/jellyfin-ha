@@ -12,7 +12,6 @@ using Jellyfin.Database.Implementations;
 using Jellyfin.Server.Implementations.StorageHelpers;
 using Jellyfin.Server.Implementations.SystemBackupService;
 using MediaBrowser.Controller;
-using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.SystemBackupService;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -34,7 +33,6 @@ public class BackupService : IBackupService
     private readonly IServerApplicationPaths _applicationPaths;
     private readonly IJellyfinDatabaseProvider _jellyfinDatabaseProvider;
     private readonly IHostApplicationLifetime _hostApplicationLifetime;
-    private readonly ILibraryManager _libraryManager;
     private static readonly JsonSerializerOptions _serializerSettings = new JsonSerializerOptions(JsonSerializerDefaults.General)
     {
         AllowTrailingCommas = true,
@@ -52,15 +50,13 @@ public class BackupService : IBackupService
     /// <param name="applicationPaths">The application paths.</param>
     /// <param name="jellyfinDatabaseProvider">The Jellyfin database Provider in use.</param>
     /// <param name="applicationLifetime">The SystemManager.</param>
-    /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     public BackupService(
         ILogger<BackupService> logger,
         IDbContextFactory<JellyfinDbContext> dbProvider,
         IServerApplicationHost applicationHost,
         IServerApplicationPaths applicationPaths,
         IJellyfinDatabaseProvider jellyfinDatabaseProvider,
-        IHostApplicationLifetime applicationLifetime,
-        ILibraryManager libraryManager)
+        IHostApplicationLifetime applicationLifetime)
     {
         _logger = logger;
         _dbProvider = dbProvider;
@@ -68,7 +64,6 @@ public class BackupService : IBackupService
         _applicationPaths = applicationPaths;
         _jellyfinDatabaseProvider = jellyfinDatabaseProvider;
         _hostApplicationLifetime = applicationLifetime;
-        _libraryManager = libraryManager;
     }
 
     /// <inheritdoc/>
@@ -107,7 +102,7 @@ public class BackupService : IBackupService
             }
 
             BackupManifest? manifest;
-            var manifestStream = await zipArchiveEntry.OpenAsync().ConfigureAwait(false);
+            var manifestStream = zipArchiveEntry.Open();
             await using (manifestStream.ConfigureAwait(false))
             {
                 manifest = await JsonSerializer.DeserializeAsync<BackupManifest>(manifestStream, _serializerSettings).ConfigureAwait(false);
@@ -173,7 +168,7 @@ public class BackupService : IBackupService
                     }
 
                     HistoryRow[] historyEntries;
-                    var historyArchive = await historyEntry.OpenAsync().ConfigureAwait(false);
+                    var historyArchive = historyEntry.Open();
                     await using (historyArchive.ConfigureAwait(false))
                     {
                         historyEntries = await JsonSerializer.DeserializeAsync<HistoryRow[]>(historyArchive).ConfigureAwait(false) ??
@@ -217,7 +212,7 @@ public class BackupService : IBackupService
                             continue;
                         }
 
-                        var zipEntryStream = await zipEntry.OpenAsync().ConfigureAwait(false);
+                        var zipEntryStream = zipEntry.Open();
                         await using (zipEntryStream.ConfigureAwait(false))
                         {
                             _logger.LogInformation("Restore backup of {Table}", entityType.Type.Name);
@@ -268,14 +263,6 @@ public class BackupService : IBackupService
     /// <inheritdoc/>
     public async Task<BackupManifestDto> CreateBackupAsync(BackupOptionsDto backupOptions)
     {
-        // Creating a backup runs a database optimization and reads the entire database under a transaction, both of
-        // which heavily contend with an active library scan and could capture an inconsistent database state.
-        if (_libraryManager.IsScanRunning)
-        {
-            _logger.LogWarning("Cannot create a backup while a library scan is running.");
-            throw new InvalidOperationException("Cannot create a backup while a library scan is running. Please try again once the scan has finished.");
-        }
-
         var manifest = new BackupManifest()
         {
             DateCreated = DateTime.UtcNow,
@@ -350,7 +337,7 @@ public class BackupService : IBackupService
                             _logger.LogInformation("Begin backup of entity {Table}", entityType.SourceName);
                             var zipEntry = zipArchive.CreateEntry(NormalizePathSeparator(Path.Combine("Database", $"{entityType.SourceName}.json")));
                             var entities = 0;
-                            var zipEntryStream = await zipEntry.OpenAsync().ConfigureAwait(false);
+                            var zipEntryStream = zipEntry.Open();
                             await using (zipEntryStream.ConfigureAwait(false))
                             {
                                 var jsonSerializer = new Utf8JsonWriter(zipEntryStream);
@@ -359,39 +346,18 @@ public class BackupService : IBackupService
                                     jsonSerializer.WriteStartArray();
 
                                     var set = entityType.ValueFactory().ConfigureAwait(false);
-                                    var enumerator = set.GetAsyncEnumerator();
-                                    await using (enumerator)
+                                    await foreach (var item in set.ConfigureAwait(false))
                                     {
-                                        while (true)
+                                        entities++;
+                                        try
                                         {
-                                            bool hasNext;
-                                            try
-                                            {
-                                                hasNext = await enumerator.MoveNextAsync();
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                _logger.LogError(ex, "Could not read next entity of type {Table}, the underlying data appears to be corrupt. Skipping this row and continuing backup; the affected database row should be inspected and fixed manually", entityType.SourceName);
-                                                continue;
-                                            }
-
-                                            if (!hasNext)
-                                            {
-                                                break;
-                                            }
-
-                                            var item = enumerator.Current;
-                                            entities++;
-                                            try
-                                            {
-                                                using var document = JsonSerializer.SerializeToDocument(item, _serializerSettings);
-                                                document.WriteTo(jsonSerializer);
-                                            }
-                                            catch (Exception ex)
-                                            {
-                                                _logger.LogError(ex, "Could not load entity {Entity}", item);
-                                                throw;
-                                            }
+                                            using var document = JsonSerializer.SerializeToDocument(item, _serializerSettings);
+                                            document.WriteTo(jsonSerializer);
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            _logger.LogError(ex, "Could not load entity {Entity}", item);
+                                            throw;
                                         }
                                     }
 
@@ -408,7 +374,7 @@ public class BackupService : IBackupService
                 foreach (var item in Directory.EnumerateFiles(_applicationPaths.ConfigurationDirectoryPath, "*.xml", SearchOption.TopDirectoryOnly)
                              .Union(Directory.EnumerateFiles(_applicationPaths.ConfigurationDirectoryPath, "*.json", SearchOption.TopDirectoryOnly)))
                 {
-                    await zipArchive.CreateEntryFromFileAsync(item, NormalizePathSeparator(Path.Combine("Config", Path.GetFileName(item)))).ConfigureAwait(false);
+                    zipArchive.CreateEntryFromFile(item, NormalizePathSeparator(Path.Combine("Config", Path.GetFileName(item))));
                 }
 
                 void CopyDirectory(string source, string target, string filter = "*")
@@ -422,7 +388,6 @@ public class BackupService : IBackupService
 
                     foreach (var item in Directory.EnumerateFiles(source, filter, SearchOption.AllDirectories))
                     {
-                        // TODO: @bond make async
                         zipArchive.CreateEntryFromFile(item, NormalizePathSeparator(Path.Combine(target, Path.GetRelativePath(source, item))));
                     }
                 }
@@ -457,7 +422,7 @@ public class BackupService : IBackupService
                     }
                 }
 
-                var manifestStream = await zipArchive.CreateEntry(ManifestEntryName).OpenAsync().ConfigureAwait(false);
+                var manifestStream = zipArchive.CreateEntry(ManifestEntryName).Open();
                 await using (manifestStream.ConfigureAwait(false))
                 {
                     await JsonSerializer.SerializeAsync(manifestStream, manifest).ConfigureAwait(false);
@@ -557,7 +522,7 @@ public class BackupService : IBackupService
                 return null;
             }
 
-            var manifestStream = await manifestEntry.OpenAsync().ConfigureAwait(false);
+            var manifestStream = manifestEntry.Open();
             await using (manifestStream.ConfigureAwait(false))
             {
                 return await JsonSerializer.DeserializeAsync<BackupManifest>(manifestStream, _serializerSettings).ConfigureAwait(false);

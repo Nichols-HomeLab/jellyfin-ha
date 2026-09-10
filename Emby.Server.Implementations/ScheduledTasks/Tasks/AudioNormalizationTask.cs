@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,7 +26,7 @@ namespace Emby.Server.Implementations.ScheduledTasks.Tasks;
 /// </summary>
 public partial class AudioNormalizationTask : IScheduledTask
 {
-    private readonly IItemPersistenceService _persistenceService;
+    private readonly IItemRepository _itemRepository;
     private readonly ILibraryManager _libraryManager;
     private readonly IMediaEncoder _mediaEncoder;
     private readonly IApplicationPaths _applicationPaths;
@@ -39,21 +38,21 @@ public partial class AudioNormalizationTask : IScheduledTask
     /// <summary>
     /// Initializes a new instance of the <see cref="AudioNormalizationTask"/> class.
     /// </summary>
-    /// <param name="persistenceService">Instance of the <see cref="IItemPersistenceService"/> interface.</param>
+    /// <param name="itemRepository">Instance of the <see cref="IItemRepository"/> interface.</param>
     /// <param name="libraryManager">Instance of the <see cref="ILibraryManager"/> interface.</param>
     /// <param name="mediaEncoder">Instance of the <see cref="IMediaEncoder"/> interface.</param>
     /// <param name="applicationPaths">Instance of the <see cref="IApplicationPaths"/> interface.</param>
     /// <param name="localizationManager">Instance of the <see cref="ILocalizationManager"/> interface.</param>
     /// <param name="logger">Instance of the <see cref="ILogger{AudioNormalizationTask}"/> interface.</param>
     public AudioNormalizationTask(
-        IItemPersistenceService persistenceService,
+        IItemRepository itemRepository,
         ILibraryManager libraryManager,
         IMediaEncoder mediaEncoder,
         IApplicationPaths applicationPaths,
         ILocalizationManager localizationManager,
         ILogger<AudioNormalizationTask> logger)
     {
-        _persistenceService = persistenceService;
+        _itemRepository = itemRepository;
         _libraryManager = libraryManager;
         _mediaEncoder = mediaEncoder;
         _applicationPaths = applicationPaths;
@@ -139,7 +138,7 @@ public partial class AudioNormalizationTask : IScheduledTask
                 {
                     if (toSaveDbItems.Count > 1)
                     {
-                        _persistenceService.SaveItems(toSaveDbItems, cancellationToken);
+                        _itemRepository.SaveItems(toSaveDbItems, cancellationToken);
                         toSaveDbItems.Clear();
                     }
 
@@ -159,7 +158,7 @@ public partial class AudioNormalizationTask : IScheduledTask
 
             if (toSaveDbItems.Count > 1)
             {
-                _persistenceService.SaveItems(toSaveDbItems, cancellationToken);
+                _itemRepository.SaveItems(toSaveDbItems, cancellationToken);
                 toSaveDbItems.Clear();
             }
 
@@ -174,7 +173,7 @@ public partial class AudioNormalizationTask : IScheduledTask
                 if (!t.NormalizationGain.HasValue && !t.LUFS.HasValue && t.IsFileProtocol)
                 {
                     t.LUFS = await CalculateLUFSAsync(
-                        string.Format(CultureInfo.InvariantCulture, "-i \"{0}\"", t.Path.EscapeProcessArgument()),
+                        string.Format(CultureInfo.InvariantCulture, "-i \"{0}\"", t.Path.Replace("\"", "\\\"", StringComparison.Ordinal)),
                         false,
                         cancellationToken).ConfigureAwait(false);
                     toSaveDbItems.Add(t);
@@ -184,7 +183,7 @@ public partial class AudioNormalizationTask : IScheduledTask
                 {
                     if (toSaveDbItems.Count > 1)
                     {
-                        _persistenceService.SaveItems(toSaveDbItems, cancellationToken);
+                        _itemRepository.SaveItems(toSaveDbItems, cancellationToken);
                         toSaveDbItems.Clear();
                     }
 
@@ -201,7 +200,7 @@ public partial class AudioNormalizationTask : IScheduledTask
 
             if (toSaveDbItems.Count > 1)
             {
-                _persistenceService.SaveItems(toSaveDbItems, cancellationToken);
+                _itemRepository.SaveItems(toSaveDbItems, cancellationToken);
             }
 
             // Update progress
@@ -235,7 +234,7 @@ public partial class AudioNormalizationTask : IScheduledTask
             {
                 FileName = _mediaEncoder.EncoderPath,
                 Arguments = args,
-                StandardErrorEncoding = Encoding.UTF8,
+                RedirectStandardOutput = false,
                 RedirectStandardError = true
             },
         })

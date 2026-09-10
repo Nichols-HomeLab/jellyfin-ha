@@ -24,7 +24,6 @@ namespace Jellyfin.MediaEncoding.Tests
         [InlineData(EncoderValidatorTestsData.FFmpegV44Output, true)]
         [InlineData(EncoderValidatorTestsData.FFmpegV432Output, false)]
         [InlineData(EncoderValidatorTestsData.FFmpegGitUnknownOutput2, true)]
-        [InlineData(EncoderValidatorTestsData.FFmpegGitWithoutLibpostprocOutput, true)]
         [InlineData(EncoderValidatorTestsData.FFmpegGitUnknownOutput, false)]
         public void ValidateVersionInternalTest(string versionOutput, bool valid)
         {
@@ -42,7 +41,6 @@ namespace Jellyfin.MediaEncoding.Tests
                 Add(EncoderValidatorTestsData.FFmpegV44Output, new Version(4, 4));
                 Add(EncoderValidatorTestsData.FFmpegV432Output, new Version(4, 3, 2));
                 Add(EncoderValidatorTestsData.FFmpegGitUnknownOutput2, new Version(4, 4));
-                Add(EncoderValidatorTestsData.FFmpegGitWithoutLibpostprocOutput, new Version(4, 4));
                 Add(EncoderValidatorTestsData.FFmpegGitUnknownOutput, null);
             }
         }

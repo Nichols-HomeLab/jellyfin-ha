@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using Jellyfin.Api.Attributes;
-using Microsoft.OpenApi;
+using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerGen;
 
 namespace Jellyfin.Server.Filters
@@ -14,7 +14,7 @@ namespace Jellyfin.Server.Filters
         {
             Schema = new OpenApiSchema
             {
-                Type = JsonSchemaType.String,
+                Type = "string",
                 Format = "binary"
             }
         };
@@ -22,11 +22,6 @@ namespace Jellyfin.Server.Filters
         /// <inheritdoc />
         public void Apply(OpenApiOperation operation, OperationFilterContext context)
         {
-            if (operation.Responses is null)
-            {
-                return;
-            }
-
             foreach (var attribute in context.ApiDescription.ActionDescriptor.EndpointMetadata)
             {
                 if (attribute is ProducesFileAttribute producesFileAttribute)
@@ -36,7 +31,7 @@ namespace Jellyfin.Server.Filters
                         .FirstOrDefault(o => o.Key.Equals(SuccessCode, StringComparison.Ordinal));
 
                     // Operation doesn't have a response.
-                    if (response.Value?.Content is null)
+                    if (response.Value is null)
                     {
                         continue;
                     }

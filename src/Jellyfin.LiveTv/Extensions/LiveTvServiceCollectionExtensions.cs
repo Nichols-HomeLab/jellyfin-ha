@@ -40,9 +40,7 @@ public static class LiveTvServiceCollectionExtensions
         services.AddSingleton<ILiveTvService, DefaultLiveTvService>();
         services.AddSingleton<ITunerHost, HdHomerunHost>();
         services.AddSingleton<ITunerHost, M3UTunerHost>();
-        services.AddSingleton<SchedulesDirect>();
-        services.AddSingleton<IListingsProvider>(s => s.GetRequiredService<SchedulesDirect>());
-        services.AddSingleton<ISchedulesDirectService>(s => s.GetRequiredService<SchedulesDirect>());
+        services.AddSingleton<IListingsProvider, SchedulesDirect>();
         services.AddSingleton<IListingsProvider, XmlTvListingsProvider>();
     }
 }

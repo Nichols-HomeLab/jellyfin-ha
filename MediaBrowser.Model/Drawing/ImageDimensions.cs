@@ -1,5 +1,4 @@
 #pragma warning disable CS1591
-#pragma warning disable CA1815
 
 using System.Globalization;
 

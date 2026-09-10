@@ -1,5 +1,4 @@
 using System;
-using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -11,6 +10,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Jellyfin.Data.Events;
 using Jellyfin.Extensions;
 using Jellyfin.Extensions.Json;
 using MediaBrowser.Common.Configuration;
@@ -32,11 +32,6 @@ namespace Emby.Server.Implementations.Updates
     /// </summary>
     public class InstallationManager : IInstallationManager
     {
-        private static readonly SearchValues<char> InvalidPackageNameChars = SearchValues.Create([.. Path.GetInvalidFileNameChars(), '/', '\\']);
-        // Budget for the whole package download. The response headers are already bounded by the
-        // HttpClient timeout; this covers reading the package body, which can be large and slow.
-        private static readonly TimeSpan PackageDownloadTimeout = TimeSpan.FromMinutes(10);
-
         /// <summary>
         /// The logger.
         /// </summary>
@@ -84,8 +79,8 @@ namespace Emby.Server.Implementations.Updates
             IServerConfigurationManager config,
             IPluginManager pluginManager)
         {
-            _currentInstallations = [];
-            _completedInstallationsInternal = [];
+            _currentInstallations = new List<(InstallationInfo, CancellationTokenSource)>();
+            _completedInstallationsInternal = new ConcurrentBag<InstallationInfo>();
 
             _logger = logger;
             _applicationHost = appHost;
@@ -343,9 +338,8 @@ namespace Emby.Server.Implementations.Updates
 
                 _applicationHost.NotifyPendingRestart();
             }
-            catch (OperationCanceledException) when (linkedToken.IsCancellationRequested)
+            catch (OperationCanceledException)
             {
-                // Only an actually cancelled token is a cancellation.
                 lock (_currentInstallationsLock)
                 {
                     _currentInstallations.Remove(tuple);
@@ -359,7 +353,7 @@ namespace Emby.Server.Implementations.Updates
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Package installation failed: {Name} {Version}", package.Name, package.Version);
+                _logger.LogError(ex, "Package installation failed");
 
                 lock (_currentInstallationsLock)
                 {
@@ -503,9 +497,8 @@ namespace Emby.Server.Implementations.Updates
             var plugins = _pluginManager.Plugins;
             foreach (var plugin in plugins)
             {
-                // Don't auto update when plugin marked not to, or when it's disabled or pending removal.
-                if (plugin.Manifest?.AutoUpdate == false
-                    || plugin.Manifest?.Status is PluginStatus.Disabled or PluginStatus.Deleted)
+                // Don't auto update when plugin marked not to, or when it's disabled.
+                if (plugin.Manifest?.AutoUpdate == false || plugin.Manifest?.Status == PluginStatus.Disabled)
                 {
                     continue;
                 }
@@ -528,117 +521,53 @@ namespace Emby.Server.Implementations.Updates
                 return;
             }
 
-            if (!IsValidPackageDirectoryName(package.Name))
-            {
-                _logger.LogError("Refusing to install package with invalid name {PackageName}.", package.Name);
-                throw new InvalidDataException($"Plugin package name '{package.Name}' is not a valid directory name.");
-            }
-
             // Always override the passed-in target (which is a file) and figure it out again
             string targetDir = Path.Combine(_appPaths.PluginsPath, package.Name);
 
-            var pluginsRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(_appPaths.PluginsPath));
-            var resolvedTarget = Path.GetFullPath(targetDir);
-            if (!resolvedTarget.StartsWith(pluginsRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            using var response = await _httpClientFactory.CreateClient(NamedClient.Default)
+                .GetAsync(new Uri(package.SourceUrl), cancellationToken).ConfigureAwait(false);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+
+            // CA5351: Do Not Use Broken Cryptographic Algorithms
+#pragma warning disable CA5351
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var hash = Convert.ToHexString(await MD5.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
+            if (!string.Equals(package.Checksum, hash, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogError(
-                    "Refusing to install package {PackageName}: resolved target {Resolved} is outside plugins directory {Root}.",
+                    "The checksums didn't match while installing {Package}, expected: {Expected}, got: {Received}",
                     package.Name,
-                    resolvedTarget,
-                    pluginsRoot);
-                throw new InvalidDataException($"Plugin package name '{package.Name}' resolves outside the plugins directory.");
+                    package.Checksum,
+                    hash);
+                throw new InvalidDataException("The checksum of the received data doesn't match.");
             }
 
-            // ResponseHeadersRead keeps the body out of the HttpClient timeout, which otherwise covers
-            // the whole download; the package gets the longer budget below instead.
-            using var downloadTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            downloadTokenSource.CancelAfter(PackageDownloadTimeout);
-            var downloadToken = downloadTokenSource.Token;
+            // Version folder as they cannot be overwritten in Windows.
+            targetDir += "_" + package.Version;
 
-            var buffer = new MemoryStream();
-            await using (buffer.ConfigureAwait(false))
+            if (Directory.Exists(targetDir))
             {
                 try
                 {
-                    using var response = await _httpClientFactory.CreateClient(NamedClient.Default)
-                        .GetAsync(new Uri(package.SourceUrl), HttpCompletionOption.ResponseHeadersRead, downloadToken).ConfigureAwait(false);
-                    response.EnsureSuccessStatusCode();
-
-                    // The package is read twice, for the checksum and for the extraction, so it has
-                    // to be buffered: the response stream is not seekable.
-                    await response.Content.CopyToAsync(buffer, downloadToken).ConfigureAwait(false);
+                    Directory.Delete(targetDir, true);
                 }
-                catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
-                {
-                    // Either our budget above or the HttpClient timeout ran out.
-                    throw new TimeoutException(
-                        $"Downloading the package {package.Name} {package.Version} from {package.SourceUrl} timed out.",
-                        ex);
-                }
-
-                buffer.Position = 0;
-                Stream stream = buffer;
-
-                // CA5351: Do Not Use Broken Cryptographic Algorithms
-#pragma warning disable CA5351
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var hash = Convert.ToHexString(await MD5.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-                if (!string.Equals(package.Checksum, hash, StringComparison.OrdinalIgnoreCase))
-                {
-                    _logger.LogError(
-                        "The checksums didn't match while installing {Package}, expected: {Expected}, got: {Received}",
-                        package.Name,
-                        package.Checksum,
-                        hash);
-                    throw new InvalidDataException("The checksum of the received data doesn't match.");
-                }
-
-                // Version folder as they cannot be overwritten in Windows.
-                targetDir += "_" + package.Version;
-
-                if (Directory.Exists(targetDir))
-                {
-                    try
-                    {
-                        Directory.Delete(targetDir, true);
-                    }
 #pragma warning disable CA1031 // Do not catch general exception types
-                    catch
+                catch
 #pragma warning restore CA1031 // Do not catch general exception types
-                    {
-                        // Ignore any exceptions.
-                    }
+                {
+                    // Ignore any exceptions.
                 }
-
-                stream.Position = 0;
-                await ZipFile.ExtractToDirectoryAsync(stream, targetDir, true, cancellationToken).ConfigureAwait(false);
             }
+
+            stream.Position = 0;
+            ZipFile.ExtractToDirectory(stream, targetDir, true);
 
             // Ensure we create one or populate existing ones with missing data.
             await _pluginManager.PopulateManifest(package.PackageInfo, package.Version, targetDir, status).ConfigureAwait(false);
 
             _pluginManager.ImportPluginFrom(targetDir);
-        }
-
-        private static bool IsValidPackageDirectoryName(string? name)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                return false;
-            }
-
-            if (name.Equals(".", StringComparison.Ordinal) || name.Equals("..", StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            if (name.IndexOfAny(InvalidPackageNameChars) >= 0)
-            {
-                return false;
-            }
-
-            return true;
         }
 
         private async Task<bool> InstallPackageInternal(InstallationInfo package, CancellationToken cancellationToken)

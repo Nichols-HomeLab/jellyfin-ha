@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net.Http;
 using System.Threading;
@@ -59,7 +61,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
             var language = item.GetPreferredMetadataLanguage();
             var countryCode = item.GetPreferredMetadataCountryCode();
 
-            item.TryGetTmdbId(out var movieTmdbId);
+            var movieTmdbId = Convert.ToInt32(item.GetProviderId(MetadataProvider.Tmdb), CultureInfo.InvariantCulture);
             if (movieTmdbId <= 0)
             {
                 var movieImdbId = item.GetProviderId(MetadataProvider.Imdb);
@@ -77,7 +79,7 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
 
             if (movieTmdbId <= 0)
             {
-                return [];
+                return Enumerable.Empty<RemoteImageInfo>();
             }
 
             // TODO use image languages if All Languages isn't toggled, but there's currently no way to get that value in here
@@ -87,28 +89,17 @@ namespace MediaBrowser.Providers.Plugins.Tmdb.Movies
 
             if (movie?.Images is null)
             {
-                return [];
+                return Enumerable.Empty<RemoteImageInfo>();
             }
 
-            var posters = movie.Images.Posters;
-            var backdrops = movie.Images.Backdrops;
-            var logos = movie.Images.Logos;
-            var remoteImages = new List<RemoteImageInfo>((posters?.Count ?? 0) + (backdrops?.Count ?? 0) + (logos?.Count ?? 0));
+            var posters = movie.Images.Posters ?? [];
+            var backdrops = movie.Images.Backdrops ?? [];
+            var logos = movie.Images.Logos ?? [];
+            var remoteImages = new List<RemoteImageInfo>(posters.Count + backdrops.Count + logos.Count);
 
-            if (posters is not null)
-            {
-                remoteImages.AddRange(_tmdbClientManager.ConvertPostersToRemoteImageInfo(posters, language));
-            }
-
-            if (backdrops is not null)
-            {
-                remoteImages.AddRange(_tmdbClientManager.ConvertBackdropsToRemoteImageInfo(backdrops, language));
-            }
-
-            if (logos is not null)
-            {
-                remoteImages.AddRange(_tmdbClientManager.ConvertLogosToRemoteImageInfo(logos, language));
-            }
+            remoteImages.AddRange(_tmdbClientManager.ConvertPostersToRemoteImageInfo(posters, language));
+            remoteImages.AddRange(_tmdbClientManager.ConvertBackdropsToRemoteImageInfo(backdrops, language));
+            remoteImages.AddRange(_tmdbClientManager.ConvertLogosToRemoteImageInfo(logos, language));
 
             return remoteImages;
         }
