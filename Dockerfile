@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # ── Build stage ──────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/sdk:10.0 AS build
+FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/sdk:11.0 AS build
 
 WORKDIR /src
 
@@ -61,7 +61,7 @@ RUN apt-get update \
  && echo "Web client files:" && ls /usr/share/jellyfin/web/ | head -10
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
+FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:11.0
 
 # Install FFmpeg and native dependencies required by SkiaSharp and fontconfig.
 # libicu, libssl, and liblttng-ust are already present in the dotnet/aspnet base image.
