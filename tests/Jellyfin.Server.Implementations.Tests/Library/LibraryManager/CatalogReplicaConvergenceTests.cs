@@ -13,6 +13,7 @@ using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.LiveTv;
 using MediaBrowser.Controller.Persistence;
 using MediaBrowser.Model.Entities;
 using Moq;
@@ -20,8 +21,24 @@ using Xunit;
 
 namespace Jellyfin.Server.Implementations.Tests.Library.LibraryManager;
 
-public sealed class CatalogReplicaConvergenceTests
+[Collection(nameof(CatalogReplicaConvergenceTestCollection))]
+public sealed class CatalogReplicaConvergenceTests : IDisposable
 {
+    private readonly ILibraryManager _originalLibraryManager = BaseItem.LibraryManager;
+    private readonly IRecordingsManager _originalRecordingsManager = Video.RecordingsManager;
+
+    public CatalogReplicaConvergenceTests()
+    {
+        BaseItem.LibraryManager = Mock.Of<ILibraryManager>();
+        Video.RecordingsManager = Mock.Of<IRecordingsManager>();
+    }
+
+    public void Dispose()
+    {
+        BaseItem.LibraryManager = _originalLibraryManager;
+        Video.RecordingsManager = _originalRecordingsManager;
+    }
+
     [Fact]
     public async Task OwnerUpdate_AtLibraryRoot_PublishesEmptyParentId()
     {
