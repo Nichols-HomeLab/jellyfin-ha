@@ -18,6 +18,8 @@ jobs:
     services:
       postgres:
         image: postgres:18-alpine
+        ports:
+          - 5432
         env:
           POSTGRES_DB: jellyfin_catalog_test
           POSTGRES_USER: jellyfin
@@ -29,17 +31,36 @@ jobs:
           --health-retries 12
       redis:
         image: redis:7-alpine
+        ports:
+          - 6379
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
-    env:
-      JELLYFIN_CATALOG_TEST_POSTGRES: Host=postgres;Port=5432;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test
-      JELLYFIN_TEST_POSTGRES_CONNECTION_STRING: Host=postgres;Port=5432;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test
-      JELLYFIN_TEST_REDIS: redis:6379
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Connect to PostgreSQL and Redis test services
+        env:
+          POSTGRES_TEST_PORT: ${{ job.services.postgres.ports[5432] }}
+          REDIS_TEST_PORT: ${{ job.services.redis.ports[6379] }}
+        run: |
+          # This runner uses Docker's default bridge, which has no service-name DNS.
+          # Reach each job-scoped published port through the sibling DinD gateway.
+          gateway_hex="$(awk '$2 == "00000000" { print $3; exit }' /proc/net/route)"
+          test "${#gateway_hex}" -eq 8
+          printf -v service_gateway '%d.%d.%d.%d' \
+            "0x${gateway_hex:6:2}" "0x${gateway_hex:4:2}" \
+            "0x${gateway_hex:2:2}" "0x${gateway_hex:0:2}"
+          test -n "$POSTGRES_TEST_PORT"
+          test -n "$REDIS_TEST_PORT"
+          timeout 10 bash -c 'exec 3<>/dev/tcp/"$1"/"$2"' _ "$service_gateway" "$POSTGRES_TEST_PORT"
+          timeout 10 bash -c 'exec 3<>/dev/tcp/"$1"/"$2"' _ "$service_gateway" "$REDIS_TEST_PORT"
+          postgres_connection="Host=$service_gateway;Port=$POSTGRES_TEST_PORT;Database=jellyfin_catalog_test;Username=jellyfin;Password=jellyfin-test"
+          echo "JELLYFIN_CATALOG_TEST_POSTGRES=$postgres_connection" >> "$GITHUB_ENV"
+          echo "JELLYFIN_TEST_POSTGRES_CONNECTION_STRING=$postgres_connection" >> "$GITHUB_ENV"
+          echo "JELLYFIN_TEST_REDIS=$service_gateway:$REDIS_TEST_PORT" >> "$GITHUB_ENV"
 
       - name: Install .NET SDK
         run: |
