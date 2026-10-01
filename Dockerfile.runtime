@@ -20,7 +20,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:10.0
+FROM --platform=linux/amd64 mcr.microsoft.com/dotnet/aspnet:11.0
 
 # Jellyfin's FFmpeg package pins its FFmpeg/libvpl userspace and bundles a
 # compatible Intel iHD VAAPI driver. Keep the package immutable so a base-image
